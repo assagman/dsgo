@@ -14,7 +14,8 @@ while IFS= read -r -d '' file; do
         continue
     fi
     
-    if file "$file" | grep -q "text"; then
+    # Skip binary files - check for common text extensions or file type
+    if [[ "$file" =~ \.(md|txt|go|sh|yml|yaml|json|toml|mod|sum)$ ]] || file "$file" | grep -qE "(text|ASCII|UTF-8|empty)"; then
         if [[ -s "$file" ]]; then
             last_char=$(tail -c 1 "$file")
             if [[ -n "$last_char" ]]; then
