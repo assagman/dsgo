@@ -31,8 +31,8 @@ func TestPredict_Forward_Success(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	if outputs["answer"] != "42" {
-		t.Errorf("Expected answer='42', got %v", outputs["answer"])
+	if outputs.Outputs["answer"] != "42" {
+		t.Errorf("Expected answer='42', got %v", outputs.Outputs["answer"])
 	}
 }
 
@@ -115,95 +115,6 @@ func TestPredict_Forward_ValidationError(t *testing.T) {
 	}
 }
 
-func TestPredict_ParseOutput_JSONCodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	p := NewPredict(sig, nil)
-
-	content := "```json\n{\"answer\": \"test\"}\n```"
-	outputs, err := p.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "test" {
-		t.Errorf("Expected answer='test', got %v", outputs["answer"])
-	}
-}
-
-func TestPredict_ParseOutput_GenericCodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	p := NewPredict(sig, nil)
-
-	content := "```\n{\"answer\": \"test\"}\n```"
-	outputs, err := p.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "test" {
-		t.Errorf("Expected answer='test', got %v", outputs["answer"])
-	}
-}
-
-func TestPredict_ParseOutput_EmbeddedJSON(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	p := NewPredict(sig, nil)
-
-	content := "Some text before {\"answer\": \"embedded\"} and after"
-	outputs, err := p.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "embedded" {
-		t.Errorf("Expected answer='embedded', got %v", outputs["answer"])
-	}
-}
-
-func TestPredict_ParseOutput_NonJSONCodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	p := NewPredict(sig, nil)
-
-	content := "```python\nprint('hello')\n```\n{\"answer\": \"after code\"}"
-	outputs, err := p.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "after code" {
-		t.Errorf("Expected answer='after code', got %v", outputs["answer"])
-	}
-}
-
-func TestPredict_CoerceTypes_ArrayToString(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	p := NewPredict(sig, nil)
-
-	outputs := map[string]interface{}{
-		"answer": []interface{}{"line1", "line2", "line3"},
-	}
-
-	coerced := p.coerceTypes(outputs)
-
-	if str, ok := coerced["answer"].(string); !ok || str != "line1\nline2\nline3" {
-		t.Errorf("Expected array to be joined into string, got %v", coerced["answer"])
-	}
-}
-
 func TestPredict_WithOptions(t *testing.T) {
 	sig := dsgo.NewSignature("Test")
 	lm := &MockLM{}
@@ -236,83 +147,19 @@ func TestPredict_JSONSupport(t *testing.T) {
 		SupportsJSONVal: true,
 		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 			if options.ResponseFormat != "json" {
-				t.Error("ResponseFormat should be 'json' when LM supports JSON")
+				t.Error("ResponseFormat should be 'json' when LM supports JSON and using JSONAdapter")
 			}
 			return &dsgo.GenerateResult{Content: `{"answer": "ok"}`}, nil
 		},
 	}
 
-	p := NewPredict(sig, lm)
+	// Use JSONAdapter explicitly to trigger JSON mode
+	p := NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter())
 	_, err := p.Forward(context.Background(), map[string]interface{}{
 		"question": "test",
 	})
 
 	if err != nil {
 		t.Errorf("Forward() error = %v", err)
-	}
-}
-
-func TestPredict_ParseOutput_NestedJSON(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	p := NewPredict(sig, nil)
-
-	content := `Some text {"answer": "value with {nested} braces"} more text`
-	outputs, err := p.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "value with {nested} braces" {
-		t.Errorf("Expected nested braces to be handled, got %v", outputs["answer"])
-	}
-}
-
-func TestPredict_ParseOutput_EscapedQuotes(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	p := NewPredict(sig, nil)
-
-	content := `{"answer": "value with \"quotes\""}`
-	outputs, err := p.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	expected := `value with "quotes"`
-	if outputs["answer"] != expected {
-		t.Errorf("Expected escaped quotes to be handled, got %v", outputs["answer"])
-	}
-}
-
-func TestPredict_CoerceTypes_NonArrayField(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer").
-		AddOutput("count", dsgo.FieldTypeInt, "Count")
-
-	p := NewPredict(sig, nil)
-
-	outputs := map[string]interface{}{
-		"answer": "text",
-		"count":  42,
-		"extra":  []interface{}{"should", "not", "be", "coerced"},
-	}
-
-	coerced := p.coerceTypes(outputs)
-
-	if str, ok := coerced["answer"].(string); !ok || str != "text" {
-		t.Error("String field should not be changed")
-	}
-
-	if count, ok := coerced["count"].(int); !ok || count != 42 {
-		t.Error("Int field should not be changed")
-	}
-
-	if arr, ok := coerced["extra"].([]interface{}); !ok || len(arr) != 4 {
-		t.Error("Unknown fields should not be coerced")
 	}
 }

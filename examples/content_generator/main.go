@@ -50,10 +50,10 @@ func generateBlogTitle() {
 	predict := module.NewPredict(sig, lm)
 
 	// Custom scorer: balanced scoring across all dimensions
-	customScorer := func(inputs map[string]any, outputs map[string]any) (float64, error) {
-		hook, ok1 := outputs["hook_strength"].(float64)
-		seo, ok2 := outputs["seo_score"].(float64)
-		creativity, ok3 := outputs["creativity"].(float64)
+	customScorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+		hook, ok1 := prediction.Outputs["hook_strength"].(float64)
+		seo, ok2 := prediction.Outputs["seo_score"].(float64)
+		creativity, ok3 := prediction.Outputs["creativity"].(float64)
 
 		if !ok1 || !ok2 || !ok3 {
 			return 0.5, nil
@@ -70,8 +70,8 @@ func generateBlogTitle() {
 		WithParallel(false)
 
 	inputs := map[string]any{
-		"topic":            "artificial intelligence in healthcare",
-		"target_audience":  "healthcare professionals and tech enthusiasts",
+		"topic":           "artificial intelligence in healthcare",
+		"target_audience": "healthcare professionals and tech enthusiasts",
 	}
 
 	outputs, err := bestOf.Forward(ctx, inputs)
@@ -82,14 +82,14 @@ func generateBlogTitle() {
 
 	fmt.Printf("Topic: %s\n", inputs["topic"])
 	fmt.Printf("Audience: %s\n\n", inputs["target_audience"])
-	fmt.Printf("🏆 WINNING TITLE:\n%s\n\n", outputs["title"])
+	fmt.Printf("🏆 WINNING TITLE:\n%s\n\n", outputs.Outputs["title"])
 	fmt.Printf("Scores:\n")
-	fmt.Printf("  Hook Strength: %.2f\n", outputs["hook_strength"])
-	fmt.Printf("  SEO Score: %.2f\n", outputs["seo_score"])
-	fmt.Printf("  Creativity: %.2f\n", outputs["creativity"])
-	fmt.Printf("  Overall Score: %.3f\n", outputs["_best_of_n_score"])
+	fmt.Printf("  Hook Strength: %.2f\n", outputs.Outputs["hook_strength"])
+	fmt.Printf("  SEO Score: %.2f\n", outputs.Outputs["seo_score"])
+	fmt.Printf("  Creativity: %.2f\n", outputs.Outputs["creativity"])
+	fmt.Printf("  Overall Score: %.3f\n", outputs.Score)
 
-	if allScores, ok := outputs["_best_of_n_all_scores"].([]float64); ok {
+	if allScores, ok := outputs.Outputs["_best_of_n_all_scores"].([]float64); ok {
 		fmt.Printf("\nAll Candidate Scores: ")
 		for i, score := range allScores {
 			fmt.Printf("%.3f", score)
@@ -116,14 +116,14 @@ func generateProductDescription() {
 	predict := module.NewPredict(sig, lm)
 
 	// Length-aware quality scorer
-	qualityScorer := func(inputs map[string]any, outputs map[string]any) (float64, error) {
-		description, ok := outputs["description"].(string)
+	qualityScorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+		description, ok := prediction.Outputs["description"].(string)
 		if !ok {
 			return 0, fmt.Errorf("description not found")
 		}
 
-		persuasiveness, ok1 := outputs["persuasiveness"].(float64)
-		clarity, ok2 := outputs["clarity"].(float64)
+		persuasiveness, ok1 := prediction.Outputs["persuasiveness"].(float64)
+		clarity, ok2 := prediction.Outputs["clarity"].(float64)
 
 		if !ok1 || !ok2 {
 			return 0.5, nil
@@ -135,7 +135,7 @@ func generateProductDescription() {
 		if wordCount < 50 {
 			lengthScore = float64(wordCount) / 50.0
 		} else if wordCount > 150 {
-			lengthScore = 1.0 - ((float64(wordCount-150) / 100.0))
+			lengthScore = 1.0 - (float64(wordCount-150) / 100.0)
 			if lengthScore < 0 {
 				lengthScore = 0
 			}
@@ -151,9 +151,9 @@ func generateProductDescription() {
 		WithReturnAll(true)
 
 	inputs := map[string]any{
-		"product_name":  "EcoBottle Pro",
-		"key_features":  "insulated, keeps drinks cold 24h/hot 12h, made from recycled materials, leak-proof",
-		"tone":          "eco-conscious and premium",
+		"product_name": "EcoBottle Pro",
+		"key_features": "insulated, keeps drinks cold 24h/hot 12h, made from recycled materials, leak-proof",
+		"tone":         "eco-conscious and premium",
 	}
 
 	outputs, err := bestOf.Forward(ctx, inputs)
@@ -162,15 +162,15 @@ func generateProductDescription() {
 		return
 	}
 
-	description := outputs["description"].(string)
+	description := outputs.Outputs["description"].(string)
 	wordCount := len(strings.Fields(description))
 
 	fmt.Printf("Product: %s\n", inputs["product_name"])
 	fmt.Printf("Features: %s\n\n", inputs["key_features"])
 	fmt.Printf("📝 BEST DESCRIPTION (%d words):\n%s\n\n", wordCount, description)
-	fmt.Printf("Persuasiveness: %.2f\n", outputs["persuasiveness"])
-	fmt.Printf("Clarity: %.2f\n", outputs["clarity"])
-	fmt.Printf("Overall Score: %.3f\n", outputs["_best_of_n_score"])
+	fmt.Printf("Persuasiveness: %.2f\n", outputs.Outputs["persuasiveness"])
+	fmt.Printf("Clarity: %.2f\n", outputs.Outputs["clarity"])
+	fmt.Printf("Overall Score: %.3f\n", outputs.Score)
 }
 
 func generateSocialMedia() {
@@ -188,11 +188,11 @@ func generateSocialMedia() {
 	predict := module.NewPredict(sig, lm)
 
 	// Platform-specific scorer
-	platformScorer := func(inputs map[string]any, outputs map[string]any) (float64, error) {
+	platformScorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
 		platform := inputs["platform"].(string)
-		post := outputs["post"].(string)
-		engagement, ok1 := outputs["engagement_potential"].(float64)
-		charCount, ok2 := outputs["character_count"]
+		post := prediction.Outputs["post"].(string)
+		engagement, ok1 := prediction.Outputs["engagement_potential"].(float64)
+		charCount, ok2 := prediction.Outputs["character_count"]
 
 		if !ok1 || !ok2 {
 			return 0.5, nil
@@ -249,8 +249,8 @@ func generateSocialMedia() {
 
 	fmt.Printf("Message: %s\n", inputs["message"])
 	fmt.Printf("Platform: %s\n\n", inputs["platform"])
-	fmt.Printf("🐦 BEST POST:\n%s\n\n", outputs["post"])
-	fmt.Printf("Character Count: %v\n", outputs["character_count"])
-	fmt.Printf("Engagement Potential: %.2f\n", outputs["engagement_potential"])
-	fmt.Printf("Overall Score: %.3f\n", outputs["_best_of_n_score"])
+	fmt.Printf("🐦 BEST POST:\n%s\n\n", outputs.Outputs["post"])
+	fmt.Printf("Character Count: %v\n", outputs.Outputs["character_count"])
+	fmt.Printf("Engagement Potential: %.2f\n", outputs.Outputs["engagement_potential"])
+	fmt.Printf("Overall Score: %.3f\n", outputs.Score)
 }

@@ -16,14 +16,14 @@ func TestNewOpenRouter(t *testing.T) {
 	originalSiteName := os.Getenv("OPENROUTER_SITE_NAME")
 	originalSiteURL := os.Getenv("OPENROUTER_SITE_URL")
 	defer func() {
-		os.Setenv("OPENROUTER_API_KEY", originalKey)
-		os.Setenv("OPENROUTER_SITE_NAME", originalSiteName)
-		os.Setenv("OPENROUTER_SITE_URL", originalSiteURL)
+		_ = os.Setenv("OPENROUTER_API_KEY", originalKey)
+		_ = os.Setenv("OPENROUTER_SITE_NAME", originalSiteName)
+		_ = os.Setenv("OPENROUTER_SITE_URL", originalSiteURL)
 	}()
 
-	os.Setenv("OPENROUTER_API_KEY", "test-key")
-	os.Setenv("OPENROUTER_SITE_NAME", "test-site")
-	os.Setenv("OPENROUTER_SITE_URL", "https://test.com")
+	_ = os.Setenv("OPENROUTER_API_KEY", "test-key")
+	_ = os.Setenv("OPENROUTER_SITE_NAME", "test-site")
+	_ = os.Setenv("OPENROUTER_SITE_URL", "https://test.com")
 
 	lm := NewOpenRouter("gpt-4")
 	if lm.APIKey != "test-key" {
@@ -108,7 +108,7 @@ func TestOpenRouter_Generate_Success(t *testing.T) {
 				TotalTokens:      15,
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -160,7 +160,7 @@ func TestOpenRouter_Generate_WithHeaders(t *testing.T) {
 				TotalTokens      int `json:"total_tokens"`
 			}{},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -181,7 +181,7 @@ func TestOpenRouter_Generate_WithHeaders(t *testing.T) {
 func TestOpenRouter_Generate_WithTools(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		if _, ok := req["tools"]; !ok {
 			t.Error("expected tools in request")
@@ -219,7 +219,7 @@ func TestOpenRouter_Generate_WithTools(t *testing.T) {
 				TotalTokens      int `json:"total_tokens"`
 			}{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -254,7 +254,7 @@ func TestOpenRouter_Generate_WithTools(t *testing.T) {
 func TestOpenRouter_Generate_ErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error": "invalid request"}`))
+		_, _ = w.Write([]byte(`{"error": "invalid request"}`))
 	}))
 	defer server.Close()
 
@@ -280,7 +280,7 @@ func TestOpenRouter_Generate_NoChoices(t *testing.T) {
 				FinishReason string            `json:"finish_reason"`
 			}{},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -547,7 +547,7 @@ func TestOpenRouter_ParseResponse_InvalidToolArgs(t *testing.T) {
 func TestOpenRouter_Generate_WithToolChoice(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		if tc, ok := req["tool_choice"].(map[string]interface{}); !ok {
 			t.Error("expected tool_choice object")
@@ -569,7 +569,7 @@ func TestOpenRouter_Generate_WithToolChoice(t *testing.T) {
 				TotalTokens      int `json:"total_tokens"`
 			}{},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -593,7 +593,7 @@ func TestOpenRouter_Generate_WithToolChoice(t *testing.T) {
 func TestOpenRouter_Generate_ToolChoiceNone(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		if req["tool_choice"] != "none" {
 			t.Errorf("expected tool_choice none, got %v", req["tool_choice"])
@@ -611,7 +611,7 @@ func TestOpenRouter_Generate_ToolChoiceNone(t *testing.T) {
 				TotalTokens      int `json:"total_tokens"`
 			}{},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 

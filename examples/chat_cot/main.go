@@ -62,8 +62,8 @@ func cotChatDemo() {
 			continue
 		}
 
-		explanation := outputs["explanation"].(string)
-		answer := outputs["answer"].(string)
+		explanation := outputs.Outputs["explanation"].(string)
+		answer := outputs.Outputs["answer"].(string)
 
 		fmt.Printf("Tutor Reasoning: %s\n", explanation)
 		fmt.Printf("Tutor Answer: %s\n", answer)
@@ -89,9 +89,10 @@ func formatHistoryContext(messages []dsgo.Message) string {
 			continue
 		}
 		role := msg.Role
-		if role == "user" {
+		switch role {
+		case "user":
 			role = "User"
-		} else if role == "assistant" {
+		case "assistant":
 			role = "Assistant"
 		}
 		context += fmt.Sprintf("%s: %s\n", role, truncate(msg.Content, 150))

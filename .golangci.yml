@@ -1,0 +1,23 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - govet
+    - ineffassign
+    - typecheck
+
+linters-settings:
+  errcheck:
+    check-blank: false
+    check-type-assertions: false
+
+run:
+  timeout: 5m
+  tests: true
+
+issues:
+  exclude-use-default: false

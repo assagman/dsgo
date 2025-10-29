@@ -58,9 +58,9 @@ func simpleCalculation() {
 	}
 
 	fmt.Printf("Problem: %s\n", inputs["problem"])
-	fmt.Printf("\nGenerated Code:\n%s\n", outputs["code"])
-	fmt.Printf("\nExplanation: %s\n", outputs["explanation"])
-	if answer, ok := outputs["answer"]; ok {
+	fmt.Printf("\nGenerated Code:\n%s\n", outputs.Outputs["code"])
+	fmt.Printf("\nExplanation: %s\n", outputs.Outputs["explanation"])
+	if answer, ok := outputs.Outputs["answer"]; ok {
 		fmt.Printf("Answer: %s\n", answer)
 	}
 }
@@ -88,9 +88,9 @@ func complexProblem() {
 	}
 
 	fmt.Printf("Problem: %s\n", inputs["problem"])
-	fmt.Printf("\nPython Code:\n%s\n", outputs["code"])
-	fmt.Printf("\nExplanation:\n%s\n", outputs["explanation"])
-	fmt.Printf("\nAnswer: %s\n", outputs["answer"])
+	fmt.Printf("\nPython Code:\n%s\n", outputs.Outputs["code"])
+	fmt.Printf("\nExplanation:\n%s\n", outputs.Outputs["explanation"])
+	fmt.Printf("\nAnswer: %s\n", outputs.Outputs["answer"])
 }
 
 func statisticalAnalysis() {
@@ -119,7 +119,7 @@ func statisticalAnalysis() {
 
 	fmt.Printf("Data: %s\n", inputs["data_description"])
 	fmt.Printf("Analysis: %s\n", inputs["analysis_type"])
-	fmt.Printf("\nGenerated Code:\n%s\n", outputs["code"])
-	fmt.Printf("\nExplanation:\n%s\n", outputs["explanation"])
-	fmt.Printf("\nInterpretation:\n%s\n", outputs["interpretation"])
+	fmt.Printf("\nGenerated Code:\n%s\n", outputs.Outputs["code"])
+	fmt.Printf("\nExplanation:\n%s\n", outputs.Outputs["explanation"])
+	fmt.Printf("\nInterpretation:\n%s\n", outputs.Outputs["interpretation"])
 }

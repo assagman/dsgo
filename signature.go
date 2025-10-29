@@ -3,7 +3,6 @@ package dsgo
 import (
 	"fmt"
 	"reflect"
-	"strings"
 )
 
 // FieldType represents the type of a signature field
@@ -56,6 +55,17 @@ func (s *Signature) AddInput(name string, fieldType FieldType, description strin
 	return s
 }
 
+// AddOptionalInput adds an optional input field
+func (s *Signature) AddOptionalInput(name string, fieldType FieldType, description string) *Signature {
+	s.InputFields = append(s.InputFields, Field{
+		Name:        name,
+		Type:        fieldType,
+		Description: description,
+		Optional:    true,
+	})
+	return s
+}
+
 // AddOutput adds an output field to the signature
 func (s *Signature) AddOutput(name string, fieldType FieldType, description string) *Signature {
 	s.OutputFields = append(s.OutputFields, Field{
@@ -90,63 +100,20 @@ func (s *Signature) AddClassOutput(name string, classes []string, description st
 	return s
 }
 
-// BuildPrompt constructs a prompt from the signature
-func (s *Signature) BuildPrompt(inputs map[string]any) (string, error) {
-	var prompt strings.Builder
-
-	// Add description
-	if s.Description != "" {
-		prompt.WriteString(s.Description)
-		prompt.WriteString("\n\n")
-	}
-
-	// Add input fields
-	if len(s.InputFields) > 0 {
-		prompt.WriteString("--- Inputs ---\n")
-		for _, field := range s.InputFields {
-			value, exists := inputs[field.Name]
-			if !exists {
-				return "", fmt.Errorf("missing required input field: %s", field.Name)
-			}
-			if field.Description != "" {
-				prompt.WriteString(fmt.Sprintf("%s (%s): %v\n", field.Name, field.Description, value))
-			} else {
-				prompt.WriteString(fmt.Sprintf("%s: %v\n", field.Name, value))
-			}
-		}
-		prompt.WriteString("\n")
-	}
-
-	// Add output format specification
-	if len(s.OutputFields) > 0 {
-		prompt.WriteString("--- Required Output Format ---\n")
-		prompt.WriteString("Respond with a JSON object containing the following fields:\n")
-		for _, field := range s.OutputFields {
-			optional := ""
-			if field.Optional {
-				optional = " (optional)"
-			}
-			classInfo := ""
-			if field.Type == FieldTypeClass && len(field.Classes) > 0 {
-				classInfo = fmt.Sprintf(" - MUST be exactly one of: %s", strings.Join(field.Classes, ", "))
-			}
-			if field.Description != "" {
-				prompt.WriteString(fmt.Sprintf("- %s (%s)%s%s: %s\n", field.Name, field.Type, optional, classInfo, field.Description))
-			} else {
-				prompt.WriteString(fmt.Sprintf("- %s (%s)%s%s\n", field.Name, field.Type, optional, classInfo))
-			}
-		}
-		prompt.WriteString("\nIMPORTANT: Return ONLY a valid JSON object. Do not include any code blocks, explanations, or additional text.\n")
-	}
-
-	return prompt.String(), nil
-}
-
-// ValidateInputs validates that all required inputs are present
+// ValidateInputs validates that all required inputs are present and of correct type
 func (s *Signature) ValidateInputs(inputs map[string]any) error {
 	for _, field := range s.InputFields {
-		if _, exists := inputs[field.Name]; !exists {
+		value, exists := inputs[field.Name]
+		if !exists && !field.Optional {
 			return fmt.Errorf("missing required input field: %s", field.Name)
+		}
+		if !exists {
+			continue
+		}
+
+		// Basic type validation
+		if err := s.validateFieldType(field, value); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -154,9 +121,9 @@ func (s *Signature) ValidateInputs(inputs map[string]any) error {
 
 // GetOutputField returns the output field with the given name, or nil if not found
 func (s *Signature) GetOutputField(name string) *Field {
-	for _, field := range s.OutputFields {
-		if field.Name == name {
-			return &field
+	for i := range s.OutputFields {
+		if s.OutputFields[i].Name == name {
+			return &s.OutputFields[i]
 		}
 	}
 	return nil
@@ -204,24 +171,48 @@ func (s *Signature) validateFieldType(field Field, value any) error {
 		return fmt.Errorf("field %s cannot be nil", field.Name)
 	}
 
+	kind := reflect.TypeOf(value).Kind()
+
 	switch field.Type {
 	case FieldTypeString, FieldTypeClass, FieldTypeImage, FieldTypeDatetime:
-		if reflect.TypeOf(value).Kind() != reflect.String {
+		if kind != reflect.String {
 			return fmt.Errorf("field %s expected string, got %T", field.Name, value)
 		}
+
 	case FieldTypeInt:
-		kind := reflect.TypeOf(value).Kind()
-		if kind != reflect.Int && kind != reflect.Int64 && kind != reflect.Int32 && kind != reflect.Float64 {
-			return fmt.Errorf("field %s expected int, got %T", field.Name, value)
+		// Accept all int kinds + float64 (adapters coerce to int)
+		switch kind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			// OK
+		case reflect.Float64:
+			// OK - adapters will coerce to int
+		default:
+			return fmt.Errorf("field %s expected int-like (int/int32/int64/float64), got %T", field.Name, value)
 		}
+
 	case FieldTypeFloat:
-		kind := reflect.TypeOf(value).Kind()
-		if kind != reflect.Float64 && kind != reflect.Float32 && kind != reflect.Int && kind != reflect.Int64 {
-			return fmt.Errorf("field %s expected float, got %T", field.Name, value)
+		// Accept all float kinds + int kinds (can convert to float)
+		switch kind {
+		case reflect.Float32, reflect.Float64:
+			// OK
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			// OK - can convert to float
+		default:
+			return fmt.Errorf("field %s expected float-like (float32/float64/int), got %T", field.Name, value)
 		}
+
 	case FieldTypeBool:
-		if reflect.TypeOf(value).Kind() != reflect.Bool {
+		if kind != reflect.Bool {
 			return fmt.Errorf("field %s expected bool, got %T", field.Name, value)
+		}
+
+	case FieldTypeJSON:
+		// Accept map, slice, or string (JSON)
+		switch kind {
+		case reflect.Map, reflect.Slice, reflect.String:
+			// OK
+		default:
+			return fmt.Errorf("field %s expected JSON (map/slice/string), got %T", field.Name, value)
 		}
 	}
 	return nil

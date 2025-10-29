@@ -84,23 +84,23 @@ func researchAssistant() {
 	fmt.Println(strings.Repeat("=", 70))
 
 	fmt.Println("\n📝 SUMMARY:")
-	fmt.Println(outputs["summary"])
+	fmt.Println(outputs.Outputs["summary"])
 
 	fmt.Println("\n🔍 KEY FINDINGS:")
-	fmt.Println(outputs["key_findings"])
+	fmt.Println(outputs.Outputs["key_findings"])
 
-	if stats, ok := outputs["statistics"]; ok && stats != nil {
+	if stats, ok := outputs.Outputs["statistics"]; ok && stats != nil {
 		fmt.Println("\n📈 STATISTICS:")
 		fmt.Println(stats)
 	}
 
 	fmt.Println("\n💡 RECOMMENDATIONS:")
-	fmt.Println(outputs["recommendations"])
+	fmt.Println(outputs.Outputs["recommendations"])
 
 	fmt.Println("\n📊 METADATA:")
-	fmt.Printf("  Confidence Level: %v\n", outputs["confidence_level"])
-	fmt.Printf("  Research Quality: %v\n", outputs["research_quality"])
-	fmt.Printf("  Sources Consulted: %v\n", outputs["sources_consulted"])
+	fmt.Printf("  Confidence Level: %v\n", outputs.Outputs["confidence_level"])
+	fmt.Printf("  Research Quality: %v\n", outputs.Outputs["research_quality"])
+	fmt.Printf("  Sources Consulted: %v\n", outputs.Outputs["sources_consulted"])
 
 	fmt.Println("\n" + strings.Repeat("=", 70))
 }

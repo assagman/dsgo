@@ -2,10 +2,10 @@ package module
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/assagman/dsgo"
 )
@@ -57,7 +57,7 @@ func (pot *ProgramOfThought) GetSignature() *dsgo.Signature {
 }
 
 // Forward executes the program of thought
-func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
 	if err := pot.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
@@ -71,20 +71,25 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 		{Role: "user", Content: prompt},
 	}
 
-	options := pot.Options
-	if pot.LM.SupportsJSON() {
-		options.ResponseFormat = "json"
-	}
+	// Copy options to avoid mutation
+	options := pot.Options.Copy()
+	// ProgramOfThought always uses FallbackAdapter internally (line 86)
+	// So we don't force JSON mode since FallbackAdapter can handle various formats
 
 	result, err := pot.LM.Generate(ctx, messages, options)
 	if err != nil {
 		return nil, fmt.Errorf("LM generation failed: %w", err)
 	}
 
-	outputs, err := pot.parseOutput(result.Content)
+	// Use FallbackAdapter to parse output
+	adapter := dsgo.NewFallbackAdapter()
+	outputs, err := adapter.Parse(pot.Signature, result.Content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse output: %w", err)
 	}
+
+	// Extract adapter metadata
+	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
 
 	// Execute code if enabled
 	if pot.AllowExecution {
@@ -102,7 +107,18 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 		return nil, fmt.Errorf("output validation failed: %w", err)
 	}
 
-	return outputs, nil
+	// Build Prediction object
+	prediction := dsgo.NewPrediction(outputs).
+		WithUsage(result.Usage).
+		WithModuleName("ProgramOfThought").
+		WithInputs(inputs)
+
+	// Add adapter metrics if available
+	if adapterUsed != "" {
+		prediction.WithAdapterMetrics(adapterUsed, parseAttempts, fallbackUsed)
+	}
+
+	return prediction, nil
 }
 
 func (pot *ProgramOfThought) buildPrompt(inputs map[string]any) (string, error) {
@@ -163,60 +179,18 @@ func (pot *ProgramOfThought) buildPrompt(inputs map[string]any) (string, error) 
 	return prompt.String(), nil
 }
 
-func (pot *ProgramOfThought) parseOutput(content string) (map[string]any, error) {
-	content = strings.TrimSpace(content)
-
-	// Try to extract JSON from markdown code blocks
-	if strings.Contains(content, "```json") {
-		start := strings.Index(content, "```json") + 7
-		end := strings.Index(content[start:], "```")
-		if end > 0 {
-			content = content[start : start+end]
-		}
-	} else if strings.Contains(content, "```") {
-		start := strings.Index(content, "```") + 3
-		end := strings.Index(content[start:], "```")
-		if end > 0 {
-			content = content[start : start+end]
-		}
-	} else {
-		// Try to find JSON object in the content
-		start := strings.Index(content, "{")
-		if start >= 0 {
-			// Find matching closing brace
-			depth := 0
-			for i := start; i < len(content); i++ {
-				if content[i] == '{' {
-					depth++
-				} else if content[i] == '}' {
-					depth--
-					if depth == 0 {
-						content = content[start : i+1]
-						break
-					}
-				}
-			}
-		}
-	}
-
-	content = strings.TrimSpace(content)
-
-	var outputs map[string]any
-	if err := json.Unmarshal([]byte(content), &outputs); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, content)
-	}
-
-	return outputs, nil
-}
-
 func (pot *ProgramOfThought) executeCode(ctx context.Context, code string) (string, error) {
+	// Create a timeout context for code execution
+	execCtx, cancel := context.WithTimeout(ctx, time.Duration(pot.ExecutionTimeout)*time.Second)
+	defer cancel()
+
 	var cmd *exec.Cmd
 
 	switch pot.Language {
 	case "python":
-		cmd = exec.CommandContext(ctx, "python3", "-c", code)
+		cmd = exec.CommandContext(execCtx, "python3", "-c", code)
 	case "javascript":
-		cmd = exec.CommandContext(ctx, "node", "-e", code)
+		cmd = exec.CommandContext(execCtx, "node", "-e", code)
 	case "go":
 		// Go requires a file, so we'll skip execution for now
 		return "", fmt.Errorf("go code execution not yet supported")
@@ -226,6 +200,9 @@ func (pot *ProgramOfThought) executeCode(ctx context.Context, code string) (stri
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if execCtx.Err() == context.DeadlineExceeded {
+			return string(output), fmt.Errorf("execution timeout after %d seconds", pot.ExecutionTimeout)
+		}
 		return string(output), fmt.Errorf("execution failed: %w", err)
 	}
 

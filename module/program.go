@@ -29,24 +29,34 @@ func (p *Program) AddModule(module dsgo.Module) *Program {
 
 // Forward executes the program by running modules in sequence
 // Each module's outputs become available as inputs to subsequent modules
-func (p *Program) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
 	if len(p.modules) == 0 {
 		return nil, fmt.Errorf("program has no modules")
 	}
 
 	currentInputs := inputs
 	finalOutputs := make(map[string]any)
+	var lastPrediction *dsgo.Prediction
+	var totalUsage dsgo.Usage
 
 	for i, module := range p.modules {
-		outputs, err := module.Forward(ctx, currentInputs)
+		prediction, err := module.Forward(ctx, currentInputs)
 		if err != nil {
 			return nil, fmt.Errorf("module %d failed: %w", i, err)
 		}
 
 		// Accumulate outputs from all modules
-		for k, v := range outputs {
+		for k, v := range prediction.Outputs {
 			finalOutputs[k] = v
 		}
+
+		// Track last prediction
+		lastPrediction = prediction
+
+		// Accumulate usage stats
+		totalUsage.PromptTokens += prediction.Usage.PromptTokens
+		totalUsage.CompletionTokens += prediction.Usage.CompletionTokens
+		totalUsage.TotalTokens += prediction.Usage.TotalTokens
 
 		// Merge outputs into inputs for next module
 		// This allows modules to access both original inputs and previous outputs
@@ -54,13 +64,24 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (map[strin
 		for k, v := range currentInputs {
 			merged[k] = v
 		}
-		for k, v := range outputs {
+		for k, v := range prediction.Outputs {
 			merged[k] = v
 		}
 		currentInputs = merged
 	}
 
-	return finalOutputs, nil
+	// Build final prediction from accumulated results
+	finalPrediction := dsgo.NewPrediction(finalOutputs).
+		WithUsage(totalUsage).
+		WithModuleName(p.name).
+		WithInputs(inputs)
+
+	// Carry over rationale from last prediction if available
+	if lastPrediction != nil && lastPrediction.Rationale != "" {
+		finalPrediction.Rationale = lastPrediction.Rationale
+	}
+
+	return finalPrediction, nil
 }
 
 // GetSignature returns the signature of the last module in the pipeline

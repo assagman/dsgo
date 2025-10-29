@@ -31,13 +31,15 @@ vet:
 	go vet $(PACKAGES)
 
 lint:
-	@which golangci-lint > /dev/null || (echo "golangci-lint not installed. Install from https://golangci-lint.run/usage/install/" && exit 1)
+	@which golangci-lint > /dev/null || (echo "golangci-lint not installed. Run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest" && exit 1)
 	golangci-lint run --timeout=5m
 
 verify:
 	go mod verify
 
 check: verify fmt vet build
+
+check-lint: check lint
 
 check-eof:
 	./scripts/check-eof.sh

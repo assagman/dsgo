@@ -35,3 +35,7 @@ Thumbs.db
 # Examples binaries
 examples/*/main
 examples/*/*.exe
+
+# Example test artifacts
+tmp_*.log
+example_execution_results.txt

@@ -8,20 +8,39 @@ import (
 	"github.com/assagman/dsgo"
 )
 
-// ScoringFunction evaluates the quality of an output
-type ScoringFunction func(inputs map[string]any, outputs map[string]any) (float64, error)
+// ScoringFunction evaluates the quality of a prediction
+type ScoringFunction func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error)
 
-// BestOfN executes a module N times and returns the best result
+// BestOfN executes a module N times and returns the best result.
+//
+// IMPORTANT: When using WithParallel(true), ensure the module is stateless
+// or provide N independent module instances. Modules that maintain internal
+// state (e.g., History in Predict or ChainOfThought) will cause data races
+// when shared across goroutines.
+//
+// Safe parallel usage patterns:
+//   - Use stateless modules (no internal state mutation)
+//   - Create N independent instances of stateful modules
+//   - Use separate History instances for each parallel execution
+//
+// Example with independent instances:
+//
+//	modules := make([]dsgo.Module, n)
+//	for i := 0; i < n; i++ {
+//	    modules[i] = module.NewPredict(sig, lm) // Each has its own History
+//	}
+//	// Execute with BestOfN wrapping each independently
 type BestOfN struct {
 	Module      dsgo.Module
 	N           int
 	Scorer      ScoringFunction
 	Parallel    bool
 	ReturnAll   bool
-	MaxFailures int // Maximum number of failures before giving up
+	MaxFailures int     // Maximum number of failures before giving up
+	Threshold   float64 // Early-stop if score meets or exceeds this threshold
 }
 
-// BestOfNResult contains the results of BestOfN execution
+// BestOfNResult contains the results of BestOfN execution (deprecated - use Prediction.Completions)
 type BestOfNResult struct {
 	BestOutput   map[string]any
 	BestScore    float64
@@ -39,6 +58,7 @@ func NewBestOfN(module dsgo.Module, n int) *BestOfN {
 		Parallel:    false,
 		ReturnAll:   false,
 		MaxFailures: n / 2, // Allow up to half the attempts to fail
+		Threshold:   0,     // No threshold by default
 	}
 }
 
@@ -48,7 +68,9 @@ func (b *BestOfN) WithScorer(scorer ScoringFunction) *BestOfN {
 	return b
 }
 
-// WithParallel enables parallel execution
+// WithParallel enables parallel execution.
+// WARNING: Only use with stateless modules or independent instances.
+// See BestOfN type documentation for safe usage patterns.
 func (b *BestOfN) WithParallel(parallel bool) *BestOfN {
 	b.Parallel = parallel
 	return b
@@ -66,19 +88,25 @@ func (b *BestOfN) WithMaxFailures(max int) *BestOfN {
 	return b
 }
 
+// WithThreshold sets the early-stop threshold
+func (b *BestOfN) WithThreshold(threshold float64) *BestOfN {
+	b.Threshold = threshold
+	return b
+}
+
 // GetSignature returns the module's signature
 func (b *BestOfN) GetSignature() *dsgo.Signature {
 	return b.Module.GetSignature()
 }
 
 // Forward executes the module N times and returns the best result
-func (b *BestOfN) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+func (b *BestOfN) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
 	if b.Scorer == nil {
 		return nil, fmt.Errorf("scorer function must be set")
 	}
 
 	if b.N <= 0 {
-		return nil, fmt.Errorf("N must be positive")
+		return nil, fmt.Errorf("n must be positive")
 	}
 
 	if b.Parallel {
@@ -87,15 +115,14 @@ func (b *BestOfN) Forward(ctx context.Context, inputs map[string]any) (map[strin
 	return b.forwardSequential(ctx, inputs)
 }
 
-func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) (map[string]any, error) {
-	var allOutputs []map[string]any
-	var allScores []float64
-	var bestOutput map[string]any
+func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+	var allPredictions []*dsgo.Prediction
+	var bestPrediction *dsgo.Prediction
 	bestScore := -1.0
 	failureCount := 0
 
 	for i := 0; i < b.N; i++ {
-		outputs, err := b.Module.Forward(ctx, inputs)
+		prediction, err := b.Module.Forward(ctx, inputs)
 		if err != nil {
 			failureCount++
 			if failureCount > b.MaxFailures {
@@ -104,7 +131,7 @@ func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) 
 			continue
 		}
 
-		score, err := b.Scorer(inputs, outputs)
+		score, err := b.Scorer(inputs, prediction)
 		if err != nil {
 			failureCount++
 			if failureCount > b.MaxFailures {
@@ -113,38 +140,43 @@ func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) 
 			continue
 		}
 
-		allOutputs = append(allOutputs, outputs)
-		allScores = append(allScores, score)
+		allPredictions = append(allPredictions, prediction)
 
-		if bestOutput == nil || score > bestScore {
-			bestOutput = outputs
+		if bestPrediction == nil || score > bestScore {
+			bestPrediction = prediction
 			bestScore = score
+		}
+
+		// Early stop if threshold is met
+		if b.Threshold > 0 && score >= b.Threshold {
+			break
 		}
 	}
 
-	if bestOutput == nil {
+	if bestPrediction == nil {
 		return nil, fmt.Errorf("all %d attempts failed", b.N)
 	}
 
-	// If ReturnAll is enabled, add metadata to the result
+	// Set score on best prediction
+	bestPrediction.Score = bestScore
+
+	// If ReturnAll is enabled, add all completions
 	if b.ReturnAll {
-		result := make(map[string]any)
-		for k, v := range bestOutput {
-			result[k] = v
+		var completions []map[string]any
+		for _, pred := range allPredictions {
+			completions = append(completions, pred.Outputs)
 		}
-		result["_best_of_n_score"] = bestScore
-		result["_best_of_n_all_scores"] = allScores
-		return result, nil
+		bestPrediction.Completions = completions
 	}
 
-	return bestOutput, nil
+	return bestPrediction, nil
 }
 
-func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
 	type result struct {
-		outputs map[string]any
-		score   float64
-		err     error
+		prediction *dsgo.Prediction
+		score      float64
+		err        error
 	}
 
 	results := make(chan result, b.N)
@@ -155,19 +187,19 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (m
 		go func() {
 			defer wg.Done()
 
-			outputs, err := b.Module.Forward(ctx, inputs)
+			prediction, err := b.Module.Forward(ctx, inputs)
 			if err != nil {
 				results <- result{err: err}
 				return
 			}
 
-			score, err := b.Scorer(inputs, outputs)
+			score, err := b.Scorer(inputs, prediction)
 			if err != nil {
 				results <- result{err: err}
 				return
 			}
 
-			results <- result{outputs: outputs, score: score}
+			results <- result{prediction: prediction, score: score}
 		}()
 	}
 
@@ -178,9 +210,8 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (m
 	}()
 
 	// Collect results
-	var allOutputs []map[string]any
-	var allScores []float64
-	var bestOutput map[string]any
+	var allPredictions []*dsgo.Prediction
+	var bestPrediction *dsgo.Prediction
 	bestScore := -1.0
 	failureCount := 0
 
@@ -190,11 +221,10 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (m
 			continue
 		}
 
-		allOutputs = append(allOutputs, res.outputs)
-		allScores = append(allScores, res.score)
+		allPredictions = append(allPredictions, res.prediction)
 
-		if bestOutput == nil || res.score > bestScore {
-			bestOutput = res.outputs
+		if bestPrediction == nil || res.score > bestScore {
+			bestPrediction = res.prediction
 			bestScore = res.score
 		}
 	}
@@ -203,30 +233,31 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (m
 		return nil, fmt.Errorf("exceeded maximum failures (%d/%d)", failureCount, b.N)
 	}
 
-	if bestOutput == nil {
+	if bestPrediction == nil {
 		return nil, fmt.Errorf("all %d attempts failed", b.N)
 	}
 
-	// If ReturnAll is enabled, add metadata to the result
+	// Set score on best prediction
+	bestPrediction.Score = bestScore
+
+	// If ReturnAll is enabled, add all completions
 	if b.ReturnAll {
-		result := make(map[string]any)
-		for k, v := range bestOutput {
-			result[k] = v
+		var completions []map[string]any
+		for _, pred := range allPredictions {
+			completions = append(completions, pred.Outputs)
 		}
-		result["_best_of_n_score"] = bestScore
-		result["_best_of_n_all_scores"] = allScores
-		return result, nil
+		bestPrediction.Completions = completions
 	}
 
-	return bestOutput, nil
+	return bestPrediction, nil
 }
 
 // DefaultScorer returns a simple length-based scorer
 // This is a basic scorer that prefers longer outputs
 func DefaultScorer() ScoringFunction {
-	return func(inputs map[string]any, outputs map[string]any) (float64, error) {
+	return func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
 		totalLength := 0
-		for _, v := range outputs {
+		for _, v := range prediction.Outputs {
 			totalLength += len(fmt.Sprintf("%v", v))
 		}
 		return float64(totalLength), nil
@@ -235,8 +266,8 @@ func DefaultScorer() ScoringFunction {
 
 // ConfidenceScorer returns a scorer based on a confidence field
 func ConfidenceScorer(field string) ScoringFunction {
-	return func(inputs map[string]any, outputs map[string]any) (float64, error) {
-		confidence, exists := outputs[field]
+	return func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+		confidence, exists := prediction.Outputs[field]
 		if !exists {
 			return 0, fmt.Errorf("confidence field '%s' not found in outputs", field)
 		}

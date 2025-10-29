@@ -83,63 +83,6 @@ func TestExampleSet_Clone(t *testing.T) {
 	}
 }
 
-func TestExampleSet_FormatExamples(t *testing.T) {
-	es := NewExampleSet("test")
-	es.AddPair(
-		map[string]any{"question": "What is AI?"},
-		map[string]any{"answer": "Artificial Intelligence"},
-	)
-
-	sig := NewSignature("Test").
-		AddInput("question", FieldTypeString, "The question").
-		AddOutput("answer", FieldTypeString, "The answer")
-
-	formatted, err := es.FormatExamples(sig)
-	if err != nil {
-		t.Errorf("FormatExamples failed: %v", err)
-	}
-
-	if formatted == "" {
-		t.Error("Formatted examples should not be empty")
-	}
-}
-
-func TestExampleSet_FormatExamples_Empty(t *testing.T) {
-	es := NewExampleSet("test")
-	sig := NewSignature("Test")
-
-	formatted, err := es.FormatExamples(sig)
-	if err != nil {
-		t.Errorf("FormatExamples failed: %v", err)
-	}
-
-	if formatted != "" {
-		t.Error("Formatted examples should be empty for empty set")
-	}
-}
-
-func TestExampleSet_FormatExamples_WithLabel(t *testing.T) {
-	es := NewExampleSet("test")
-	ex := NewExample(
-		map[string]any{"in": "test"},
-		map[string]any{"out": "result"},
-	).WithLabel("example-1")
-	es.Add(ex)
-
-	sig := NewSignature("Test").
-		AddInput("in", FieldTypeString, "Input").
-		AddOutput("out", FieldTypeString, "Output")
-
-	formatted, err := es.FormatExamples(sig)
-	if err != nil {
-		t.Errorf("FormatExamples failed: %v", err)
-	}
-
-	if !contains(formatted, "example-1") {
-		t.Error("Formatted examples should include label")
-	}
-}
-
 func TestExampleSet_GetN_EdgeCases(t *testing.T) {
 	es := NewExampleSet("test")
 	es.AddPair(map[string]any{"x": 1}, map[string]any{"y": 1})
@@ -190,9 +133,4 @@ func TestExampleSet_Get(t *testing.T) {
 	if examples[1].Inputs["x"] != 2 {
 		t.Errorf("Expected x=2 at index 1, got %v", examples[1].Inputs["x"])
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && (s[0:len(substr)] == substr || contains(s[1:], substr))))
 }

@@ -94,13 +94,13 @@ func processData(data []int) []int {
 	}
 
 	fmt.Printf("Code to Review:\n%s\n", code)
-	fmt.Printf("Structure Analysis: %s\n", outputs["structure_analysis"])
-	fmt.Printf("Complexity: %s\n", outputs["complexity"])
-	fmt.Printf("Maintainability Score: %.2f\n\n", outputs["maintainability_score"])
-	fmt.Printf("Issues Found:\n%s\n\n", outputs["issues"])
-	fmt.Printf("Severity: %s\n\n", outputs["severity"])
-	fmt.Printf("Recommendations:\n%s\n", outputs["recommendations"])
-	fmt.Printf("\nRefactoring Priority: %s\n", outputs["refactoring_priority"])
+	fmt.Printf("Structure Analysis: %s\n", outputs.Outputs["structure_analysis"])
+	fmt.Printf("Complexity: %s\n", outputs.Outputs["complexity"])
+	fmt.Printf("Maintainability Score: %.2f\n\n", outputs.Outputs["maintainability_score"])
+	fmt.Printf("Issues Found:\n%s\n\n", outputs.Outputs["issues"])
+	fmt.Printf("Severity: %s\n\n", outputs.Outputs["severity"])
+	fmt.Printf("Recommendations:\n%s\n", outputs.Outputs["recommendations"])
+	fmt.Printf("\nRefactoring Priority: %s\n", outputs.Outputs["refactoring_priority"])
 }
 
 func comprehensiveReview() {
@@ -148,11 +148,11 @@ function authenticateUser(username, password) {
 	fmt.Println("COMPREHENSIVE CODE REVIEW REPORT")
 	fmt.Println(strings.Repeat("=", 70))
 
-	fmt.Printf("\n🔒 SECURITY ISSUES:\n%s\n", outputs["security_issues"])
-	fmt.Printf("\n⚡ PERFORMANCE ISSUES:\n%s\n", outputs["performance_issues"])
-	fmt.Printf("\n✅ BEST PRACTICES:\n%s\n", outputs["best_practices"])
-	fmt.Printf("\n👃 CODE SMELLS:\n%s\n", outputs["code_smell"])
-	fmt.Printf("\n📊 OVERALL QUALITY: %.2f/1.0\n", outputs["overall_quality"])
-	fmt.Printf("\n📝 SUMMARY:\n%s\n", outputs["summary"])
+	fmt.Printf("\n🔒 SECURITY ISSUES:\n%s\n", outputs.Outputs["security_issues"])
+	fmt.Printf("\n⚡ PERFORMANCE ISSUES:\n%s\n", outputs.Outputs["performance_issues"])
+	fmt.Printf("\n✅ BEST PRACTICES:\n%s\n", outputs.Outputs["best_practices"])
+	fmt.Printf("\n👃 CODE SMELLS:\n%s\n", outputs.Outputs["code_smell"])
+	fmt.Printf("\n📊 OVERALL QUALITY: %.2f/1.0\n", outputs.Outputs["overall_quality"])
+	fmt.Printf("\n📝 SUMMARY:\n%s\n", outputs.Outputs["summary"])
 	fmt.Println(strings.Repeat("=", 70))
 }

@@ -3,8 +3,8 @@
 ║                                                                      ║
 ║   ██████╗ ███████╗ ██████╗  ██████╗                                  ║
 ║   ██╔══██╗██╔════╝██╔════╝ ██╔═══██╗                                 ║
-║   ██║  ██║███████╗██║  ███╗██║   ██║                                 ║
-║   ██║  ██║╚════██║██║   ██║██║   ██║                                 ║
+║   ██║  ██║███████╗██║  ███╗██║   ██║      🚧 UNDER                   ║
+║   ██║  ██║╚════██║██║   ██║██║   ██║         CONSTRUCTION            ║
 ║   ██████╔╝███████║╚██████╔╝╚██████╔╝                                 ║
 ║   ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝                                  ║
 ║                                                                      ║
@@ -34,6 +34,11 @@ DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordn
 
 - ✅ **Signatures**: Define structured inputs and outputs for LM calls
 - ✅ **Type Safety**: Strong typing with validation for inputs and outputs
+- ✅ **Robust Adapters**: Multiple parsing strategies with automatic fallback
+  - `JSONAdapter`: Structured JSON outputs with schema validation
+  - `ChatAdapter`: Field marker format `[[ ## field ## ]]` for reliable parsing
+  - `TwoStepAdapter`: Two-stage approach for reasoning models (o1/o3/gpt-5)
+  - `FallbackAdapter`: Automatic retry chain (Chat → JSON) with >95% parse success
 - ✅ **Modules**: Composable building blocks for LM programs
   - `Predict`: Basic prediction module
   - `ChainOfThought`: Step-by-step reasoning
@@ -45,6 +50,7 @@ DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordn
 - ✅ **LM Abstraction**: Easy integration with different language models
 - ✅ **Tool Support**: Define and use tools in ReAct agents
 - ✅ **Structured Outputs**: JSON-based structured responses with validation
+- ✅ **Observability**: Adapter metrics tracking (parse success, fallback usage)
 
 ## Quick Start
 
@@ -55,6 +61,22 @@ go get github.com/assagman/dsgo
 ```
 
 ### Three Progressive Examples
+
+Learn by building progressively complex applications:
+
+```mermaid
+graph LR
+    A[1. Sentiment<br/>Beginner<br/>Predict + CoT] --> B[2. ReAct Agent<br/>Intermediate<br/>Tools + Reasoning]
+    B --> C[3. Research Assistant<br/>Advanced<br/>All Features]
+
+    classDef beginner fill:#06d6a0,stroke:#073b4c,color:#000
+    classDef intermediate fill:#ffd166,stroke:#073b4c,color:#000
+    classDef advanced fill:#ef476f,stroke:#073b4c,color:#fff
+
+    class A beginner
+    class B intermediate
+    class C advanced
+```
 
 1. **Sentiment Analysis** (Beginner) - Basic prediction and chain-of-thought
 2. **ReAct Agent** (Intermediate) - Tools and iterative reasoning
@@ -94,13 +116,13 @@ func main() {
         "text": "I love this product!",
     }
 
-    outputs, err := predict.Forward(ctx, inputs)
+    result, err := predict.Forward(ctx, inputs)
     if err != nil {
         log.Fatal(err)
     }
 
     fmt.Printf("Sentiment: %v (Confidence: %v)\n",
-        outputs["sentiment"], outputs["confidence"])
+        result.GetString("sentiment"), result.GetFloat("confidence"))
 }
 ```
 
@@ -115,9 +137,10 @@ sig := dsgo.NewSignature("Solve the math word problem").
 lm := openai.NewOpenAI("gpt-4")
 cot := module.NewChainOfThought(sig, lm)
 
-outputs, err := cot.Forward(ctx, map[string]interface{}{
+result, err := cot.Forward(ctx, map[string]interface{}{
     "problem": "If John has 5 apples and gives 2 away, how many does he have?",
 })
+// Access outputs: result.GetFloat("answer"), result.GetString("explanation")
 ```
 
 ### ReAct Agent with Tools
@@ -143,9 +166,10 @@ react := module.NewReAct(sig, lm, []dsgo.Tool{*searchTool}).
     WithMaxIterations(5).
     WithVerbose(true)
 
-outputs, err := react.Forward(ctx, map[string]interface{}{
+result, err := react.Forward(ctx, map[string]interface{}{
     "question": "What is DSPy?",
 })
+// Access result: result.GetString("answer")
 ```
 
 ### Advanced: Custom Signatures with Multiple Types
@@ -168,11 +192,12 @@ sig := dsgo.NewSignature("Research and analyze a topic").
 tools := []dsgo.Tool{searchTool, statsTool, factCheckTool}
 react := module.NewReAct(sig, lm, tools).WithMaxIterations(7)
 
-outputs, err := react.Forward(ctx, map[string]interface{}{
+result, err := react.Forward(ctx, map[string]interface{}{
     "topic":         "AI in software development",
     "depth_level":   2,
     "include_stats": true,
 })
+// Access: result.GetString("summary"), result.GetInt("sources_count"), etc.
 ```
 
 ## Core Concepts
@@ -188,27 +213,107 @@ sig := dsgo.NewSignature("Description of the task").
     AddClassOutput("category", []string{"A", "B", "C"}, "Classification")
 ```
 
-Supported field types:
-- `FieldTypeString`
-- `FieldTypeInt`
-- `FieldTypeFloat`
-- `FieldTypeBool`
-- `FieldTypeJSON`
-- `FieldTypeClass` (enum/classification)
-- `FieldTypeImage`
-- `FieldTypeDatetime`
+**Supported Field Types:**
+
+```mermaid
+graph TD
+    subgraph "Primitive Types"
+        STR[String<br/>Text data]
+        INT[Int<br/>Integers]
+        FLT[Float<br/>Decimals]
+        BOOL[Bool<br/>true/false]
+    end
+
+    subgraph "Structured Types"
+        JSON[JSON<br/>Complex objects]
+        CLS[Class<br/>Enum/Categories]
+    end
+
+    subgraph "Rich Types"
+        IMG[Image<br/>Visual data]
+        DT[Datetime<br/>Timestamps]
+    end
+
+    SIG[Signature] --> STR & INT & FLT & BOOL
+    SIG --> JSON & CLS
+    SIG --> IMG & DT
+
+    classDef prim fill:#06d6a0,stroke:#073b4c,color:#000
+    classDef struct fill:#118ab2,stroke:#073b4c,color:#fff
+    classDef rich fill:#ef476f,stroke:#073b4c,color:#fff
+    classDef sig fill:#ffd166,stroke:#073b4c,color:#000
+
+    class STR,INT,FLT,BOOL prim
+    class JSON,CLS struct
+    class IMG,DT rich
+    class SIG sig
+```
+
+- `FieldTypeString` - Text data
+- `FieldTypeInt` - Integer values
+- `FieldTypeFloat` - Decimal numbers
+- `FieldTypeBool` - Boolean (true/false)
+- `FieldTypeJSON` - Complex structured data
+- `FieldTypeClass` - Enum/classification (constrained choices)
+- `FieldTypeImage` - Image data (URLs or base64)
+- `FieldTypeDatetime` - Timestamps and dates
 
 ### Modules
 
-Modules are composable building blocks:
+Modules are composable building blocks that implement different execution strategies:
+
+```mermaid
+graph LR
+    subgraph "Simple"
+        P[Predict<br/>Direct answer]
+    end
+
+    subgraph "Reasoning"
+        COT[ChainOfThought<br/>Step-by-step thinking]
+        POT[ProgramOfThought<br/>Code generation]
+    end
+
+    subgraph "Interactive"
+        R[ReAct<br/>Reasoning + Tools]
+        REF[Refine<br/>Iterative improvement]
+    end
+
+    subgraph "Sampling"
+        BON[BestOfN<br/>Generate & select best]
+    end
+
+    subgraph "Composition"
+        PRG[Program<br/>Module pipelines]
+    end
+
+    P -.upgrade.-> COT
+    COT -.add tools.-> R
+    P -.iterate.-> REF
+    P -.sample.-> BON
+    P & COT & R -.chain.-> PRG
+
+    classDef simple fill:#2a9d8f,stroke:#264653,color:#fff
+    classDef reason fill:#e76f51,stroke:#264653,color:#fff
+    classDef interact fill:#f4a261,stroke:#264653,color:#fff
+    classDef sample fill:#e9c46a,stroke:#264653,color:#fff
+    classDef compose fill:#264653,stroke:#264653,color:#fff
+
+    class P simple
+    class COT,POT reason
+    class R,REF interact
+    class BON sample
+    class PRG compose
+```
+
+**Module Descriptions:**
 
 - **Predict**: Direct prediction based on signature
-- **ChainOfThought**: Encourages step-by-step reasoning
-- **ReAct**: Combines reasoning with tool usage
+- **ChainOfThought**: Encourages step-by-step reasoning before answering
+- **ReAct**: Combines reasoning with tool usage in iterative cycles
 - **Refine**: Iteratively improve predictions with feedback
-- **BestOfN**: Generate multiple candidates and select the best
-- **ProgramOfThought**: Generate and execute code for reasoning
-- **Program**: Chain modules into pipelines
+- **BestOfN**: Generate multiple candidates and select the best (supports early stopping with threshold)
+- **ProgramOfThought**: Generate and execute code for reasoning tasks (with timeout enforcement)
+- **Program**: Chain modules into pipelines for complex workflows
 
 ### Language Models
 
@@ -223,12 +328,25 @@ type LM interface {
 }
 ```
 
+**Thread Safety**: All modules automatically copy `GenerateOptions` before mutation to prevent race conditions and unexpected side effects when sharing options across goroutines.
+
+```go
+// Safe to share options across modules
+opts := dsgo.DefaultGenerateOptions()
+opts.Temperature = 0.8
+
+predict1 := module.NewPredict(sig1, lm).WithOptions(opts)
+predict2 := module.NewPredict(sig2, lm).WithOptions(opts)
+// Each module gets its own copy internally
+```
+
 Currently included:
 - OpenAI (GPT-3.5, GPT-4)
+- OpenRouter
 
 ### Tools
 
-Define tools for ReAct agents:
+Define tools for ReAct agents with automatic argument validation:
 
 ```go
 tool := dsgo.NewTool(
@@ -238,17 +356,106 @@ tool := dsgo.NewTool(
         // Tool implementation
         return result, nil
     },
-).AddParameter("param", "string", "Parameter description", true)
+).AddParameter("param", "string", "Parameter description", true)  // Required parameter
+ .AddEnumParameter("mode", "Operation mode", []string{"fast", "accurate"}, false)  // Optional enum
+
+// Validation happens automatically before execution
+result, err := tool.Execute(ctx, args)  // Returns error if required params missing or enum invalid
 ```
+
+**Validation Features**:
+- Required parameters are checked automatically
+- Enum parameters validated against allowed values
+- Clear error messages for validation failures
 
 ## Architecture
 
-DSGo follows the DSPy philosophy:
+DSGo follows the DSPy philosophy of declarative, modular programming with language models:
+
+```mermaid
+graph TB
+    subgraph "Core Components"
+        S[Signature<br/>Define I/O Structure]
+        M[Module<br/>Execution Logic]
+        LM[LM Interface<br/>Model Abstraction]
+    end
+
+    subgraph "Module Types"
+        P[Predict]
+        COT[ChainOfThought]
+        R[ReAct]
+        REF[Refine]
+        BON[BestOfN]
+        POT[ProgramOfThought]
+        PRG[Program]
+    end
+
+    subgraph "Primitives"
+        T[Tools]
+        H[History]
+        PR[Prediction]
+        E[Examples]
+    end
+
+    subgraph "Providers"
+        OAI[OpenAI]
+        OR[OpenRouter]
+    end
+
+    S --> M
+    M --> LM
+    M --> P & COT & R & REF & BON & POT & PRG
+    R --> T
+    M --> H & PR & E
+    LM --> OAI & OR
+
+    classDef core fill:#1a1a2e,stroke:#16213e,color:#eee
+    classDef module fill:#0f3460,stroke:#16213e,color:#eee
+    classDef prim fill:#533483,stroke:#16213e,color:#eee
+    classDef provider fill:#e94560,stroke:#16213e,color:#eee
+
+    class S,M,LM core
+    class P,COT,R,REF,BON,POT,PRG module
+    class T,H,PR,E prim
+    class OAI,OR provider
+```
+
+### Design Principles
 
 1. **Declarative**: Define what you want, not how to prompt
 2. **Modular**: Compose complex behaviors from simple modules
 3. **Type-Safe**: Strong typing with validation
 4. **Tool-Enabled**: Easy integration with external tools
+
+### Execution Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Module
+    participant Signature
+    participant LM
+    participant Tool
+
+    User->>Signature: Define inputs/outputs
+    User->>Module: Create (Predict/CoT/ReAct)
+    User->>Module: Forward(inputs)
+
+    Module->>Signature: ValidateInputs()
+    Module->>Signature: BuildPrompt()
+    Module->>LM: Generate(messages)
+
+    alt ReAct with Tools
+        LM-->>Module: Tool call request
+        Module->>Tool: Execute(args)
+        Tool-->>Module: Result
+        Module->>LM: Generate(with tool result)
+    end
+
+    LM-->>Module: Response
+    Module->>Signature: ValidateOutputs()
+    Module-->>User: Outputs
+```
 
 ## Project Structure
 
@@ -276,9 +483,18 @@ dsgo/
 ├── examples/
 │   ├── shared/              # Shared provider utilities
 │   ├── sentiment/           # Basic prediction & chain-of-thought
+│   ├── chat_predict/        # Multi-turn conversation with Predict
+│   ├── chat_cot/            # Multi-turn with ChainOfThought
 │   ├── react_agent/         # ReAct agent with tools
-│   ├── research_assistant/  # Advanced: complex signatures + tools + reasoning
-│   └── composition/         # Module composition and pipelines
+│   ├── research_assistant/  # Advanced: complex signatures + tools
+│   ├── fewshot_conversation/ # Few-shot learning example
+│   ├── composition/         # Module composition and pipelines
+│   ├── content_generator/   # Content generation example
+│   ├── customer_support/    # Customer support agent
+│   ├── math_solver/         # Math problem solver
+│   ├── code_reviewer/       # Code review agent
+│   ├── data_analyst/        # Data analysis example
+│   └── interview/           # Interview assistant
 ├── AGENTS.md                # Development guide
 └── README.md                # This file
 ```
@@ -298,10 +514,103 @@ dsgo/
 - [ ] Observability/tracing
 - [ ] Multi-modal support
 
+## Advanced Features
+
+### BestOfN with Early Stopping
+
+Generate multiple solutions and select the best, with optional early stopping when a threshold is met:
+
+```go
+// Scorer function signature: func(inputs, prediction) (score, error)
+scorer := func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
+    confidence := pred.GetFloat("confidence")
+    return confidence, nil
+}
+
+bestOfN := module.NewBestOfN(predict, 5).
+    WithScorer(scorer).
+    WithThreshold(0.9).  // Stop early if score >= 0.9
+    WithParallel(true).  // Generate in parallel (requires stateless modules!)
+    WithReturnAll(true)  // Include all scores in metadata
+
+result, err := bestOfN.Forward(ctx, inputs)
+// Returns early if any result scores >= 0.9
+// Access metadata: result.Score, result.Completions
+```
+
+**Scoring Functions**:
+- `DefaultScorer()` - Prefers longer outputs
+- `ConfidenceScorer(field)` - Uses a confidence field from outputs
+- Custom function: `func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error)`
+
+### ProgramOfThought with Timeout Enforcement
+
+Generate and execute code with guaranteed timeout enforcement:
+
+```go
+pot := module.NewProgramOfThought(sig, lm, "python").
+    WithAllowExecution(true).
+    WithExecutionTimeout(10)  // 10 second timeout, enforced via context
+
+result, err := pot.Forward(ctx, inputs)
+// Code execution is cancelled after 10 seconds
+// Timeout error returned in result["execution_error"]
+```
+
+**Features**:
+- Context-based timeout enforcement (prevents hanging)
+- Supports Python, JavaScript, Go (limited)
+- Captures both stdout and stderr
+- Safe by default (execution disabled)
+
+### Few-Shot Learning with Random Sampling
+
+Use examples to guide LM behavior with random sampling support:
+
+```go
+examples := dsgo.NewExampleSet("sentiment examples")
+examples.AddPair(
+    map[string]any{"text": "Love it!"},
+    map[string]any{"sentiment": "positive"},
+).AddPair(
+    map[string]any{"text": "Terrible experience"},
+    map[string]any{"sentiment": "negative"},
+)
+
+// Get random subset of examples
+randomExamples := examples.GetRandom(3)  // Returns 3 random examples
+formatted, _ := examples.FormatExamples(signature)
+```
+
+**ExampleSet Methods**:
+- `Add(example)` - Add a single example
+- `AddPair(inputs, outputs)` - Quick add with maps
+- `Get()` - Get all examples
+- `GetN(n)` - Get first n examples
+- `GetRandom(n)` - Get n random examples (useful for diverse sampling)
+- `Len()`, `IsEmpty()`, `Clear()`, `Clone()`
+
+### Thread-Safe Options
+
+All modules automatically copy `GenerateOptions` to prevent mutation:
+
+```go
+// Original options remain unchanged
+opts := dsgo.DefaultGenerateOptions()
+opts.Temperature = 0.8
+
+predict := module.NewPredict(sig, lm).WithOptions(opts)
+// Module internally calls opts.Copy() - original opts unchanged
+
+// Manual copy
+optsCopy := opts.Copy()  // Deep copy including slices
+```
+
 ## Documentation Index
 
 - **[QUICKSTART.md](QUICKSTART.md)** - Get started in 30 seconds
 - **[AGENTS.md](AGENTS.md)** - Development and testing guide
+- **[ROADMAP.md](ROADMAP.md)** - Implementation progress and roadmap
 
 ## Contributing
 

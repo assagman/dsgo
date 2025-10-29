@@ -1,13 +1,15 @@
 # DSGo Quick Start Guide
 
+Get started with DSGo in under 1 minute. Build LM-powered apps with structured signatures and composable modules.
+
 ## Install & Run (30 seconds)
 
 ```bash
 # 1. Get the package
 go get github.com/assagman/dsgo
 
-# 2. Set your OpenAI key
-export OPENROUTER_API_KEY =sk-or-your-key-here # or OPENAI_API_KEY
+# 2. Set your API key
+export OPENROUTER_API_KEY=sk-or-your-key-here # or OPENAI_API_KEY
 
 # 3. Run an example
 go run examples/sentiment/main.go
@@ -24,7 +26,8 @@ import (
     "log"
 
     "github.com/assagman/dsgo"
-    "github.com/assagman/dsgo/examples/openai"
+    "github.com/assagman/dsgo/module"
+    "github.com/assagman/dsgo/providers/openai"
 )
 
 func main() {
@@ -37,7 +40,7 @@ func main() {
     lm := openai.NewOpenAI("gpt-4")
 
     // 3. Create a module
-    predict := dsgo.NewPredict(sig, lm)
+    predict := module.NewPredict(sig, lm)
 
     // 4. Run it
     result, err := predict.Forward(context.Background(), map[string]interface{}{
@@ -48,13 +51,34 @@ func main() {
         log.Fatal(err)
     }
 
-    fmt.Printf("Sentiment: %s\n", result["sentiment"])
+    fmt.Printf("Sentiment: %s\n", result.GetString("sentiment"))
 }
 ```
 
 ## Core Concepts (5 minutes)
 
+DSGo uses three main building blocks:
+
+```mermaid
+graph LR
+    A[1. Signature<br/>Define I/O] --> B[2. Module<br/>Execution Strategy]
+    B --> C[3. Language Model<br/>AI Provider]
+    D[Tools<br/>Optional] -.-> B
+    
+    classDef sig fill:#ffd166,stroke:#073b4c,color:#000
+    classDef mod fill:#06d6a0,stroke:#073b4c,color:#000
+    classDef lm fill:#118ab2,stroke:#073b4c,color:#fff
+    classDef tool fill:#ef476f,stroke:#073b4c,color:#fff
+    
+    class A sig
+    class B mod
+    class C lm
+    class D tool
+```
+
 ### 1. Signatures = I/O Definition
+
+Define what you want the LM to do:
 
 ```go
 sig := dsgo.NewSignature("Task description").
@@ -66,22 +90,39 @@ sig := dsgo.NewSignature("Task description").
 
 ### 2. Modules = Execution Strategy
 
-- **Predict**: Direct answer
-- **ChainOfThought**: Think step-by-step
-- **ReAct**: Use tools to find answer
+Choose how the LM should approach the task:
+
+```mermaid
+graph TD
+    START[Choose Module] --> SIMPLE{Need reasoning?}
+    SIMPLE -->|No| PRED[Predict<br/>Direct answer]
+    SIMPLE -->|Yes| REASON{Need tools?}
+    REASON -->|No| COT[ChainOfThought<br/>Think step-by-step]
+    REASON -->|Yes| REACT[ReAct<br/>Reason + Tools]
+    
+    classDef start fill:#ffd166,stroke:#073b4c,color:#000
+    classDef module fill:#06d6a0,stroke:#073b4c,color:#000
+    classDef decision fill:#118ab2,stroke:#073b4c,color:#fff
+    
+    class START start
+    class PRED,COT,REACT module
+    class SIMPLE,REASON decision
+```
 
 ```go
-// Simple
-predict := dsgo.NewPredict(sig, lm)
+// Simple - Direct answer
+predict := module.NewPredict(sig, lm)
 
-// Reasoning
-cot := dsgo.NewChainOfThought(sig, lm)
+// Reasoning - Think step-by-step
+cot := module.NewChainOfThought(sig, lm)
 
-// With tools
-react := dsgo.NewReAct(sig, lm, tools)
+// With tools - Reason and act
+react := module.NewReAct(sig, lm, tools)
 ```
 
 ### 3. Tools = Superpowers
+
+Give your LM agent the ability to take actions:
 
 ```go
 tool := dsgo.NewTool("search", "Search the web",
@@ -90,6 +131,25 @@ tool := dsgo.NewTool("search", "Search the web",
         return search(query), nil
     },
 ).AddParameter("query", "string", "Search query", true)
+```
+
+**Flow with Tools:**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant ReAct
+    participant LM
+    participant Tool
+    
+    User->>ReAct: Ask question
+    ReAct->>LM: What should I do?
+    LM->>ReAct: Use search tool
+    ReAct->>Tool: search("query")
+    Tool->>ReAct: Results
+    ReAct->>LM: Here are results
+    LM->>ReAct: Final answer
+    ReAct->>User: Answer
 ```
 
 ## Common Patterns
@@ -109,14 +169,14 @@ sig := dsgo.NewSignature("Solve problem").
     AddInput("problem", dsgo.FieldTypeString, "Problem").
     AddOutput("answer", dsgo.FieldTypeString, "Answer")
 
-cot := dsgo.NewChainOfThought(sig, lm)
+cot := module.NewChainOfThought(sig, lm)
 ```
 
 ### Agent with Tools
 
 ```go
 tools := []dsgo.Tool{searchTool, calculatorTool}
-react := dsgo.NewReAct(sig, lm, tools).WithVerbose(true)
+react := module.NewReAct(sig, lm, tools).WithVerbose(true)
 ```
 
 ### Complex Inputs/Outputs
@@ -150,7 +210,7 @@ sig := dsgo.NewSignature("Research topic").
 ### Enable verbose mode (see what the agent is thinking)
 
 ```go
-react := dsgo.NewReAct(sig, lm, tools).
+react := module.NewReAct(sig, lm, tools).
     WithVerbose(true).  // ← See all iterations
     WithMaxIterations(10)
 ```
@@ -176,24 +236,26 @@ err := sig.ValidateOutputs(outputs)
 
 ## Next Steps
 
-1. ✅ Run `examples/sentiment/` - See basic usage
-2. ✅ Run `examples/react_agent/` - See tools in action
-3. ✅ Run `examples/research_assistant/` - See everything together
-4. ✅ Read `EXAMPLES.md` - Detailed walkthrough
-5. ✅ Build your own! - Use these patterns
+1. **Run Examples** - Explore `examples/` directory:
+   - `sentiment/` - Basic Predict and ChainOfThought
+   - `react_agent/` - ReAct with tools
+   - `fewshot_conversation/` - Few-shot learning
+   - `composition/` - Module pipelines
+2. **Read Docs** - Check README.md for complete overview
+3. **Build!** - Start with a simple Predict module and expand
 
 ## Cheat Sheet
 
 | Want to... | Use this |
 |------------|----------|
-| Get a quick answer | `NewPredict(sig, lm)` |
-| Show reasoning steps | `NewChainOfThought(sig, lm)` |
-| Use external tools | `NewReAct(sig, lm, tools)` |
-| Classify text | `AddClassOutput(name, []string{...}, desc)` |
-| Make field optional | `AddOptionalOutput(name, type, desc)` |
+| Get a quick answer | `module.NewPredict(sig, lm)` |
+| Show reasoning steps | `module.NewChainOfThought(sig, lm)` |
+| Use external tools | `module.NewReAct(sig, lm, tools)` |
+| Classify text | `sig.AddClassOutput(name, []string{...}, desc)` |
+| Make field optional | `sig.AddOptionalOutput(name, type, desc)` |
 | Debug agent | `.WithVerbose(true)` |
 | Limit iterations | `.WithMaxIterations(n)` |
-| Change temperature | `.WithOptions(&GenerateOptions{Temperature: 0.7})` |
+| Few-shot examples | Use `Example` with `module.WithDemos([]dsgo.Example{...})` |
 
 ## Common Errors
 
@@ -211,11 +273,9 @@ err := sig.ValidateOutputs(outputs)
 
 ## Full Documentation
 
-- **README.md** - Complete overview
-- **EXAMPLES.md** - Example walkthrough
-- **AGENTS.md** - Development guide
-- **IMPLEMENTATION.md** - Technical deep dive
-- **SUMMARY.md** - What was built
+- **README.md** - Complete overview and architecture
+- **ROADMAP.md** - Implementation status and future plans
+- **AGENTS.md** - Development and testing guide
 
 ## Questions?
 

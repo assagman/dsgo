@@ -13,9 +13,9 @@ import (
 
 func TestNewOpenAI(t *testing.T) {
 	originalKey := os.Getenv("OPENAI_API_KEY")
-	defer os.Setenv("OPENAI_API_KEY", originalKey)
+	defer func() { _ = os.Setenv("OPENAI_API_KEY", originalKey) }()
 
-	os.Setenv("OPENAI_API_KEY", "test-key")
+	_ = os.Setenv("OPENAI_API_KEY", "test-key")
 
 	lm := NewOpenAI("gpt-4")
 	if lm.APIKey != "test-key" {
@@ -94,7 +94,7 @@ func TestOpenAI_Generate_Success(t *testing.T) {
 				TotalTokens:      15,
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -128,7 +128,7 @@ func TestOpenAI_Generate_Success(t *testing.T) {
 func TestOpenAI_Generate_WithTools(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		if _, ok := req["tools"]; !ok {
 			t.Error("expected tools in request")
@@ -166,7 +166,7 @@ func TestOpenAI_Generate_WithTools(t *testing.T) {
 				TotalTokens      int `json:"total_tokens"`
 			}{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -201,7 +201,7 @@ func TestOpenAI_Generate_WithTools(t *testing.T) {
 func TestOpenAI_Generate_ErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error": "invalid request"}`))
+		_, _ = w.Write([]byte(`{"error": "invalid request"}`))
 	}))
 	defer server.Close()
 
@@ -227,7 +227,7 @@ func TestOpenAI_Generate_NoChoices(t *testing.T) {
 				FinishReason string        `json:"finish_reason"`
 			}{},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -495,7 +495,7 @@ func TestOpenAI_ParseResponse_InvalidToolArgs(t *testing.T) {
 func TestOpenAI_Generate_WithToolChoice(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		if tc, ok := req["tool_choice"].(map[string]any); !ok {
 			t.Error("expected tool_choice object")
@@ -517,7 +517,7 @@ func TestOpenAI_Generate_WithToolChoice(t *testing.T) {
 				TotalTokens      int `json:"total_tokens"`
 			}{},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -541,7 +541,7 @@ func TestOpenAI_Generate_WithToolChoice(t *testing.T) {
 func TestOpenAI_Generate_ToolChoiceNone(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		if req["tool_choice"] != "none" {
 			t.Errorf("expected tool_choice none, got %v", req["tool_choice"])
@@ -559,7 +559,7 @@ func TestOpenAI_Generate_ToolChoiceNone(t *testing.T) {
 				TotalTokens      int `json:"total_tokens"`
 			}{},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 

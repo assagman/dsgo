@@ -34,3 +34,29 @@ func (m *MockLM) SupportsJSON() bool {
 func (m *MockLM) SupportsTools() bool {
 	return m.SupportsToolsVal
 }
+
+func (m *MockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		// Generate response using GenerateFunc
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Send content as a single chunk
+		chunkChan <- dsgo.Chunk{
+			Content:      result.Content,
+			FinishReason: result.FinishReason,
+			Usage:        result.Usage,
+		}
+	}()
+
+	return chunkChan, errChan
+}

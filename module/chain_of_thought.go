@@ -2,9 +2,7 @@ package module
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/assagman/dsgo"
 )
@@ -14,6 +12,9 @@ type ChainOfThought struct {
 	Signature *dsgo.Signature
 	LM        dsgo.LM
 	Options   *dsgo.GenerateOptions
+	Adapter   dsgo.Adapter
+	History   *dsgo.History  // Optional conversation history
+	Demos     []dsgo.Example // Optional few-shot examples
 }
 
 // NewChainOfThought creates a new ChainOfThought module
@@ -22,6 +23,7 @@ func NewChainOfThought(signature *dsgo.Signature, lm dsgo.LM) *ChainOfThought {
 		Signature: signature,
 		LM:        lm,
 		Options:   dsgo.DefaultGenerateOptions(),
+		Adapter:   dsgo.NewFallbackAdapter().WithReasoning(true),
 	}
 }
 
@@ -31,29 +33,59 @@ func (cot *ChainOfThought) WithOptions(options *dsgo.GenerateOptions) *ChainOfTh
 	return cot
 }
 
+// WithAdapter sets a custom adapter
+func (cot *ChainOfThought) WithAdapter(adapter dsgo.Adapter) *ChainOfThought {
+	cot.Adapter = adapter
+	return cot
+}
+
+// WithHistory sets conversation history for multi-turn interactions
+func (cot *ChainOfThought) WithHistory(history *dsgo.History) *ChainOfThought {
+	cot.History = history
+	return cot
+}
+
+// WithDemos sets few-shot examples for in-context learning
+func (cot *ChainOfThought) WithDemos(demos []dsgo.Example) *ChainOfThought {
+	cot.Demos = demos
+	return cot
+}
+
 // GetSignature returns the module's signature
 func (cot *ChainOfThought) GetSignature() *dsgo.Signature {
 	return cot.Signature
 }
 
 // Forward executes the chain of thought reasoning
-func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
 	if err := cot.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
 
-	prompt, err := cot.buildChainOfThoughtPrompt(inputs)
+	// Use adapter to format messages with demos
+	newMessages, err := cot.Adapter.Format(cot.Signature, inputs, cot.Demos)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build prompt: %w", err)
+		return nil, fmt.Errorf("failed to format messages: %w", err)
 	}
 
-	messages := []dsgo.Message{
-		{Role: "user", Content: prompt},
+	// Build final message list
+	var messages []dsgo.Message
+
+	// Prepend history if available
+	if cot.History != nil && !cot.History.IsEmpty() {
+		historyMessages := cot.Adapter.FormatHistory(cot.History)
+		messages = append(messages, historyMessages...)
 	}
 
-	options := cot.Options
+	// Add new messages
+	messages = append(messages, newMessages...)
+
+	// Copy options to avoid mutation
+	options := cot.Options.Copy()
 	if cot.LM.SupportsJSON() {
-		options.ResponseFormat = "json"
+		if _, isJSON := cot.Adapter.(*dsgo.JSONAdapter); isJSON {
+			options.ResponseFormat = "json"
+		}
 	}
 
 	result, err := cot.LM.Generate(ctx, messages, options)
@@ -61,7 +93,8 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 		return nil, fmt.Errorf("LM generation failed: %w", err)
 	}
 
-	outputs, err := cot.parseOutput(result.Content)
+	// Use adapter to parse output
+	outputs, err := cot.Adapter.Parse(cot.Signature, result.Content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse output: %w", err)
 	}
@@ -70,110 +103,46 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 		return nil, fmt.Errorf("output validation failed: %w", err)
 	}
 
-	return outputs, nil
-}
+	// Extract adapter metadata
+	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
 
-func (cot *ChainOfThought) buildChainOfThoughtPrompt(inputs map[string]any) (string, error) {
-	var prompt strings.Builder
-
-	// Add description with CoT instruction
-	if cot.Signature.Description != "" {
-		prompt.WriteString(cot.Signature.Description)
-		prompt.WriteString("\n\n")
-	}
-
-	prompt.WriteString("Think through this step-by-step before providing your final answer.\n\n")
-
-	// Add input fields
-	if len(cot.Signature.InputFields) > 0 {
-		prompt.WriteString("--- Inputs ---\n")
-		for _, field := range cot.Signature.InputFields {
-			value, exists := inputs[field.Name]
-			if !exists {
-				return "", fmt.Errorf("missing required input field: %s", field.Name)
-			}
-			if field.Description != "" {
-				prompt.WriteString(fmt.Sprintf("%s (%s): %v\n", field.Name, field.Description, value))
-			} else {
-				prompt.WriteString(fmt.Sprintf("%s: %v\n", field.Name, value))
-			}
-		}
-		prompt.WriteString("\n")
-	}
-
-	// Add output format with reasoning field
-	if len(cot.Signature.OutputFields) > 0 {
-		prompt.WriteString("--- Required Output Format ---\n")
-		prompt.WriteString("Respond with a JSON object containing:\n")
-		prompt.WriteString("- reasoning (string): Your step-by-step thought process\n")
-		for _, field := range cot.Signature.OutputFields {
-			optional := ""
-			if field.Optional {
-				optional = " (optional)"
-			}
-			classInfo := ""
-			if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
-				classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
-			}
-			if field.Description != "" {
-				prompt.WriteString(fmt.Sprintf("- %s (%s)%s%s: %s\n", field.Name, field.Type, optional, classInfo, field.Description))
-			} else {
-				prompt.WriteString(fmt.Sprintf("- %s (%s)%s%s\n", field.Name, field.Type, optional, classInfo))
-			}
+	// Extract rationale from outputs
+	rationale := ""
+	if reasoning, exists := outputs["reasoning"]; exists {
+		rationale = fmt.Sprintf("%v", reasoning)
+		// Remove reasoning from outputs if not part of signature
+		if cot.Signature.GetOutputField("reasoning") == nil {
+			delete(outputs, "reasoning")
 		}
 	}
 
-	return prompt.String(), nil
-}
-
-func (cot *ChainOfThought) parseOutput(content string) (map[string]any, error) {
-	content = strings.TrimSpace(content)
-
-	// Try to extract JSON from markdown code blocks
-	if strings.Contains(content, "```json") {
-		start := strings.Index(content, "```json") + 7
-		end := strings.Index(content[start:], "```")
-		if end > 0 {
-			content = content[start : start+end]
-		}
-	} else if strings.Contains(content, "```") {
-		start := strings.Index(content, "```") + 3
-		end := strings.Index(content[start:], "```")
-		if end > 0 {
-			content = content[start : start+end]
-		}
-	} else {
-		// Try to find JSON object in the content
-		start := strings.Index(content, "{")
-		if start >= 0 {
-			// Find matching closing brace
-			depth := 0
-			for i := start; i < len(content); i++ {
-				if content[i] == '{' {
-					depth++
-				} else if content[i] == '}' {
-					depth--
-					if depth == 0 {
-						content = content[start : i+1]
-						break
-					}
-				}
+	// Update history if present
+	if cot.History != nil {
+		// Add only the new user message(s) (not from history)
+		for _, msg := range newMessages {
+			if msg.Role == "user" {
+				cot.History.Add(msg)
 			}
 		}
+
+		// Add assistant response
+		cot.History.Add(dsgo.Message{
+			Role:    "assistant",
+			Content: result.Content,
+		})
 	}
 
-	content = strings.TrimSpace(content)
+	// Build Prediction object with rationale
+	prediction := dsgo.NewPrediction(outputs).
+		WithRationale(rationale).
+		WithUsage(result.Usage).
+		WithModuleName("ChainOfThought").
+		WithInputs(inputs)
 
-	var result map[string]any
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, content)
+	// Add adapter metrics if available
+	if adapterUsed != "" {
+		prediction.WithAdapterMetrics(adapterUsed, parseAttempts, fallbackUsed)
 	}
 
-	// Always include reasoning in outputs
-	outputs := make(map[string]any)
-	for k, v := range result {
-		outputs[k] = v
-	}
-
-	return outputs, nil
+	return prediction, nil
 }

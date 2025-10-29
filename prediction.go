@@ -14,6 +14,12 @@ type Prediction struct {
 	// Provenance
 	ModuleName string         // Name of module that generated this
 	Inputs     map[string]any // Original inputs
+
+	// Adapter metrics (for diagnostics and monitoring)
+	AdapterUsed   string // Name of the adapter that successfully parsed the response
+	ParseSuccess  bool   // Whether parsing succeeded on first attempt
+	ParseAttempts int    // Number of parse attempts (for fallback adapters)
+	FallbackUsed  bool   // Whether fallback to another adapter was needed
 }
 
 // NewPrediction creates a new prediction from outputs
@@ -122,4 +128,28 @@ func (p *Prediction) HasRationale() bool {
 // HasCompletions returns true if there are alternative completions
 func (p *Prediction) HasCompletions() bool {
 	return len(p.Completions) > 0
+}
+
+// WithAdapterMetrics records adapter usage information
+func (p *Prediction) WithAdapterMetrics(adapterName string, attempts int, fallbackUsed bool) *Prediction {
+	p.AdapterUsed = adapterName
+	p.ParseAttempts = attempts
+	p.ParseSuccess = attempts == 1
+	p.FallbackUsed = fallbackUsed
+	return p
+}
+
+// ExtractAdapterMetadata extracts and removes adapter metadata from outputs map
+// Returns (adapterUsed, parseAttempts, fallbackUsed)
+func ExtractAdapterMetadata(outputs map[string]any) (string, int, bool) {
+	adapterUsed, _ := outputs["__adapter_used"].(string)
+	parseAttempts, _ := outputs["__parse_attempts"].(int)
+	fallbackUsed, _ := outputs["__fallback_used"].(bool)
+
+	// Remove metadata from outputs (internal only)
+	delete(outputs, "__adapter_used")
+	delete(outputs, "__parse_attempts")
+	delete(outputs, "__fallback_used")
+
+	return adapterUsed, parseAttempts, fallbackUsed
 }

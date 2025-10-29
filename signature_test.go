@@ -110,41 +110,6 @@ func TestSignature_ValidateOutputs(t *testing.T) {
 	}
 }
 
-func TestSignature_BuildPrompt(t *testing.T) {
-	sig := NewSignature("Analyze sentiment").
-		AddInput("text", FieldTypeString, "Input text").
-		AddClassOutput("sentiment", []string{"positive", "negative"}, "Sentiment")
-
-	inputs := map[string]any{
-		"text": "I love this!",
-	}
-
-	prompt, err := sig.BuildPrompt(inputs)
-	if err != nil {
-		t.Fatalf("BuildPrompt() error = %v", err)
-	}
-
-	if prompt == "" {
-		t.Error("Expected non-empty prompt")
-	}
-
-	// Check that prompt contains key elements
-	if !containsStr(prompt, "Analyze sentiment") {
-		t.Error("Prompt should contain description")
-	}
-	if !containsStr(prompt, "I love this!") {
-		t.Error("Prompt should contain input value")
-	}
-	if !containsStr(prompt, "sentiment") {
-		t.Error("Prompt should contain output field name")
-	}
-}
-
-func containsStr(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && (s[0:len(substr)] == substr || containsStr(s[1:], substr))))
-}
-
 func TestSignature_GetOutputField(t *testing.T) {
 	sig := NewSignature("Test").
 		AddOutput("field1", FieldTypeString, "First field").
@@ -203,29 +168,6 @@ func TestSignature_ValidateOutputs_TypeValidation(t *testing.T) {
 	}
 }
 
-func TestSignature_BuildPrompt_MissingInput(t *testing.T) {
-	sig := NewSignature("Test").
-		AddInput("required", FieldTypeString, "Required field")
-
-	_, err := sig.BuildPrompt(map[string]any{})
-	if err == nil {
-		t.Error("BuildPrompt should error on missing input")
-	}
-}
-
-func TestSignature_BuildPrompt_NoInputsNoOutputs(t *testing.T) {
-	sig := NewSignature("Simple description")
-
-	prompt, err := sig.BuildPrompt(map[string]any{})
-	if err != nil {
-		t.Fatalf("BuildPrompt() error = %v", err)
-	}
-
-	if !containsStr(prompt, "Simple description") {
-		t.Error("Prompt should contain description")
-	}
-}
-
 func TestSignature_AddOptionalOutput(t *testing.T) {
 	sig := NewSignature("Test").
 		AddOptionalOutput("optional", FieldTypeString, "Optional field")
@@ -260,5 +202,48 @@ func TestFieldType_Constants(t *testing.T) {
 		if ft == "" {
 			t.Errorf("FieldType should not be empty: %v", ft)
 		}
+	}
+}
+
+func TestSignature_ValidateFieldType_NumericTypes(t *testing.T) {
+	tests := []struct {
+		name      string
+		fieldType FieldType
+		value     any
+		wantErr   bool
+	}{
+		// Int validation - accept all int types + float64
+		{"int valid", FieldTypeInt, int(42), false},
+		{"int8 valid", FieldTypeInt, int8(42), false},
+		{"int16 valid", FieldTypeInt, int16(42), false},
+		{"int32 valid", FieldTypeInt, int32(42), false},
+		{"int64 valid", FieldTypeInt, int64(42), false},
+		{"int from float64", FieldTypeInt, float64(42.0), false},
+		{"int invalid", FieldTypeInt, "42", true},
+
+		// Float validation - accept float types + int types
+		{"float32 valid", FieldTypeFloat, float32(3.14), false},
+		{"float64 valid", FieldTypeFloat, float64(3.14), false},
+		{"float from int", FieldTypeFloat, int(42), false},
+		{"float from int64", FieldTypeFloat, int64(42), false},
+		{"float invalid", FieldTypeFloat, "3.14", true},
+
+		// JSON validation
+		{"json map", FieldTypeJSON, map[string]any{"key": "value"}, false},
+		{"json slice", FieldTypeJSON, []any{1, 2, 3}, false},
+		{"json string", FieldTypeJSON, `{"key":"value"}`, false},
+		{"json invalid", FieldTypeJSON, 123, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sig := NewSignature("Test").
+				AddOutput("field", tt.fieldType, "Test field")
+
+			err := sig.ValidateOutputs(map[string]any{"field": tt.value})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateOutputs() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

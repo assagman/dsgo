@@ -33,27 +33,33 @@ func generateInterviewQuestion() {
 
 	sig := dsgo.NewSignature("Help generating technical interview question using step-by-step reasoning").
 		AddInput("topic", dsgo.FieldTypeString, "The current question or problem").
-		AddInput("history", dsgo.FieldTypeString, "Conversation history").
 		AddOutput("question", dsgo.FieldTypeString, "Clear technical coding question").
 		AddOutput("solution", dsgo.FieldTypeString, "Code for solving the technical question without using builtin packages for search and sort")
 
-	cot := module.NewChainOfThought(sig, lm)
+	cot := module.NewChainOfThought(sig, lm).WithHistory(history)
 	cot.Options.Temperature = 0.7
 
 	topic := "algorithmic skills"
 	history.AddUserMessage(topic)
 
 	outputs, err := cot.Forward(ctx, map[string]any{
-		"topic":   topic,
-		"history": history,
+		"topic": topic,
 	})
 	if err != nil {
 		log.Printf("Error: %v\n", err)
+		return
 	}
 
-	reasoning := outputs["reasoning"].(string)
-	question := outputs["question"].(string)
-	solution := outputs["solution"].(string)
+	// Get reasoning from Rationale field (ChainOfThought stores it there)
+	reasoning := outputs.Rationale
+
+	question, ok2 := outputs.Outputs["question"].(string)
+	solution, ok3 := outputs.Outputs["solution"].(string)
+
+	if !ok2 || !ok3 {
+		log.Printf("Error: Invalid output types - question=%v, solution=%v\n", outputs.Outputs["question"], outputs.Outputs["solution"])
+		return
+	}
 
 	responseMsg := fmt.Sprintf("Reasoning: \n%s\n\nQuestion: \n%s\n\nSolution: \n%s", reasoning, question, solution)
 	fmt.Println(responseMsg)

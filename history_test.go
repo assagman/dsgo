@@ -173,12 +173,17 @@ func TestHistory_GetLast_EdgeCases(t *testing.T) {
 	h.AddUserMessage("msg1")
 	h.AddUserMessage("msg2")
 
-	all := h.GetLast(0)
-	if len(all) != 2 {
-		t.Error("GetLast(0) should return all messages")
+	empty := h.GetLast(0)
+	if len(empty) != 0 {
+		t.Error("GetLast(0) should return empty slice")
 	}
 
-	all = h.GetLast(10)
+	negative := h.GetLast(-1)
+	if len(negative) != 0 {
+		t.Error("GetLast(negative) should return empty slice")
+	}
+
+	all := h.GetLast(10)
 	if len(all) != 2 {
 		t.Error("GetLast(n > length) should return all messages")
 	}

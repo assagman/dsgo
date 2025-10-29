@@ -2,7 +2,6 @@ package module
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -14,6 +13,9 @@ type Predict struct {
 	Signature *dsgo.Signature
 	LM        dsgo.LM
 	Options   *dsgo.GenerateOptions
+	Adapter   dsgo.Adapter
+	History   *dsgo.History  // Optional conversation history
+	Demos     []dsgo.Example // Optional few-shot examples
 }
 
 // NewPredict creates a new Predict module
@@ -22,6 +24,7 @@ func NewPredict(signature *dsgo.Signature, lm dsgo.LM) *Predict {
 		Signature: signature,
 		LM:        lm,
 		Options:   dsgo.DefaultGenerateOptions(),
+		Adapter:   dsgo.NewFallbackAdapter(), // Use fallback adapter for robustness
 	}
 }
 
@@ -31,29 +34,60 @@ func (p *Predict) WithOptions(options *dsgo.GenerateOptions) *Predict {
 	return p
 }
 
+// WithAdapter sets a custom adapter
+func (p *Predict) WithAdapter(adapter dsgo.Adapter) *Predict {
+	p.Adapter = adapter
+	return p
+}
+
+// WithHistory sets conversation history for multi-turn interactions
+func (p *Predict) WithHistory(history *dsgo.History) *Predict {
+	p.History = history
+	return p
+}
+
+// WithDemos sets few-shot examples for in-context learning
+func (p *Predict) WithDemos(demos []dsgo.Example) *Predict {
+	p.Demos = demos
+	return p
+}
+
 // GetSignature returns the module's signature
 func (p *Predict) GetSignature() *dsgo.Signature {
 	return p.Signature
 }
 
 // Forward executes the prediction
-func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
 	if err := p.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
 
-	prompt, err := p.Signature.BuildPrompt(inputs)
+	// Use adapter to format messages with demos
+	newMessages, err := p.Adapter.Format(p.Signature, inputs, p.Demos)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build prompt: %w", err)
+		return nil, fmt.Errorf("failed to format messages: %w", err)
 	}
 
-	messages := []dsgo.Message{
-		{Role: "user", Content: prompt},
+	// Build final message list
+	var messages []dsgo.Message
+
+	// Prepend history if available
+	if p.History != nil && !p.History.IsEmpty() {
+		historyMessages := p.Adapter.FormatHistory(p.History)
+		messages = append(messages, historyMessages...)
 	}
 
-	options := p.Options
+	// Add new messages
+	messages = append(messages, newMessages...)
+
+	// Copy options to avoid mutation
+	options := p.Options.Copy()
+	// Only force JSON mode for JSONAdapter (not ChatAdapter or FallbackAdapter)
 	if p.LM.SupportsJSON() {
-		options.ResponseFormat = "json"
+		if _, isJSON := p.Adapter.(*dsgo.JSONAdapter); isJSON {
+			options.ResponseFormat = "json"
+		}
 	}
 
 	result, err := p.LM.Generate(ctx, messages, options)
@@ -61,7 +95,8 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (map[strin
 		return nil, fmt.Errorf("LM generation failed: %w", err)
 	}
 
-	outputs, err := p.parseOutput(result.Content)
+	// Use adapter to parse output
+	outputs, err := p.Adapter.Parse(p.Signature, result.Content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse output: %w", err)
 	}
@@ -70,121 +105,174 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (map[strin
 		return nil, fmt.Errorf("output validation failed: %w", err)
 	}
 
-	return outputs, nil
+	// Update history if present
+	if p.History != nil {
+		// Add only the new user message(s) (not from history)
+		for _, msg := range newMessages {
+			if msg.Role == "user" {
+				p.History.Add(msg)
+			}
+		}
+
+		// Add assistant response
+		p.History.Add(dsgo.Message{
+			Role:    "assistant",
+			Content: result.Content,
+		})
+	}
+
+	// Extract adapter metadata
+	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+
+	// Build Prediction object
+	prediction := dsgo.NewPrediction(outputs).
+		WithUsage(result.Usage).
+		WithModuleName("Predict").
+		WithInputs(inputs)
+
+	// Add adapter metrics if available
+	if adapterUsed != "" {
+		prediction.WithAdapterMetrics(adapterUsed, parseAttempts, fallbackUsed)
+	}
+
+	return prediction, nil
 }
 
-func (p *Predict) parseOutput(content string) (map[string]any, error) {
-	content = strings.TrimSpace(content)
-
-	// Try to extract JSON from markdown code blocks
-	if strings.Contains(content, "```json") {
-		start := strings.Index(content, "```json") + 7
-		end := strings.Index(content[start:], "```")
-		if end > 0 {
-			content = content[start : start+end]
-		}
-	} else if strings.Contains(content, "```") {
-		// Skip non-JSON code blocks (like python, javascript, etc.)
-		start := strings.Index(content, "```")
-		// Check if this is a code block with a language identifier
-		lineEnd := strings.Index(content[start:], "\n")
-		if lineEnd > 0 {
-			lang := strings.TrimSpace(content[start+3 : start+lineEnd])
-			// If it's not JSON and it looks like a programming language, skip this block
-			if lang != "" && lang != "json" && !strings.Contains(lang, "{") {
-				// Try to find JSON after the code block
-				end := strings.Index(content[start+3:], "```")
-				if end > 0 {
-					afterBlock := content[start+3+end+3:]
-					if idx := strings.Index(afterBlock, "{"); idx >= 0 {
-						content = afterBlock
-					}
-				}
-			} else {
-				// Extract from generic code block
-				start := strings.Index(content, "```") + 3
-				end := strings.Index(content[start:], "```")
-				if end > 0 {
-					content = content[start : start+end]
-				}
-			}
-		}
-	}
-
-	// Try to find JSON object in the content
-	if !strings.HasPrefix(strings.TrimSpace(content), "{") {
-		start := strings.Index(content, "{")
-		if start >= 0 {
-			// Find matching closing brace, accounting for strings
-			depth := 0
-			inString := false
-			escape := false
-			for i := start; i < len(content); i++ {
-				if escape {
-					escape = false
-					continue
-				}
-				if content[i] == '\\' {
-					escape = true
-					continue
-				}
-				if content[i] == '"' {
-					inString = !inString
-				}
-				if !inString {
-					if content[i] == '{' {
-						depth++
-					} else if content[i] == '}' {
-						depth--
-						if depth == 0 {
-							content = content[start : i+1]
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	content = strings.TrimSpace(content)
-
-	var outputs map[string]any
-	if err := json.Unmarshal([]byte(content), &outputs); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, content)
-	}
-
-	// Coerce types to match signature expectations
-	outputs = p.coerceTypes(outputs)
-
-	return outputs, nil
+// StreamResult represents the result of a streaming prediction
+type StreamResult struct {
+	Chunks     <-chan dsgo.Chunk       // Channel for receiving streaming chunks
+	Prediction <-chan *dsgo.Prediction // Channel for receiving final prediction (sent after stream completes)
+	Errors     <-chan error            // Channel for receiving errors
 }
 
-// coerceTypes attempts to convert output values to expected types
-func (p *Predict) coerceTypes(outputs map[string]any) map[string]any {
-	result := make(map[string]any)
+// Stream executes the prediction with streaming output
+// Returns channels for chunks, final prediction, and errors
+// The chunks channel emits incremental content in real-time
+// The prediction channel emits the final parsed prediction after the stream completes
+// The errors channel emits any errors that occur during streaming or parsing
+func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamResult, error) {
+	if err := p.Signature.ValidateInputs(inputs); err != nil {
+		return nil, fmt.Errorf("input validation failed: %w", err)
+	}
 
-	for key, value := range outputs {
-		field := p.Signature.GetOutputField(key)
-		if field == nil {
-			result[key] = value
-			continue
+	// Use adapter to format messages with demos
+	newMessages, err := p.Adapter.Format(p.Signature, inputs, p.Demos)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format messages: %w", err)
+	}
+
+	// Build final message list
+	var messages []dsgo.Message
+
+	// Prepend history if available
+	if p.History != nil && !p.History.IsEmpty() {
+		historyMessages := p.Adapter.FormatHistory(p.History)
+		messages = append(messages, historyMessages...)
+	}
+
+	// Add new messages
+	messages = append(messages, newMessages...)
+
+	// Copy options to avoid mutation
+	options := p.Options.Copy()
+	// Only force JSON mode for JSONAdapter (not ChatAdapter or FallbackAdapter)
+	if p.LM.SupportsJSON() {
+		if _, isJSON := p.Adapter.(*dsgo.JSONAdapter); isJSON {
+			options.ResponseFormat = "json"
 		}
+	}
 
-		// Coerce arrays to strings if field expects string
-		if field.Type == dsgo.FieldTypeString || field.Type == dsgo.FieldTypeClass {
-			if arr, ok := value.([]any); ok {
-				// Join array elements into a string
-				var parts []string
-				for _, item := range arr {
-					parts = append(parts, fmt.Sprintf("%v", item))
-				}
-				result[key] = strings.Join(parts, "\n")
-				continue
+	// Call LM Stream
+	chunkChan, errChan := p.LM.Stream(ctx, messages, options)
+
+	// Create result channels
+	outputChunks := make(chan dsgo.Chunk)
+	predictionChan := make(chan *dsgo.Prediction, 1)
+	errorChan := make(chan error, 1)
+
+	// Start goroutine to handle streaming and final parsing
+	go func() {
+		defer close(outputChunks)
+		defer close(predictionChan)
+		defer close(errorChan)
+
+		var fullContent strings.Builder
+		var finalUsage dsgo.Usage
+
+		// Forward chunks and accumulate content
+		for chunk := range chunkChan {
+			// Forward chunk to caller
+			outputChunks <- chunk
+
+			// Accumulate content
+			fullContent.WriteString(chunk.Content)
+
+			// Capture final metadata
+			if chunk.Usage.TotalTokens > 0 {
+				finalUsage = chunk.Usage
 			}
 		}
 
-		result[key] = value
-	}
+		// Check for streaming errors
+		select {
+		case err := <-errChan:
+			if err != nil {
+				errorChan <- fmt.Errorf("LM streaming failed: %w", err)
+				return
+			}
+		default:
+		}
 
-	return result
+		// Parse accumulated content
+		content := fullContent.String()
+		outputs, err := p.Adapter.Parse(p.Signature, content)
+		if err != nil {
+			errorChan <- fmt.Errorf("failed to parse output: %w", err)
+			return
+		}
+
+		if err := p.Signature.ValidateOutputs(outputs); err != nil {
+			errorChan <- fmt.Errorf("output validation failed: %w", err)
+			return
+		}
+
+		// Update history if present
+		if p.History != nil {
+			// Add only the new user message(s) (not from history)
+			for _, msg := range newMessages {
+				if msg.Role == "user" {
+					p.History.Add(msg)
+				}
+			}
+
+			// Add assistant response
+			p.History.Add(dsgo.Message{
+				Role:    "assistant",
+				Content: content,
+			})
+		}
+
+		// Extract adapter metadata
+		adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+
+		// Build Prediction object
+		prediction := dsgo.NewPrediction(outputs).
+			WithUsage(finalUsage).
+			WithModuleName("Predict").
+			WithInputs(inputs)
+
+		// Add adapter metrics if available
+		if adapterUsed != "" {
+			prediction.WithAdapterMetrics(adapterUsed, parseAttempts, fallbackUsed)
+		}
+
+		// Send final prediction
+		predictionChan <- prediction
+	}()
+
+	return &StreamResult{
+		Chunks:     outputChunks,
+		Prediction: predictionChan,
+		Errors:     errorChan,
+	}, nil
 }

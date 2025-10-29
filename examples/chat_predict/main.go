@@ -62,7 +62,7 @@ func predictChatDemo() {
 			continue
 		}
 
-		answer := outputs["answer"].(string)
+		answer := outputs.Outputs["answer"].(string)
 		fmt.Printf("Assistant: %s\n", answer)
 
 		history.AddAssistantMessage(answer)
@@ -85,9 +85,10 @@ func formatHistoryContext(messages []dsgo.Message) string {
 			continue
 		}
 		role := msg.Role
-		if role == "user" {
+		switch role {
+		case "user":
 			role = "User"
-		} else if role == "assistant" {
+		case "assistant":
 			role = "Assistant"
 		}
 		context += fmt.Sprintf("%s: %s\n", role, truncate(msg.Content, 150))

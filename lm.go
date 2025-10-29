@@ -46,10 +46,24 @@ type Usage struct {
 	TotalTokens      int
 }
 
+// Chunk represents a streaming response chunk from the LM
+type Chunk struct {
+	Content      string     // Incremental content delta
+	ToolCalls    []ToolCall // Incremental tool call deltas
+	FinishReason string     // Set when stream ends ("stop", "length", "tool_calls", etc.)
+	Usage        Usage      // Token usage (typically only set in final chunk)
+}
+
 // LM represents a language model interface
 type LM interface {
 	// Generate generates a response from the LM
 	Generate(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error)
+
+	// Stream generates a streaming response from the LM
+	// Returns a channel that emits chunks and an error channel
+	// The chunk channel will be closed when the stream completes
+	// If an error occurs, it will be sent to the error channel
+	Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error)
 
 	// Name returns the name/identifier of the LM
 	Name() string
@@ -77,7 +91,33 @@ func DefaultGenerateOptions() *GenerateOptions {
 	}
 }
 
-// NewGenerateOptions creates GenerateOptions with custom values
-func NewGenerateOptions() *GenerateOptions {
-	return DefaultGenerateOptions()
+// Copy creates a deep copy of GenerateOptions
+func (o *GenerateOptions) Copy() *GenerateOptions {
+	if o == nil {
+		return nil
+	}
+
+	copied := &GenerateOptions{
+		Temperature:      o.Temperature,
+		MaxTokens:        o.MaxTokens,
+		TopP:             o.TopP,
+		ResponseFormat:   o.ResponseFormat,
+		ToolChoice:       o.ToolChoice,
+		Stream:           o.Stream,
+		FrequencyPenalty: o.FrequencyPenalty,
+		PresencePenalty:  o.PresencePenalty,
+	}
+
+	// Copy slices
+	if o.Stop != nil {
+		copied.Stop = make([]string, len(o.Stop))
+		copy(copied.Stop, o.Stop)
+	}
+
+	if o.Tools != nil {
+		copied.Tools = make([]Tool, len(o.Tools))
+		copy(copied.Tools, o.Tools)
+	}
+
+	return copied
 }

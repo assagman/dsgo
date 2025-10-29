@@ -31,11 +31,11 @@ func TestProgramOfThought_Forward_Success(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	if outputs["answer"] != "4" {
-		t.Errorf("Expected answer='4', got %v", outputs["answer"])
+	if outputs.Outputs["answer"] != "4" {
+		t.Errorf("Expected answer='4', got %v", outputs.Outputs["answer"])
 	}
 
-	if _, exists := outputs["code"]; !exists {
+	if _, exists := outputs.Outputs["code"]; !exists {
 		t.Error("Should include code field")
 	}
 }
@@ -147,60 +147,6 @@ func TestProgramOfThought_ExecuteCode_GoNotSupported(t *testing.T) {
 	}
 }
 
-func TestProgramOfThought_ParseOutput_CodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("code", dsgo.FieldTypeString, "Code")
-
-	pot := NewProgramOfThought(sig, &MockLM{}, "python")
-
-	content := "```json\n{\"code\": \"print('test')\"}\n```"
-	outputs, err := pot.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["code"] != "print('test')" {
-		t.Error("Should parse code from JSON block")
-	}
-}
-
-func TestProgramOfThought_ParseOutput_GenericBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("code", dsgo.FieldTypeString, "Code")
-
-	pot := NewProgramOfThought(sig, &MockLM{}, "python")
-
-	content := "```\n{\"code\": \"test\"}\n```"
-	outputs, err := pot.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["code"] != "test" {
-		t.Error("Should parse generic code block")
-	}
-}
-
-func TestProgramOfThought_ParseOutput_EmbeddedJSON(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("code", dsgo.FieldTypeString, "Code")
-
-	pot := NewProgramOfThought(sig, &MockLM{}, "python")
-
-	content := "Here is the solution: {\"code\": \"embedded\"} end"
-	outputs, err := pot.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["code"] != "embedded" {
-		t.Error("Should extract embedded JSON")
-	}
-}
-
 func TestProgramOfThought_BuildPrompt_NoDescription(t *testing.T) {
 	sig := dsgo.NewSignature("").
 		AddInput("problem", dsgo.FieldTypeString, "Problem")
@@ -242,7 +188,7 @@ func TestProgramOfThought_Forward_WithCodeExecution(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	if _, exists := outputs["execution_result"]; !exists {
+	if _, exists := outputs.Outputs["execution_result"]; !exists {
 		t.Log("execution_result field expected when execution enabled")
 	}
 }
@@ -288,7 +234,7 @@ func TestProgramOfThought_Forward_WithCodeExecutionError(t *testing.T) {
 		t.Fatalf("Forward() should not fail on execution error: %v", err)
 	}
 
-	if _, exists := outputs["execution_error"]; !exists {
+	if _, exists := outputs.Outputs["execution_error"]; !exists {
 		t.Error("Should include execution_error when code execution fails")
 	}
 }

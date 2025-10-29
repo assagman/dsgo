@@ -64,3 +64,89 @@ func TestTool_AddEnumParameter(t *testing.T) {
 		t.Errorf("Expected 2 enum values, got %d", len(param.Enum))
 	}
 }
+
+func TestTool_Validate_Success(t *testing.T) {
+	tool := NewTool("test", "Test tool", nil)
+	tool.AddParameter("name", "string", "Name parameter", true)
+	tool.AddParameter("age", "int", "Age parameter", false)
+
+	args := map[string]any{
+		"name": "John",
+		"age":  30,
+	}
+
+	err := tool.Validate(args)
+	if err != nil {
+		t.Errorf("validation should succeed, got error: %v", err)
+	}
+}
+
+func TestTool_Validate_MissingRequired(t *testing.T) {
+	tool := NewTool("test", "Test tool", nil)
+	tool.AddParameter("name", "string", "Name parameter", true)
+
+	args := map[string]any{}
+
+	err := tool.Validate(args)
+	if err == nil {
+		t.Error("expected validation error for missing required parameter")
+	}
+}
+
+func TestTool_Validate_EnumSuccess(t *testing.T) {
+	tool := NewTool("test", "Test tool", nil)
+	tool.AddEnumParameter("status", "Status value", []string{"active", "inactive"}, true)
+
+	args := map[string]any{
+		"status": "active",
+	}
+
+	err := tool.Validate(args)
+	if err != nil {
+		t.Errorf("validation should succeed, got error: %v", err)
+	}
+}
+
+func TestTool_Validate_EnumInvalid(t *testing.T) {
+	tool := NewTool("test", "Test tool", nil)
+	tool.AddEnumParameter("status", "Status value", []string{"active", "inactive"}, true)
+
+	args := map[string]any{
+		"status": "pending",
+	}
+
+	err := tool.Validate(args)
+	if err == nil {
+		t.Error("expected validation error for invalid enum value")
+	}
+}
+
+func TestTool_Execute_WithValidation(t *testing.T) {
+	called := false
+	tool := NewTool("test", "Test tool", func(ctx context.Context, args map[string]any) (any, error) {
+		called = true
+		return "success", nil
+	})
+	tool.AddParameter("name", "string", "Name parameter", true)
+
+	// Should fail validation
+	_, err := tool.Execute(context.Background(), map[string]any{})
+	if err == nil {
+		t.Error("expected validation error")
+	}
+	if called {
+		t.Error("function should not be called when validation fails")
+	}
+
+	// Should succeed
+	result, err := tool.Execute(context.Background(), map[string]any{"name": "John"})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("function should be called when validation succeeds")
+	}
+	if result != "success" {
+		t.Errorf("expected 'success', got %v", result)
+	}
+}

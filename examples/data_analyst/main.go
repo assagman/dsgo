@@ -32,7 +32,7 @@ func dataAnalystAgent() {
 	lm := shared.GetLM("gpt-4o-mini")
 
 	// Define analytical tools
-	
+
 	// Tool 1: Calculate statistics
 	statsTool := dsgo.NewTool(
 		"calculate_statistics",
@@ -40,7 +40,7 @@ func dataAnalystAgent() {
 		func(ctx context.Context, args map[string]any) (any, error) {
 			dataStr := args["data"].(string)
 			numbers := parseNumbers(dataStr)
-			
+
 			if len(numbers) == 0 {
 				return "No valid numbers found", nil
 			}
@@ -48,16 +48,16 @@ func dataAnalystAgent() {
 			mean := calculateMean(numbers)
 			median := calculateMedian(numbers)
 			stdDev := calculateStdDev(numbers, mean)
-			
+
 			return fmt.Sprintf(
 				"Statistics for dataset:\n"+
-				"  Count: %d\n"+
-				"  Mean: %.2f\n"+
-				"  Median: %.2f\n"+
-				"  Std Dev: %.2f\n"+
-				"  Min: %.2f\n"+
-				"  Max: %.2f",
-				len(numbers), mean, median, stdDev, 
+					"  Count: %d\n"+
+					"  Mean: %.2f\n"+
+					"  Median: %.2f\n"+
+					"  Std Dev: %.2f\n"+
+					"  Min: %.2f\n"+
+					"  Max: %.2f",
+				len(numbers), mean, median, stdDev,
 				numbers[0], numbers[len(numbers)-1],
 			), nil
 		},
@@ -70,7 +70,7 @@ func dataAnalystAgent() {
 		func(ctx context.Context, args map[string]any) (any, error) {
 			dataStr := args["data"].(string)
 			numbers := parseNumbers(dataStr)
-			
+
 			if len(numbers) < 4 {
 				return "Need at least 4 data points to detect outliers", nil
 			}
@@ -94,11 +94,11 @@ func dataAnalystAgent() {
 
 			return fmt.Sprintf(
 				"Outlier Analysis:\n"+
-				"  Q1: %.2f\n"+
-				"  Q3: %.2f\n"+
-				"  IQR: %.2f\n"+
-				"  Valid Range: [%.2f, %.2f]\n"+
-				"  Outliers Found: %v",
+					"  Q1: %.2f\n"+
+					"  Q3: %.2f\n"+
+					"  IQR: %.2f\n"+
+					"  Valid Range: [%.2f, %.2f]\n"+
+					"  Outliers Found: %v",
 				q1, q3, iqr, lowerBound, upperBound, outliers,
 			), nil
 		},
@@ -111,7 +111,7 @@ func dataAnalystAgent() {
 		func(ctx context.Context, args map[string]any) (any, error) {
 			data1Str := args["dataset1"].(string)
 			data2Str := args["dataset2"].(string)
-			
+
 			nums1 := parseNumbers(data1Str)
 			nums2 := parseNumbers(data2Str)
 
@@ -125,10 +125,10 @@ func dataAnalystAgent() {
 
 			return fmt.Sprintf(
 				"Dataset Comparison:\n"+
-				"  Dataset 1: Mean=%.2f, Count=%d\n"+
-				"  Dataset 2: Mean=%.2f, Count=%d\n"+
-				"  Mean Difference: %.2f%%\n"+
-				"  %s has higher average",
+					"  Dataset 1: Mean=%.2f, Count=%d\n"+
+					"  Dataset 2: Mean=%.2f, Count=%d\n"+
+					"  Mean Difference: %.2f%%\n"+
+					"  %s has higher average",
 				mean1, len(nums1), mean2, len(nums2), math.Abs(diff),
 				map[bool]string{true: "Dataset 2", false: "Dataset 1"}[mean2 > mean1],
 			), nil
@@ -143,7 +143,7 @@ func dataAnalystAgent() {
 		func(ctx context.Context, args map[string]any) (any, error) {
 			dataStr := args["data"].(string)
 			numbers := parseNumbers(dataStr)
-			
+
 			if len(numbers) < 3 {
 				return "Need at least 3 data points for trend analysis", nil
 			}
@@ -170,11 +170,11 @@ func dataAnalystAgent() {
 
 			return fmt.Sprintf(
 				"Trend Analysis:\n"+
-				"  Overall Trend: %s\n"+
-				"  Increases: %d\n"+
-				"  Decreases: %d\n"+
-				"  Total Change: %.2f%%\n"+
-				"  Start: %.2f → End: %.2f",
+					"  Overall Trend: %s\n"+
+					"  Increases: %d\n"+
+					"  Decreases: %d\n"+
+					"  Total Change: %.2f%%\n"+
+					"  Start: %.2f → End: %.2f",
 				trend, increases, decreases, change,
 				numbers[0], numbers[len(numbers)-1],
 			), nil
@@ -211,9 +211,9 @@ func dataAnalystAgent() {
 	fmt.Println("\n" + strings.Repeat("=", 70))
 	fmt.Println("ANALYSIS REPORT")
 	fmt.Println(strings.Repeat("=", 70))
-	fmt.Printf("\n📊 ANALYSIS:\n%s\n", outputs1["analysis"])
-	fmt.Printf("\n💡 KEY INSIGHTS:\n%s\n", outputs1["insights"])
-	fmt.Printf("\n✅ RECOMMENDATIONS:\n%s\n", outputs1["recommendation"])
+	fmt.Printf("\n📊 ANALYSIS:\n%s\n", outputs1.Outputs["analysis"])
+	fmt.Printf("\n💡 KEY INSIGHTS:\n%s\n", outputs1.Outputs["insights"])
+	fmt.Printf("\n✅ RECOMMENDATIONS:\n%s\n", outputs1.Outputs["recommendation"])
 	fmt.Println(strings.Repeat("=", 70))
 
 	// Example 2: Comparison
@@ -232,9 +232,9 @@ func dataAnalystAgent() {
 	fmt.Println("\n" + strings.Repeat("=", 70))
 	fmt.Println("COMPARISON REPORT")
 	fmt.Println(strings.Repeat("=", 70))
-	fmt.Printf("\n📊 ANALYSIS:\n%s\n", outputs2["analysis"])
-	fmt.Printf("\n💡 KEY INSIGHTS:\n%s\n", outputs2["insights"])
-	fmt.Printf("\n✅ RECOMMENDATIONS:\n%s\n", outputs2["recommendation"])
+	fmt.Printf("\n📊 ANALYSIS:\n%s\n", outputs2.Outputs["analysis"])
+	fmt.Printf("\n💡 KEY INSIGHTS:\n%s\n", outputs2.Outputs["insights"])
+	fmt.Printf("\n✅ RECOMMENDATIONS:\n%s\n", outputs2.Outputs["recommendation"])
 	fmt.Println(strings.Repeat("=", 70))
 }
 
@@ -245,7 +245,7 @@ func parseNumbers(s string) []float64 {
 	s = strings.ReplaceAll(s, "|", ",")
 	// Remove labels like "Product A:"
 	parts := strings.Split(s, ",")
-	
+
 	var numbers []float64
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -254,13 +254,13 @@ func parseNumbers(s string) []float64 {
 			part = part[idx+1:]
 			part = strings.TrimSpace(part)
 		}
-		
+
 		var num float64
 		if _, err := fmt.Sscanf(part, "%f", &num); err == nil {
 			numbers = append(numbers, num)
 		}
 	}
-	
+
 	sort.Float64s(numbers)
 	return numbers
 }
@@ -295,11 +295,11 @@ func calculatePercentile(numbers []float64, percentile float64) float64 {
 	index := (percentile / 100.0) * float64(len(numbers)-1)
 	lower := int(math.Floor(index))
 	upper := int(math.Ceil(index))
-	
+
 	if lower == upper {
 		return numbers[lower]
 	}
-	
+
 	weight := index - float64(lower)
 	return numbers[lower]*(1-weight) + numbers[upper]*weight
 }

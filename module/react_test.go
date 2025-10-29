@@ -31,8 +31,8 @@ func TestReAct_Forward_NoTools(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	if outputs["answer"] != "result" {
-		t.Errorf("Expected answer='result', got %v", outputs["answer"])
+	if outputs.Outputs["answer"] != "result" {
+		t.Errorf("Expected answer='result', got %v", outputs.Outputs["answer"])
 	}
 }
 
@@ -73,8 +73,8 @@ func TestReAct_Forward_WithToolCalls(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	if outputs["answer"] != "final answer" {
-		t.Errorf("Expected final answer, got %v", outputs["answer"])
+	if outputs.Outputs["answer"] != "final answer" {
+		t.Errorf("Expected final answer, got %v", outputs.Outputs["answer"])
 	}
 }
 
@@ -169,7 +169,7 @@ func TestReAct_Forward_ToolNotFound(t *testing.T) {
 		t.Fatalf("Forward() should handle missing tool gracefully, got error: %v", err)
 	}
 
-	if outputs["answer"] != "recovered" {
+	if outputs.Outputs["answer"] != "recovered" {
 		t.Error("Should recover from tool not found error")
 	}
 }
@@ -210,7 +210,7 @@ func TestReAct_Forward_ToolError(t *testing.T) {
 		t.Fatalf("Forward() should handle tool errors, got: %v", err)
 	}
 
-	if outputs["answer"] != "recovered from error" {
+	if outputs.Outputs["answer"] != "recovered from error" {
 		t.Error("Should recover from tool execution error")
 	}
 }
@@ -255,88 +255,8 @@ func TestReAct_GetSignature(t *testing.T) {
 	}
 }
 
-func TestReAct_ParseFinalAnswer_NestedJSON(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	react := NewReAct(sig, &MockLM{}, []dsgo.Tool{})
-
-	content := `Text before {"answer": "value with {nested}"} after`
-	outputs, err := react.parseFinalAnswer(content)
-
-	if err != nil {
-		t.Fatalf("parseFinalAnswer() error = %v", err)
-	}
-
-	if outputs["answer"] != "value with {nested}" {
-		t.Error("Should handle nested braces")
-	}
-}
-
-func TestReAct_ParseFinalAnswer_WithNewlines(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	react := NewReAct(sig, &MockLM{}, []dsgo.Tool{})
-
-	content := `{"answer": "line1
-line2"}`
-	outputs, err := react.parseFinalAnswer(content)
-
-	if err != nil {
-		t.Fatalf("parseFinalAnswer() error = %v", err)
-	}
-
-	if outputs["answer"] != "line1\\nline2" && outputs["answer"] != "line1\nline2" {
-		t.Logf("Answer: %v", outputs["answer"])
-	}
-}
-
-func TestReAct_FixJSONNewlines(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "newline in string",
-			input:    `{"text": "line1\nline2"}`,
-			expected: `{"text": "line1\nline2"}`,
-		},
-		{
-			name:     "literal newline",
-			input:    "{\"text\": \"line1\nline2\"}",
-			expected: `{"text": "line1\nline2"}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := fixJSONNewlines(tt.input)
-			if result != tt.expected {
-				t.Logf("Expected: %q\nGot: %q", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestReAct_ParseFinalAnswer_GenericCodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	react := NewReAct(sig, &MockLM{}, []dsgo.Tool{})
-
-	content := "```\n{\"answer\": \"result\"}\n```"
-	outputs, err := react.parseFinalAnswer(content)
-
-	if err != nil {
-		t.Fatalf("parseFinalAnswer() error = %v", err)
-	}
-
-	if outputs["answer"] != "result" {
-		t.Error("Should parse generic code block")
-	}
-}
+// TestReAct_FixJSONNewlines removed - functionality moved to internal/jsonutil package
+// See internal/jsonutil/extract_test.go for comprehensive JSON extraction and newline fixing tests
 
 func TestReAct_BuildSystemPrompt_NoTools(t *testing.T) {
 	sig := dsgo.NewSignature("Test")
@@ -360,26 +280,6 @@ func TestReAct_BuildSystemPrompt_WithTools(t *testing.T) {
 
 	if !contains(prompt, "ReAct") {
 		t.Error("System prompt should mention ReAct")
-	}
-}
-
-func TestReAct_BuildInitialPrompt_NoDescription(t *testing.T) {
-	sig := dsgo.NewSignature("").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	react := NewReAct(sig, &MockLM{}, []dsgo.Tool{})
-
-	prompt, err := react.buildInitialPrompt(map[string]interface{}{
-		"question": "test",
-	})
-
-	if err != nil {
-		t.Fatalf("buildInitialPrompt() error = %v", err)
-	}
-
-	if prompt == "" {
-		t.Error("Prompt should not be empty")
 	}
 }
 

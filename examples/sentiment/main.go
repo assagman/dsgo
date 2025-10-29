@@ -50,8 +50,8 @@ func basicPredict() {
 	}
 
 	fmt.Printf("Input: %s\n", inputs["text"])
-	fmt.Printf("Sentiment: %v\n", outputs["sentiment"])
-	fmt.Printf("Confidence: %v\n", outputs["confidence"])
+	fmt.Printf("Sentiment: %v\n", outputs.Outputs["sentiment"])
+	fmt.Printf("Confidence: %v\n", outputs.Outputs["confidence"])
 }
 
 func chainOfThought() {
@@ -79,7 +79,7 @@ func chainOfThought() {
 	}
 
 	fmt.Printf("Problem: %s\n", inputs["problem"])
-	fmt.Printf("Reasoning: %v\n", outputs["reasoning"])
-	fmt.Printf("Answer: %v\n", outputs["answer"])
-	fmt.Printf("Explanation: %v\n", outputs["explanation"])
+	fmt.Printf("Reasoning: %v\n", outputs.Rationale) // ChainOfThought stores reasoning in Rationale
+	fmt.Printf("Answer: %v\n", outputs.Outputs["answer"])
+	fmt.Printf("Explanation: %v\n", outputs.Outputs["explanation"])
 }

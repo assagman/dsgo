@@ -60,8 +60,8 @@ func refineResponseExample() {
 	}
 
 	fmt.Printf("Customer Message: %s\n", inputs["customer_message"])
-	fmt.Printf("\nRefined Response:\n%s\n", outputs["response"])
-	fmt.Printf("\nTone: %s\n", outputs["tone"])
+	fmt.Printf("\nRefined Response:\n%s\n", outputs.Outputs["response"])
+	fmt.Printf("\nTone: %s\n", outputs.Outputs["tone"])
 }
 
 func bestOfNResponseExample() {
@@ -78,9 +78,9 @@ func bestOfNResponseExample() {
 	predict := module.NewPredict(sig, lm)
 
 	// Custom scorer: combine empathy and professionalism
-	scorer := func(inputs map[string]any, outputs map[string]any) (float64, error) {
-		empathy, ok1 := outputs["empathy_score"].(float64)
-		professionalism, ok2 := outputs["professionalism_score"].(float64)
+	scorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+		empathy, ok1 := prediction.Outputs["empathy_score"].(float64)
+		professionalism, ok2 := prediction.Outputs["professionalism_score"].(float64)
 
 		if !ok1 || !ok2 {
 			return 0.5, nil
@@ -107,11 +107,11 @@ func bestOfNResponseExample() {
 	}
 
 	fmt.Printf("Customer Message: %s\n", inputs["customer_message"])
-	fmt.Printf("\nBest Response (Score: %.2f):\n%s\n", outputs["_best_of_n_score"], outputs["response"])
-	fmt.Printf("\nEmpathy Score: %.2f\n", outputs["empathy_score"])
-	fmt.Printf("Professionalism Score: %.2f\n", outputs["professionalism_score"])
+	fmt.Printf("\nBest Response (Score: %.2f):\n%s\n", outputs.Score, outputs.Outputs["response"])
+	fmt.Printf("\nEmpathy Score: %.2f\n", outputs.Outputs["empathy_score"])
+	fmt.Printf("Professionalism Score: %.2f\n", outputs.Outputs["professionalism_score"])
 
-	if scores, ok := outputs["_best_of_n_all_scores"].([]float64); ok {
+	if scores, ok := outputs.Outputs["_best_of_n_all_scores"].([]float64); ok {
 		fmt.Printf("\nAll Scores: %v\n", scores)
 	}
 }
@@ -160,9 +160,9 @@ func combinedWorkflow() {
 
 	fmt.Printf("Customer Message: %s\n", inputs["message"])
 	fmt.Printf("\nClassification:")
-	fmt.Printf("\n  Category: %v", outputs["category"])
-	fmt.Printf("\n  Urgency: %v", outputs["urgency"])
-	fmt.Printf("\n  Key Points: %v\n", outputs["key_points"])
-	fmt.Printf("\nGenerated Response:\n%s\n", outputs["response"])
-	fmt.Printf("\nQuality Score: %.2f\n", outputs["quality_score"])
+	fmt.Printf("\n  Category: %v", outputs.Outputs["category"])
+	fmt.Printf("\n  Urgency: %v", outputs.Outputs["urgency"])
+	fmt.Printf("\n  Key Points: %v\n", outputs.Outputs["key_points"])
+	fmt.Printf("\nGenerated Response:\n%s\n", outputs.Outputs["response"])
+	fmt.Printf("\nQuality Score: %.2f\n", outputs.Outputs["quality_score"])
 }

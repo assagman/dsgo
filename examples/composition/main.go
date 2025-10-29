@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
@@ -74,10 +73,10 @@ func programExample() {
 		return
 	}
 
-	fmt.Printf("Main Topic: %v\n", outputs["main_topic"])
-	fmt.Printf("Key Points: %v\n", outputs["key_points"])
-	fmt.Printf("Sentiment: %v\n", outputs["sentiment"])
-	fmt.Printf("Confidence: %v\n", outputs["confidence"])
+	fmt.Printf("Main Topic: %v\n", outputs.Outputs["main_topic"])
+	fmt.Printf("Key Points: %v\n", outputs.Outputs["key_points"])
+	fmt.Printf("Sentiment: %v\n", outputs.Outputs["sentiment"])
+	fmt.Printf("Confidence: %v\n", outputs.Outputs["confidence"])
 }
 
 func refineExample() {
@@ -105,8 +104,8 @@ func refineExample() {
 		return
 	}
 
-	fmt.Printf("Subject: %v\n", outputs["subject"])
-	fmt.Printf("Email:\n%v\n", outputs["email"])
+	fmt.Printf("Subject: %v\n", outputs.Outputs["subject"])
+	fmt.Printf("Email:\n%v\n", outputs.Outputs["email"])
 }
 
 func bestOfNExample() {
@@ -137,10 +136,10 @@ func bestOfNExample() {
 		return
 	}
 
-	fmt.Printf("Best Tagline: %v\n", outputs["tagline"])
-	fmt.Printf("Confidence: %v\n", outputs["confidence"])
-	fmt.Printf("Best Score: %v\n", outputs["_best_of_n_score"])
-	if scores, ok := outputs["_best_of_n_all_scores"].([]float64); ok {
+	fmt.Printf("Best Tagline: %v\n", outputs.Outputs["tagline"])
+	fmt.Printf("Confidence: %v\n", outputs.Outputs["confidence"])
+	fmt.Printf("Best Score: %.3f\n", outputs.Score)
+	if scores, ok := outputs.Outputs["_best_of_n_all_scores"].([]float64); ok {
 		fmt.Printf("All Scores: %v\n", scores)
 	}
 }
@@ -185,30 +184,8 @@ func combinedExample() {
 		return
 	}
 
-	fmt.Printf("Analysis: %v\n", outputs["analysis"])
-	fmt.Printf("Approach: %v\n", outputs["approach"])
-	fmt.Printf("\nBest Solution:\n%v\n", outputs["solution"])
-	fmt.Printf("Confidence: %v\n", outputs["confidence"])
-}
-
-// Custom scorer based on solution length and detail
-func solutionQualityScorer(inputs map[string]any, outputs map[string]any) (float64, error) {
-	solution, ok := outputs["solution"].(string)
-	if !ok {
-		return 0, fmt.Errorf("solution field not found or not a string")
-	}
-
-	confidence, ok := outputs["confidence"].(float64)
-	if !ok {
-		confidence = 0.5 // Default if not provided
-	}
-
-	// Score based on length (prefer detailed solutions) and confidence
-	wordCount := float64(len(strings.Fields(solution)))
-	lengthScore := wordCount / 10.0 // Normalize
-
-	// Combined score: 60% confidence, 40% length
-	score := (confidence * 0.6) + (lengthScore * 0.4)
-
-	return score, nil
+	fmt.Printf("Analysis: %v\n", outputs.Outputs["analysis"])
+	fmt.Printf("Approach: %v\n", outputs.Outputs["approach"])
+	fmt.Printf("\nBest Solution:\n%v\n", outputs.Outputs["solution"])
+	fmt.Printf("Confidence: %v\n", outputs.Outputs["confidence"])
 }

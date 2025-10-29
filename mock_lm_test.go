@@ -36,6 +36,32 @@ func (m *MockLM) SupportsTools() bool {
 	return m.SupportsToolsVal
 }
 
+func (m *MockLM) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
+	chunkChan := make(chan Chunk, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		// Generate response using GenerateFunc
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Send content as a single chunk
+		chunkChan <- Chunk{
+			Content:      result.Content,
+			FinishReason: result.FinishReason,
+			Usage:        result.Usage,
+		}
+	}()
+
+	return chunkChan, errChan
+}
+
 // NewMockLM creates a new mock LM with default behavior
 func NewMockLM() *MockLM {
 	return &MockLM{
@@ -98,15 +124,5 @@ func TestDefaultGenerateOptions(t *testing.T) {
 	}
 	if opts.MaxTokens != 2048 {
 		t.Errorf("Expected max tokens 2048, got %d", opts.MaxTokens)
-	}
-}
-
-func TestNewGenerateOptions(t *testing.T) {
-	opts := NewGenerateOptions()
-	if opts == nil {
-		t.Fatal("NewGenerateOptions should not return nil")
-	}
-	if opts.Temperature != 0.7 {
-		t.Errorf("Expected temperature 0.7, got %f", opts.Temperature)
 	}
 }

@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/assagman/dsgo"
 )
@@ -71,7 +73,7 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -248,6 +250,105 @@ func (o *OpenAI) parseResponse(resp *openAIResponse) (*dsgo.GenerateResult, erro
 	return result, nil
 }
 
+// Stream generates a streaming response from OpenAI
+func (o *OpenAI) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		reqBody := o.buildRequest(messages, options)
+		reqBody["stream"] = true
+
+		bodyBytes, err := json.Marshal(reqBody)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to marshal request: %w", err)
+			return
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+		if err != nil {
+			errChan <- fmt.Errorf("failed to create request: %w", err)
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+o.APIKey)
+
+		resp, err := o.Client.Do(req)
+		if err != nil {
+			errChan <- fmt.Errorf("request failed: %w", err)
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			errChan <- fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+			return
+		}
+
+		// Read SSE stream
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			// Skip empty lines
+			if line == "" {
+				continue
+			}
+
+			// Parse SSE format: "data: {json}"
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+
+			data := strings.TrimPrefix(line, "data: ")
+
+			// Check for stream end
+			if data == "[DONE]" {
+				break
+			}
+
+			// Parse JSON chunk
+			var streamResp openAIStreamResponse
+			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+				errChan <- fmt.Errorf("failed to parse stream chunk: %w", err)
+				return
+			}
+
+			// Extract chunk data
+			if len(streamResp.Choices) > 0 {
+				choice := streamResp.Choices[0]
+				chunk := dsgo.Chunk{
+					Content:      choice.Delta.Content,
+					FinishReason: choice.FinishReason,
+				}
+
+				// Add usage if present (typically in last chunk)
+				if streamResp.Usage != nil {
+					chunk.Usage = dsgo.Usage{
+						PromptTokens:     streamResp.Usage.PromptTokens,
+						CompletionTokens: streamResp.Usage.CompletionTokens,
+						TotalTokens:      streamResp.Usage.TotalTokens,
+					}
+				}
+
+				chunkChan <- chunk
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			errChan <- fmt.Errorf("stream reading error: %w", err)
+			return
+		}
+	}()
+
+	return chunkChan, errChan
+}
+
 // OpenAI API response structures
 type openAIResponse struct {
 	ID      string `json:"id"`
@@ -279,4 +380,24 @@ type openAIToolCall struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
 	} `json:"function"`
+}
+
+type openAIStreamResponse struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index int `json:"index"`
+		Delta struct {
+			Content string `json:"content"`
+			Role    string `json:"role,omitempty"`
+		} `json:"delta"`
+		FinishReason string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage,omitempty"`
 }

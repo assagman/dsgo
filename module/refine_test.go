@@ -31,8 +31,8 @@ func TestRefine_Forward_NoFeedback(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	if outputs["answer"] != "initial" {
-		t.Errorf("Expected answer='initial', got %v", outputs["answer"])
+	if outputs.Outputs["answer"] != "initial" {
+		t.Errorf("Expected answer='initial', got %v", outputs.Outputs["answer"])
 	}
 }
 
@@ -64,8 +64,8 @@ func TestRefine_Forward_WithFeedback(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	if outputs["answer"] != "refined" {
-		t.Errorf("Expected refined answer, got %v", outputs["answer"])
+	if outputs.Outputs["answer"] != "refined" {
+		t.Errorf("Expected refined answer, got %v", outputs.Outputs["answer"])
 	}
 
 	if callCount != 2 {
@@ -173,62 +173,8 @@ func TestRefine_RefinementError(t *testing.T) {
 		t.Fatalf("Forward() should not error when refinement fails")
 	}
 
-	if outputs["answer"] != "initial" {
+	if outputs.Outputs["answer"] != "initial" {
 		t.Error("Should return initial output when refinement fails")
-	}
-}
-
-func TestRefine_ParseOutput_CodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	refine := NewRefine(sig, &MockLM{})
-
-	content := "```json\n{\"answer\": \"test\"}\n```"
-	outputs, err := refine.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "test" {
-		t.Error("Should parse JSON code block")
-	}
-}
-
-func TestRefine_ParseOutput_GenericBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	refine := NewRefine(sig, &MockLM{})
-
-	content := "```\n{\"answer\": \"result\"}\n```"
-	outputs, err := refine.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "result" {
-		t.Error("Should parse generic code block")
-	}
-}
-
-func TestRefine_ParseOutput_EmbeddedJSON(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	refine := NewRefine(sig, &MockLM{})
-
-	content := "Text before {\"answer\": \"embedded\"} after"
-	outputs, err := refine.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "embedded" {
-		t.Error("Should extract embedded JSON")
 	}
 }
 
@@ -260,71 +206,7 @@ func TestRefine_Forward_MaxIterations1(t *testing.T) {
 		t.Errorf("Expected 1 call with max_iterations=1, got %d", callCount)
 	}
 
-	if outputs["answer"] != "initial" {
+	if outputs.Outputs["answer"] != "initial" {
 		t.Error("Should return initial output when max_iterations=1")
-	}
-}
-
-func TestRefine_GeneratePrediction_SkipFeedbackField(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddInput("feedback", dsgo.FieldTypeString, "Feedback").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			content := messages[0].Content
-			if contains(content, "feedback") {
-				t.Error("Initial prompt should not contain feedback field")
-			}
-			return &dsgo.GenerateResult{Content: `{"answer": "ok"}`}, nil
-		},
-	}
-
-	refine := NewRefine(sig, lm)
-	_, err := refine.generatePrediction(context.Background(), map[string]interface{}{
-		"question": "test",
-		"feedback": "should be skipped",
-	}, nil)
-
-	if err != nil {
-		t.Fatalf("generatePrediction() error = %v", err)
-	}
-}
-
-func TestRefine_GenerateRefinement(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			content := messages[0].Content
-			if !contains(content, "Refine") {
-				t.Error("Refinement prompt should mention refining")
-			}
-			if !contains(content, "Previous Output") {
-				t.Error("Refinement prompt should show previous output")
-			}
-			return &dsgo.GenerateResult{Content: `{"answer": "refined"}`}, nil
-		},
-	}
-
-	refine := NewRefine(sig, lm)
-	outputs, err := refine.generateRefinement(
-		context.Background(),
-		map[string]interface{}{"question": "test"},
-		map[string]interface{}{"answer": "initial"},
-		"make it better",
-	)
-
-	if err != nil {
-		t.Fatalf("generateRefinement() error = %v", err)
-	}
-
-	if outputs["answer"] != "refined" {
-		t.Error("Should return refined output")
 	}
 }

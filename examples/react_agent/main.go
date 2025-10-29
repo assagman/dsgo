@@ -39,11 +39,19 @@ func reactAgent() {
 		"Perform mathematical calculations",
 		func(ctx context.Context, args map[string]any) (any, error) {
 			expression := args["expression"].(string)
-			// Simple calculation simulation
-			if strings.Contains(expression, "2024-2020") {
-				return "4", nil
+			// Simple pattern matching for basic arithmetic
+			// Supports: "X - Y" format
+			parts := strings.Split(strings.ReplaceAll(expression, " ", ""), "-")
+			if len(parts) == 2 {
+				var num1, num2 int
+				// Try to parse both as integers
+				_, err1 := fmt.Sscanf(parts[0], "%d", &num1)
+				_, err2 := fmt.Sscanf(parts[1], "%d", &num2)
+				if err1 == nil && err2 == nil {
+					return fmt.Sprintf("%d", num1-num2), nil
+				}
 			}
-			return "Result of calculation", nil
+			return fmt.Sprintf("Unable to calculate: %s", expression), nil
 		},
 	).AddParameter("expression", "string", "The mathematical expression to evaluate", true)
 
@@ -76,6 +84,6 @@ func reactAgent() {
 
 	fmt.Printf("\n=== Final Result ===\n")
 	fmt.Printf("Question: %s\n", inputs["question"])
-	fmt.Printf("Answer: %v\n", outputs["answer"])
-	fmt.Printf("Sources: %v\n", outputs["sources"])
+	fmt.Printf("Answer: %v\n", outputs.Outputs["answer"])
+	fmt.Printf("Sources: %v\n", outputs.Outputs["sources"])
 }

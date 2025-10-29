@@ -54,7 +54,10 @@ func (h *History) Get() []Message {
 
 // GetLast returns the last n messages from history
 func (h *History) GetLast(n int) []Message {
-	if n <= 0 || n >= len(h.messages) {
+	if n <= 0 {
+		return []Message{}
+	}
+	if n >= len(h.messages) {
 		return h.messages
 	}
 	return h.messages[len(h.messages)-n:]

@@ -1,8 +1,7 @@
 package dsgo
 
 import (
-	"fmt"
-	"strings"
+	"math/rand"
 )
 
 // Example represents an input/output pair for few-shot learning
@@ -84,8 +83,31 @@ func (es *ExampleSet) GetN(n int) []*Example {
 
 // GetRandom returns n random examples
 func (es *ExampleSet) GetRandom(n int) []*Example {
-	// TODO: Implement random sampling
-	return es.GetN(n)
+	if n <= 0 {
+		return []*Example{}
+	}
+
+	if n >= len(es.examples) {
+		return es.examples
+	}
+
+	// Create a copy of indices and shuffle them
+	indices := make([]int, len(es.examples))
+	for i := range indices {
+		indices[i] = i
+	}
+
+	rand.Shuffle(len(indices), func(i, j int) {
+		indices[i], indices[j] = indices[j], indices[i]
+	})
+
+	// Select the first n shuffled examples
+	result := make([]*Example, n)
+	for i := 0; i < n; i++ {
+		result[i] = es.examples[indices[i]]
+	}
+
+	return result
 }
 
 // Len returns the number of examples
@@ -103,7 +125,7 @@ func (es *ExampleSet) Clear() {
 	es.examples = []*Example{}
 }
 
-// Clone creates a deep copy of the example set
+// Clone creates a copy of the example set (shallow copy of map values)
 func (es *ExampleSet) Clone() *ExampleSet {
 	cloned := NewExampleSet(es.name)
 	for _, ex := range es.examples {
@@ -116,44 +138,6 @@ func (es *ExampleSet) Clone() *ExampleSet {
 		})
 	}
 	return cloned
-}
-
-// FormatExamples formats examples for inclusion in prompts
-func (es *ExampleSet) FormatExamples(signature *Signature) (string, error) {
-	if es.IsEmpty() {
-		return "", nil
-	}
-
-	var builder strings.Builder
-	builder.WriteString("Here are some examples:\n\n")
-
-	for i, ex := range es.examples {
-		builder.WriteString(fmt.Sprintf("Example %d:\n", i+1))
-
-		if ex.Label != "" {
-			builder.WriteString(fmt.Sprintf("Label: %s\n", ex.Label))
-		}
-
-		// Format inputs
-		builder.WriteString("Inputs:\n")
-		for _, field := range signature.InputFields {
-			if val, ok := ex.Inputs[field.Name]; ok {
-				builder.WriteString(fmt.Sprintf("  %s: %v\n", field.Name, val))
-			}
-		}
-
-		// Format outputs
-		builder.WriteString("Outputs:\n")
-		for _, field := range signature.OutputFields {
-			if val, ok := ex.Outputs[field.Name]; ok {
-				builder.WriteString(fmt.Sprintf("  %s: %v\n", field.Name, val))
-			}
-		}
-
-		builder.WriteString("\n")
-	}
-
-	return builder.String(), nil
 }
 
 // Helper function to deep copy a map

@@ -2,7 +2,6 @@ package module
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -19,6 +18,9 @@ type ReAct struct {
 	LM            dsgo.LM
 	Tools         []dsgo.Tool
 	Options       *dsgo.GenerateOptions
+	Adapter       dsgo.Adapter
+	History       *dsgo.History  // Optional conversation history
+	Demos         []dsgo.Example // Optional few-shot examples
 	MaxIterations int
 	Verbose       bool
 }
@@ -30,6 +32,7 @@ func NewReAct(signature *dsgo.Signature, lm dsgo.LM, tools []dsgo.Tool) *ReAct {
 		LM:            lm,
 		Tools:         tools,
 		Options:       dsgo.DefaultGenerateOptions(),
+		Adapter:       dsgo.NewFallbackAdapter().WithReasoning(true),
 		MaxIterations: MaxReActIterations,
 		Verbose:       false,
 	}
@@ -38,6 +41,24 @@ func NewReAct(signature *dsgo.Signature, lm dsgo.LM, tools []dsgo.Tool) *ReAct {
 // WithOptions sets custom generation options
 func (r *ReAct) WithOptions(options *dsgo.GenerateOptions) *ReAct {
 	r.Options = options
+	return r
+}
+
+// WithAdapter sets a custom adapter
+func (r *ReAct) WithAdapter(adapter dsgo.Adapter) *ReAct {
+	r.Adapter = adapter
+	return r
+}
+
+// WithHistory sets conversation history for multi-turn interactions
+func (r *ReAct) WithHistory(history *dsgo.History) *ReAct {
+	r.History = history
+	return r
+}
+
+// WithDemos sets few-shot examples for in-context learning
+func (r *ReAct) WithDemos(demos []dsgo.Example) *ReAct {
+	r.Demos = demos
 	return r
 }
 
@@ -59,22 +80,34 @@ func (r *ReAct) GetSignature() *dsgo.Signature {
 }
 
 // Forward executes the ReAct loop
-func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
 	if err := r.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
 
-	messages := []dsgo.Message{}
+	// Use adapter to format messages with demos
+	newMessages, err := r.Adapter.Format(r.Signature, inputs, r.Demos)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format messages: %w", err)
+	}
+
+	// Build initial message list
+	var messages []dsgo.Message
+
+	// Add system prompt for ReAct pattern
 	systemPrompt := r.buildSystemPrompt()
 	if systemPrompt != "" {
 		messages = append(messages, dsgo.Message{Role: "system", Content: systemPrompt})
 	}
 
-	userPrompt, err := r.buildInitialPrompt(inputs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build initial prompt: %w", err)
+	// Prepend history if available
+	if r.History != nil && !r.History.IsEmpty() {
+		historyMessages := r.Adapter.FormatHistory(r.History)
+		messages = append(messages, historyMessages...)
 	}
-	messages = append(messages, dsgo.Message{Role: "user", Content: userPrompt})
+
+	// Add new messages from adapter
+	messages = append(messages, newMessages...)
 
 	// ReAct loop: Thought -> Action -> Observation
 	for i := 0; i < r.MaxIterations; i++ {
@@ -82,15 +115,23 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (map[string]
 			fmt.Printf("\n=== ReAct Iteration %d ===\n", i+1)
 		}
 
-		options := r.Options
+		// Copy options to avoid mutation
+		options := r.Options.Copy()
 		if r.LM.SupportsTools() && len(r.Tools) > 0 {
 			options.Tools = r.Tools
 			options.ToolChoice = "auto"
 		}
 
+		// Enable JSON mode when tools are not used (for final answer)
+		if r.LM.SupportsJSON() && len(options.Tools) == 0 {
+			if _, isJSON := r.Adapter.(*dsgo.JSONAdapter); isJSON {
+				options.ResponseFormat = "json"
+			}
+		}
+
 		result, err := r.LM.Generate(ctx, messages, options)
 		if err != nil {
-			return nil, fmt.Errorf("LM generation failed at iteration %d: %w", i, err)
+			return nil, fmt.Errorf("LM generation failed at iteration %d: %w", i+1, err)
 		}
 
 		// If no tool calls, this should be the final answer
@@ -100,7 +141,8 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (map[string]
 				fmt.Println("Action: None (Final Answer)")
 			}
 
-			outputs, err := r.parseFinalAnswer(result.Content)
+			// Use adapter to parse output
+			outputs, err := r.Adapter.Parse(r.Signature, result.Content)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse final answer: %w", err)
 			}
@@ -109,7 +151,48 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (map[string]
 				return nil, fmt.Errorf("output validation failed: %w", err)
 			}
 
-			return outputs, nil
+			// Extract adapter metadata
+			adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+
+			// Extract rationale if present
+			rationale := ""
+			if reasoning, exists := outputs["reasoning"]; exists {
+				rationale = fmt.Sprintf("%v", reasoning)
+				// Remove reasoning from outputs if not part of signature
+				if r.Signature.GetOutputField("reasoning") == nil {
+					delete(outputs, "reasoning")
+				}
+			}
+
+			// Update history if present
+			if r.History != nil {
+				// Add only the new user message(s) (not from history)
+				for _, msg := range newMessages {
+					if msg.Role == "user" {
+						r.History.Add(msg)
+					}
+				}
+
+				// Add assistant response
+				r.History.Add(dsgo.Message{
+					Role:    "assistant",
+					Content: result.Content,
+				})
+			}
+
+			// Build Prediction object
+			prediction := dsgo.NewPrediction(outputs).
+				WithRationale(rationale).
+				WithUsage(result.Usage).
+				WithModuleName("ReAct").
+				WithInputs(inputs)
+
+			// Add adapter metrics if available
+			if adapterUsed != "" {
+				prediction.WithAdapterMetrics(adapterUsed, parseAttempts, fallbackUsed)
+			}
+
+			return prediction, nil
 		}
 
 		// Add assistant's response with tool calls
@@ -189,56 +272,6 @@ func (r *ReAct) buildSystemPrompt() string {
 	return prompt.String()
 }
 
-func (r *ReAct) buildInitialPrompt(inputs map[string]any) (string, error) {
-	var prompt strings.Builder
-
-	if r.Signature.Description != "" {
-		prompt.WriteString(r.Signature.Description)
-		prompt.WriteString("\n\n")
-	}
-
-	// Add input fields
-	if len(r.Signature.InputFields) > 0 {
-		prompt.WriteString("--- Inputs ---\n")
-		for _, field := range r.Signature.InputFields {
-			value, exists := inputs[field.Name]
-			if !exists {
-				return "", fmt.Errorf("missing required input field: %s", field.Name)
-			}
-			if field.Description != "" {
-				prompt.WriteString(fmt.Sprintf("%s (%s): %v\n", field.Name, field.Description, value))
-			} else {
-				prompt.WriteString(fmt.Sprintf("%s: %v\n", field.Name, value))
-			}
-		}
-		prompt.WriteString("\n")
-	}
-
-	// Add output format specification
-	if len(r.Signature.OutputFields) > 0 {
-		prompt.WriteString("--- Final Answer Format ---\n")
-		prompt.WriteString("When you have enough information, respond with a JSON object containing:\n")
-		prompt.WriteString("- reasoning (string): Your step-by-step thought process\n")
-		for _, field := range r.Signature.OutputFields {
-			optional := ""
-			if field.Optional {
-				optional = " (optional)"
-			}
-			classInfo := ""
-			if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
-				classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
-			}
-			if field.Description != "" {
-				prompt.WriteString(fmt.Sprintf("- %s (%s)%s%s: %s\n", field.Name, field.Type, optional, classInfo, field.Description))
-			} else {
-				prompt.WriteString(fmt.Sprintf("- %s (%s)%s%s\n", field.Name, field.Type, optional, classInfo))
-			}
-		}
-	}
-
-	return prompt.String(), nil
-}
-
 func (r *ReAct) findTool(name string) *dsgo.Tool {
 	for i := range r.Tools {
 		if r.Tools[i].Name == name {
@@ -246,110 +279,4 @@ func (r *ReAct) findTool(name string) *dsgo.Tool {
 		}
 	}
 	return nil
-}
-
-func (r *ReAct) parseFinalAnswer(content string) (map[string]any, error) {
-	content = strings.TrimSpace(content)
-
-	// Try to extract JSON from markdown code blocks
-	if strings.Contains(content, "```json") {
-		start := strings.Index(content, "```json") + 7
-		end := strings.Index(content[start:], "```")
-		if end > 0 {
-			content = content[start : start+end]
-		}
-	} else if strings.Contains(content, "```") {
-		start := strings.Index(content, "```") + 3
-		end := strings.Index(content[start:], "```")
-		if end > 0 {
-			content = content[start : start+end]
-		}
-	} else {
-		// Try to find JSON object in the content
-		start := strings.Index(content, "{")
-		if start >= 0 {
-			// Find matching closing brace, accounting for strings
-			depth := 0
-			inString := false
-			escape := false
-			for i := start; i < len(content); i++ {
-				if escape {
-					escape = false
-					continue
-				}
-				if content[i] == '\\' {
-					escape = true
-					continue
-				}
-				if content[i] == '"' {
-					inString = !inString
-				}
-				if !inString {
-					if content[i] == '{' {
-						depth++
-					} else if content[i] == '}' {
-						depth--
-						if depth == 0 {
-							content = content[start : i+1]
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	content = strings.TrimSpace(content)
-
-	// Fix common JSON issues: unescaped newlines in strings
-	content = fixJSONNewlines(content)
-
-	var outputs map[string]any
-	if err := json.Unmarshal([]byte(content), &outputs); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, content)
-	}
-
-	return outputs, nil
-}
-
-// fixJSONNewlines attempts to fix unescaped newlines in JSON strings
-func fixJSONNewlines(jsonStr string) string {
-	var result strings.Builder
-	inString := false
-	escape := false
-
-	for i := 0; i < len(jsonStr); i++ {
-		ch := jsonStr[i]
-
-		if escape {
-			result.WriteByte(ch)
-			escape = false
-			continue
-		}
-
-		if ch == '\\' {
-			result.WriteByte(ch)
-			escape = true
-			continue
-		}
-
-		if ch == '"' {
-			inString = !inString
-			result.WriteByte(ch)
-			continue
-		}
-
-		// If we're inside a string and encounter a newline, escape it
-		if inString && (ch == '\n' || ch == '\r') {
-			if ch == '\n' {
-				result.WriteString("\\n")
-			}
-			// Skip \r as it's often paired with \n
-			continue
-		}
-
-		result.WriteByte(ch)
-	}
-
-	return result.String()
 }

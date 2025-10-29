@@ -31,12 +31,12 @@ func TestChainOfThought_Forward_Success(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	if outputs["answer"] != "42" {
-		t.Errorf("Expected answer='42', got %v", outputs["answer"])
+	if outputs.Outputs["answer"] != "42" {
+		t.Errorf("Expected answer='42', got %v", outputs.Outputs["answer"])
 	}
 
-	if reasoning, ok := outputs["reasoning"]; !ok || reasoning == "" {
-		t.Error("ChainOfThought should include reasoning")
+	if !outputs.HasRationale() {
+		t.Error("ChainOfThought should include reasoning/rationale")
 	}
 }
 
@@ -70,42 +70,6 @@ func TestChainOfThought_Forward_LMError(t *testing.T) {
 
 	if err == nil {
 		t.Error("Forward() should propagate LM error")
-	}
-}
-
-func TestChainOfThought_ParseOutput_CodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	cot := NewChainOfThought(sig, nil)
-
-	content := "```json\n{\"reasoning\": \"thinking\", \"answer\": \"result\"}\n```"
-	outputs, err := cot.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "result" {
-		t.Errorf("Expected answer='result', got %v", outputs["answer"])
-	}
-}
-
-func TestChainOfThought_ParseOutput_EmbeddedJSON(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	cot := NewChainOfThought(sig, nil)
-
-	content := "Let me think... {\"answer\": \"embedded\"} that's the answer"
-	outputs, err := cot.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "embedded" {
-		t.Errorf("Expected answer='embedded', got %v", outputs["answer"])
 	}
 }
 
@@ -160,24 +124,6 @@ func TestChainOfThought_BuildPrompt(t *testing.T) {
 	}
 }
 
-func TestChainOfThought_ParseOutput_GenericCodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
-
-	cot := NewChainOfThought(sig, nil)
-
-	content := "```\n{\"reasoning\": \"test\", \"answer\": \"result\"}\n```"
-	outputs, err := cot.parseOutput(content)
-
-	if err != nil {
-		t.Fatalf("parseOutput() error = %v", err)
-	}
-
-	if outputs["answer"] != "result" {
-		t.Error("Should parse generic code blocks")
-	}
-}
-
 func TestChainOfThought_BuildPrompt_NoDescription(t *testing.T) {
 	sig := dsgo.NewSignature("").
 		AddInput("problem", dsgo.FieldTypeString, "Problem").
@@ -196,5 +142,51 @@ func TestChainOfThought_BuildPrompt_NoDescription(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("Forward() should work without description: %v", err)
+	}
+}
+
+// TestChainOfThought_ReasoningInRationale verifies that reasoning is stored in Rationale field,
+// not in Outputs["reasoning"]. This prevents the bug found in examples/sentiment and examples/interview.
+func TestChainOfThought_ReasoningInRationale(t *testing.T) {
+	sig := dsgo.NewSignature("Test signature").
+		AddInput("question", dsgo.FieldTypeString, "The question").
+		AddOutput("answer", dsgo.FieldTypeString, "The answer")
+
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			return &dsgo.GenerateResult{
+				Content: `{
+					"reasoning": "This is my step-by-step reasoning",
+					"answer": "42"
+				}`,
+			}, nil
+		},
+	}
+
+	cot := NewChainOfThought(sig, lm)
+	ctx := context.Background()
+	inputs := map[string]any{"question": "What is the answer?"}
+
+	result, err := cot.Forward(ctx, inputs)
+	if err != nil {
+		t.Fatalf("Forward() failed: %v", err)
+	}
+
+	// Verify reasoning is in Rationale field
+	if result.Rationale == "" {
+		t.Error("Expected reasoning in Rationale field, got empty string")
+	}
+	if result.Rationale != "This is my step-by-step reasoning" {
+		t.Errorf("Expected reasoning in Rationale, got: %s", result.Rationale)
+	}
+
+	// Verify reasoning is NOT in Outputs map (unless explicitly in signature)
+	if _, exists := result.Outputs["reasoning"]; exists {
+		t.Error("Reasoning should not be in Outputs map when not defined in signature")
+	}
+
+	// Verify answer is in Outputs
+	if answer, ok := result.Outputs["answer"].(string); !ok || answer != "42" {
+		t.Errorf("Expected answer='42' in Outputs, got: %v", result.Outputs["answer"])
 	}
 }
