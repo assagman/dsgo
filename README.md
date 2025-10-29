@@ -1,3 +1,29 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║   ██████╗ ███████╗ ██████╗  ██████╗                                  ║
+║   ██╔══██╗██╔════╝██╔════╝ ██╔═══██╗                                 ║
+║   ██║  ██║███████╗██║  ███╗██║   ██║                                 ║
+║   ██║  ██║╚════██║██║   ██║██║   ██║                                 ║
+║   ██████╔╝███████║╚██████╔╝╚██████╔╝                                 ║
+║   ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝                                  ║
+║                                                                      ║
+║   DSPy Framework for Go                                              ║
+║   Programming Language Models with Signatures, Modules & Tools       ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+✨ Features:
+  • Type-Safe Signatures (8 field types)
+  • Composable Modules (Predict, ChainOfThought, ReAct)
+  • Tool/Function Calling
+  • OpenAI and Openrouter support
+  • Experiment-Ready
+
+📚 Documentation:
+  • QUICKSTART.md  - Get started in 30 seconds
+  • AGENTS.md      - Development guide
+  • README.md      - Complete overview
+
 # DSGo - DSPy for Go
 
 DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordnlp/dspy) for programming language models. It provides a structured approach to building LM-based applications through signatures, modules, and composable patterns.
@@ -29,10 +55,8 @@ go get github.com/assagman/dsgo
 ### Three Progressive Examples
 
 1. **Sentiment Analysis** (Beginner) - Basic prediction and chain-of-thought
-2. **ReAct Agent** (Intermediate) - Tools and iterative reasoning  
+2. **ReAct Agent** (Intermediate) - Tools and iterative reasoning
 3. **Research Assistant** (Advanced) - All features: complex signatures, multiple types, tools, reasoning
-
-See [EXAMPLES.md](EXAMPLES.md) for detailed walkthrough.
 
 ### Basic Example: Sentiment Analysis
 
@@ -43,7 +67,7 @@ import (
     "context"
     "fmt"
     "log"
-    
+
     "github.com/assagman/dsgo"
     "github.com/assagman/dsgo/module"
     "github.com/assagman/dsgo/providers/openai"
@@ -55,25 +79,25 @@ func main() {
         AddInput("text", dsgo.FieldTypeString, "The text to analyze").
         AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "The sentiment").
         AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score")
-    
+
     // Create language model
     lm := openai.NewOpenAI("gpt-4")
-    
+
     // Create Predict module
     predict := module.NewPredict(sig, lm)
-    
+
     // Execute
     ctx := context.Background()
     inputs := map[string]interface{}{
         "text": "I love this product!",
     }
-    
+
     outputs, err := predict.Forward(ctx, inputs)
     if err != nil {
         log.Fatal(err)
     }
-    
-    fmt.Printf("Sentiment: %v (Confidence: %v)\n", 
+
+    fmt.Printf("Sentiment: %v (Confidence: %v)\n",
         outputs["sentiment"], outputs["confidence"])
 }
 ```
@@ -275,10 +299,7 @@ dsgo/
 ## Documentation Index
 
 - **[QUICKSTART.md](QUICKSTART.md)** - Get started in 30 seconds
-- **[EXAMPLES.md](EXAMPLES.md)** - Walkthrough of all 3 examples
 - **[AGENTS.md](AGENTS.md)** - Development and testing guide
-- **[IMPLEMENTATION.md](IMPLEMENTATION.md)** - Technical deep dive
-- **[SUMMARY.md](SUMMARY.md)** - What was built
 
 ## Contributing
 

@@ -1,8 +1,8 @@
-.PHONY: test test-cover test-race build fmt vet lint check verify clean all install-hooks
+.PHONY: test test-cover test-race build fmt vet lint check check-eof verify clean all install-hooks
 
 PACKAGES := $$(go list ./... | grep -v /examples/)
 
-all: clean check test-race
+all: clean check test-race check-eof
 
 test:
 	go test $(PACKAGES)
@@ -38,6 +38,9 @@ verify:
 	go mod verify
 
 check: verify fmt vet build
+
+check-eof:
+	./scripts/check-eof.sh
 
 clean:
 	rm -f coverage.out
