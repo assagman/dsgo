@@ -13,10 +13,13 @@ type MockModule struct {
 	ForwardFunc    func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error)
 	SignatureValue *dsgo.Signature
 	CallCount      int
+	mu             sync.Mutex
 }
 
 func (m *MockModule) Forward(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+	m.mu.Lock()
 	m.CallCount++
+	m.mu.Unlock()
 	if m.ForwardFunc != nil {
 		return m.ForwardFunc(ctx, inputs)
 	}

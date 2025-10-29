@@ -1,8 +1,8 @@
-.PHONY: test test-cover test-race test-cover-out build fmt vet lint check verify clean all install-hooks
+.PHONY: test test-cover test-race build fmt vet lint check verify clean all install-hooks
 
 PACKAGES := $$(go list ./... | grep -v /examples/)
 
-all: check test
+all: clean check test-race
 
 test:
 	go test $(PACKAGES)
@@ -12,9 +12,6 @@ test-cover:
 
 test-race:
 	go test -v -race -coverpkg=./... -coverprofile=coverage.out $(PACKAGES)
-
-test-cover-out:
-	go test -v -coverpkg=$$(go list ./... | grep -v /examples/ | tr '\n' ',') $(PACKAGES) -coverprofile=coverage.out && go tool cover -func=coverage.out
 
 build:
 	go build ./...
