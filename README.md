@@ -45,7 +45,8 @@ import (
     "log"
     
     "github.com/assagman/dsgo"
-    "github.com/assagman/dsgo/examples/openai"
+    "github.com/assagman/dsgo/module"
+    "github.com/assagman/dsgo/providers/openai"
 )
 
 func main() {
@@ -59,7 +60,7 @@ func main() {
     lm := openai.NewOpenAI("gpt-4")
     
     // Create Predict module
-    predict := dsgo.NewPredict(sig, lm)
+    predict := module.NewPredict(sig, lm)
     
     // Execute
     ctx := context.Background()
@@ -86,7 +87,7 @@ sig := dsgo.NewSignature("Solve the math word problem").
     AddOutput("explanation", dsgo.FieldTypeString, "Step-by-step solution")
 
 lm := openai.NewOpenAI("gpt-4")
-cot := dsgo.NewChainOfThought(sig, lm)
+cot := module.NewChainOfThought(sig, lm)
 
 outputs, err := cot.Forward(ctx, map[string]interface{}{
     "problem": "If John has 5 apples and gives 2 away, how many does he have?",
@@ -112,7 +113,7 @@ sig := dsgo.NewSignature("Answer questions using available tools").
     AddOutput("answer", dsgo.FieldTypeString, "The answer")
 
 lm := openai.NewOpenAI("gpt-4")
-react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool}).
+react := module.NewReAct(sig, lm, []dsgo.Tool{*searchTool}).
     WithMaxIterations(5).
     WithVerbose(true)
 
@@ -139,7 +140,7 @@ sig := dsgo.NewSignature("Research and analyze a topic").
 
 // Use with ReAct and multiple tools
 tools := []dsgo.Tool{searchTool, statsTool, factCheckTool}
-react := dsgo.NewReAct(sig, lm, tools).WithMaxIterations(7)
+react := module.NewReAct(sig, lm, tools).WithMaxIterations(7)
 
 outputs, err := react.Forward(ctx, map[string]interface{}{
     "topic":         "AI in software development",
@@ -227,19 +228,27 @@ DSGo follows the DSPy philosophy:
 
 ```
 dsgo/
-├── signature.go              # Signature system (InputField, OutputField)
+├── signature.go             # Signature system (InputField, OutputField)
 ├── lm.go                    # Language Model interface
-├── module.go                # Base Predict module
-├── chain_of_thought.go      # ChainOfThought module
-├── react.go                 # ReAct module with tool support
-├── refine.go                # Refine module for iterative improvement
-├── best_of_n.go             # BestOfN module for multiple sampling
-├── program_of_thought.go    # ProgramOfThought module for code generation
-├── program.go               # Program structure for module composition
+├── module.go                # Module interface
+├── prediction.go            # Prediction wrapper with metadata
+├── history.go               # Conversation history management
+├── example.go               # Few-shot learning support
 ├── tool.go                  # Tool/function definitions
 ├── *_test.go                # Unit tests
+├── module/
+│   ├── predict.go           # Basic Predict module
+│   ├── chain_of_thought.go  # ChainOfThought module
+│   ├── react.go             # ReAct module with tool support
+│   ├── refine.go            # Refine module for iterative improvement
+│   ├── best_of_n.go         # BestOfN module for multiple sampling
+│   ├── program_of_thought.go # ProgramOfThought module for code generation
+│   └── program.go           # Program structure for module composition
+├── providers/
+│   ├── openai/              # OpenAI LM provider
+│   └── openrouter/          # OpenRouter LM provider
 ├── examples/
-│   ├── openai/              # OpenAI LM provider implementation
+│   ├── shared/              # Shared provider utilities
 │   ├── sentiment/           # Basic prediction & chain-of-thought
 │   ├── react_agent/         # ReAct agent with tools
 │   ├── research_assistant/  # Advanced: complex signatures + tools + reasoning

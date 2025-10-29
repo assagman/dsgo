@@ -1,35 +1,37 @@
-package dsgo
+package module
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/assagman/dsgo"
 )
 
 // Refine implements iterative refinement of predictions
 // It takes an initial prediction and refines it based on feedback or additional context
 type Refine struct {
-	Signature       *Signature
-	LM              LM
-	Options         *GenerateOptions
+	Signature       *dsgo.Signature
+	LM              dsgo.LM
+	Options         *dsgo.GenerateOptions
 	MaxIterations   int
 	RefinementField string // Field name to use for refinement feedback
 }
 
 // NewRefine creates a new Refine module
-func NewRefine(signature *Signature, lm LM) *Refine {
+func NewRefine(signature *dsgo.Signature, lm dsgo.LM) *Refine {
 	return &Refine{
 		Signature:       signature,
 		LM:              lm,
-		Options:         DefaultGenerateOptions(),
+		Options:         dsgo.DefaultGenerateOptions(),
 		MaxIterations:   3,
 		RefinementField: "feedback",
 	}
 }
 
 // WithOptions sets custom generation options
-func (r *Refine) WithOptions(options *GenerateOptions) *Refine {
+func (r *Refine) WithOptions(options *dsgo.GenerateOptions) *Refine {
 	r.Options = options
 	return r
 }
@@ -47,12 +49,12 @@ func (r *Refine) WithRefinementField(field string) *Refine {
 }
 
 // GetSignature returns the module's signature
-func (r *Refine) GetSignature() *Signature {
+func (r *Refine) GetSignature() *dsgo.Signature {
 	return r.Signature
 }
 
 // Forward executes the refinement loop
-func (r *Refine) Forward(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (r *Refine) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	if err := r.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
@@ -84,7 +86,7 @@ func (r *Refine) Forward(ctx context.Context, inputs map[string]interface{}) (ma
 	return outputs, nil
 }
 
-func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]interface{}, previousOutput map[string]interface{}) (map[string]interface{}, error) {
+func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, previousOutput map[string]any) (map[string]any, error) {
 	var prompt strings.Builder
 
 	// Add description
@@ -132,7 +134,7 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]inter
 				optional = " (optional)"
 			}
 			classInfo := ""
-			if field.Type == FieldTypeClass && len(field.Classes) > 0 {
+			if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
 				classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 			}
 			if field.Description != "" {
@@ -143,7 +145,7 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]inter
 		}
 	}
 
-	messages := []Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: prompt.String()},
 	}
 
@@ -169,7 +171,7 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]inter
 	return outputs, nil
 }
 
-func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]interface{}, previousOutput map[string]interface{}, feedback string) (map[string]interface{}, error) {
+func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, previousOutput map[string]any, feedback string) (map[string]any, error) {
 	var prompt strings.Builder
 
 	prompt.WriteString("Refine the previous output based on the following feedback:\n\n")
@@ -205,7 +207,7 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]inter
 			optional = " (optional)"
 		}
 		classInfo := ""
-		if field.Type == FieldTypeClass && len(field.Classes) > 0 {
+		if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
 			classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 		}
 		if field.Description != "" {
@@ -215,7 +217,7 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]inter
 		}
 	}
 
-	messages := []Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: prompt.String()},
 	}
 
@@ -241,7 +243,7 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]inter
 	return outputs, nil
 }
 
-func (r *Refine) parseOutput(content string) (map[string]interface{}, error) {
+func (r *Refine) parseOutput(content string) (map[string]any, error) {
 	content = strings.TrimSpace(content)
 
 	// Try to extract JSON from markdown code blocks
@@ -279,7 +281,7 @@ func (r *Refine) parseOutput(content string) (map[string]interface{}, error) {
 
 	content = strings.TrimSpace(content)
 
-	var outputs map[string]interface{}
+	var outputs map[string]any
 	if err := json.Unmarshal([]byte(content), &outputs); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, content)
 	}

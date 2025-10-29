@@ -1,17 +1,19 @@
-package dsgo
+package module
 
 import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/assagman/dsgo"
 )
 
 // ScoringFunction evaluates the quality of an output
-type ScoringFunction func(inputs map[string]interface{}, outputs map[string]interface{}) (float64, error)
+type ScoringFunction func(inputs map[string]any, outputs map[string]any) (float64, error)
 
 // BestOfN executes a module N times and returns the best result
 type BestOfN struct {
-	Module      Module
+	Module      dsgo.Module
 	N           int
 	Scorer      ScoringFunction
 	Parallel    bool
@@ -21,15 +23,15 @@ type BestOfN struct {
 
 // BestOfNResult contains the results of BestOfN execution
 type BestOfNResult struct {
-	BestOutput    map[string]interface{}
-	BestScore     float64
-	AllOutputs    []map[string]interface{}
-	AllScores     []float64
-	FailureCount  int
+	BestOutput   map[string]any
+	BestScore    float64
+	AllOutputs   []map[string]any
+	AllScores    []float64
+	FailureCount int
 }
 
 // NewBestOfN creates a new BestOfN module
-func NewBestOfN(module Module, n int) *BestOfN {
+func NewBestOfN(module dsgo.Module, n int) *BestOfN {
 	return &BestOfN{
 		Module:      module,
 		N:           n,
@@ -65,12 +67,12 @@ func (b *BestOfN) WithMaxFailures(max int) *BestOfN {
 }
 
 // GetSignature returns the module's signature
-func (b *BestOfN) GetSignature() *Signature {
+func (b *BestOfN) GetSignature() *dsgo.Signature {
 	return b.Module.GetSignature()
 }
 
 // Forward executes the module N times and returns the best result
-func (b *BestOfN) Forward(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (b *BestOfN) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	if b.Scorer == nil {
 		return nil, fmt.Errorf("scorer function must be set")
 	}
@@ -85,10 +87,10 @@ func (b *BestOfN) Forward(ctx context.Context, inputs map[string]interface{}) (m
 	return b.forwardSequential(ctx, inputs)
 }
 
-func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
-	var allOutputs []map[string]interface{}
+func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+	var allOutputs []map[string]any
 	var allScores []float64
-	var bestOutput map[string]interface{}
+	var bestOutput map[string]any
 	bestScore := -1.0
 	failureCount := 0
 
@@ -126,7 +128,7 @@ func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]inter
 
 	// If ReturnAll is enabled, add metadata to the result
 	if b.ReturnAll {
-		result := make(map[string]interface{})
+		result := make(map[string]any)
 		for k, v := range bestOutput {
 			result[k] = v
 		}
@@ -138,9 +140,9 @@ func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]inter
 	return bestOutput, nil
 }
 
-func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	type result struct {
-		outputs map[string]interface{}
+		outputs map[string]any
 		score   float64
 		err     error
 	}
@@ -176,9 +178,9 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]interfa
 	}()
 
 	// Collect results
-	var allOutputs []map[string]interface{}
+	var allOutputs []map[string]any
 	var allScores []float64
-	var bestOutput map[string]interface{}
+	var bestOutput map[string]any
 	bestScore := -1.0
 	failureCount := 0
 
@@ -207,7 +209,7 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]interfa
 
 	// If ReturnAll is enabled, add metadata to the result
 	if b.ReturnAll {
-		result := make(map[string]interface{})
+		result := make(map[string]any)
 		for k, v := range bestOutput {
 			result[k] = v
 		}
@@ -222,7 +224,7 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]interfa
 // DefaultScorer returns a simple length-based scorer
 // This is a basic scorer that prefers longer outputs
 func DefaultScorer() ScoringFunction {
-	return func(inputs map[string]interface{}, outputs map[string]interface{}) (float64, error) {
+	return func(inputs map[string]any, outputs map[string]any) (float64, error) {
 		totalLength := 0
 		for _, v := range outputs {
 			totalLength += len(fmt.Sprintf("%v", v))
@@ -233,7 +235,7 @@ func DefaultScorer() ScoringFunction {
 
 // ConfidenceScorer returns a scorer based on a confidence field
 func ConfidenceScorer(field string) ScoringFunction {
-	return func(inputs map[string]interface{}, outputs map[string]interface{}) (float64, error) {
+	return func(inputs map[string]any, outputs map[string]any) (float64, error) {
 		confidence, exists := outputs[field]
 		if !exists {
 			return 0, fmt.Errorf("confidence field '%s' not found in outputs", field)

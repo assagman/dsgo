@@ -25,7 +25,7 @@ func NewHistoryWithLimit(maxSize int) *History {
 // Add appends a message to the history
 func (h *History) Add(message Message) {
 	h.messages = append(h.messages, message)
-	
+
 	// Trim if exceeds max size (keep most recent)
 	if h.maxSize > 0 && len(h.messages) > h.maxSize {
 		h.messages = h.messages[len(h.messages)-h.maxSize:]

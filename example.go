@@ -7,9 +7,9 @@ import (
 
 // Example represents an input/output pair for few-shot learning
 type Example struct {
-	Inputs  map[string]interface{}
-	Outputs map[string]interface{}
-	
+	Inputs  map[string]any
+	Outputs map[string]any
+
 	// Optional metadata
 	Label       string  // Human-readable label
 	Weight      float64 // Importance weight (default 1.0)
@@ -17,7 +17,7 @@ type Example struct {
 }
 
 // NewExample creates a new example
-func NewExample(inputs, outputs map[string]interface{}) *Example {
+func NewExample(inputs, outputs map[string]any) *Example {
 	return &Example{
 		Inputs:  inputs,
 		Outputs: outputs,
@@ -64,7 +64,7 @@ func (es *ExampleSet) Add(example *Example) *ExampleSet {
 }
 
 // AddPair adds an input/output pair as an example
-func (es *ExampleSet) AddPair(inputs, outputs map[string]interface{}) *ExampleSet {
+func (es *ExampleSet) AddPair(inputs, outputs map[string]any) *ExampleSet {
 	es.Add(NewExample(inputs, outputs))
 	return es
 }
@@ -123,17 +123,17 @@ func (es *ExampleSet) FormatExamples(signature *Signature) (string, error) {
 	if es.IsEmpty() {
 		return "", nil
 	}
-	
+
 	var builder strings.Builder
 	builder.WriteString("Here are some examples:\n\n")
-	
+
 	for i, ex := range es.examples {
 		builder.WriteString(fmt.Sprintf("Example %d:\n", i+1))
-		
+
 		if ex.Label != "" {
 			builder.WriteString(fmt.Sprintf("Label: %s\n", ex.Label))
 		}
-		
+
 		// Format inputs
 		builder.WriteString("Inputs:\n")
 		for _, field := range signature.InputFields {
@@ -141,7 +141,7 @@ func (es *ExampleSet) FormatExamples(signature *Signature) (string, error) {
 				builder.WriteString(fmt.Sprintf("  %s: %v\n", field.Name, val))
 			}
 		}
-		
+
 		// Format outputs
 		builder.WriteString("Outputs:\n")
 		for _, field := range signature.OutputFields {
@@ -149,16 +149,16 @@ func (es *ExampleSet) FormatExamples(signature *Signature) (string, error) {
 				builder.WriteString(fmt.Sprintf("  %s: %v\n", field.Name, val))
 			}
 		}
-		
+
 		builder.WriteString("\n")
 	}
-	
+
 	return builder.String(), nil
 }
 
 // Helper function to deep copy a map
-func copyMap(m map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
+func copyMap(m map[string]any) map[string]any {
+	result := make(map[string]any)
 	for k, v := range m {
 		result[k] = v
 	}

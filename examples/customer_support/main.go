@@ -6,7 +6,8 @@ import (
 	"log"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -33,7 +34,7 @@ func main() {
 
 func refineResponseExample() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	sig := dsgo.NewSignature("Generate a professional customer support response").
 		AddInput("customer_message", dsgo.FieldTypeString, "The customer's message").
@@ -42,11 +43,11 @@ func refineResponseExample() {
 		AddOutput("response", dsgo.FieldTypeString, "Support response").
 		AddOutput("tone", dsgo.FieldTypeString, "Tone of the response")
 
-	refine := dsgo.NewRefine(sig, lm).
+	refine := module.NewRefine(sig, lm).
 		WithMaxIterations(2).
 		WithRefinementField("feedback")
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"customer_message": "I ordered a laptop 3 weeks ago and it still hasn't arrived. This is unacceptable!",
 		"issue_type":       "delayed_delivery",
 		"feedback":         "make it more empathetic and offer specific compensation",
@@ -65,7 +66,7 @@ func refineResponseExample() {
 
 func bestOfNResponseExample() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	sig := dsgo.NewSignature("Generate a customer support response").
 		AddInput("customer_message", dsgo.FieldTypeString, "The customer's message").
@@ -74,10 +75,10 @@ func bestOfNResponseExample() {
 		AddOutput("empathy_score", dsgo.FieldTypeFloat, "Empathy score 0-1").
 		AddOutput("professionalism_score", dsgo.FieldTypeFloat, "Professionalism score 0-1")
 
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 
 	// Custom scorer: combine empathy and professionalism
-	scorer := func(inputs map[string]interface{}, outputs map[string]interface{}) (float64, error) {
+	scorer := func(inputs map[string]any, outputs map[string]any) (float64, error) {
 		empathy, ok1 := outputs["empathy_score"].(float64)
 		professionalism, ok2 := outputs["professionalism_score"].(float64)
 
@@ -90,11 +91,11 @@ func bestOfNResponseExample() {
 		return score, nil
 	}
 
-	bestOf := dsgo.NewBestOfN(predict, 3).
+	bestOf := module.NewBestOfN(predict, 3).
 		WithScorer(scorer).
 		WithReturnAll(true)
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"customer_message": "Your product broke after just one week! I want a refund immediately!",
 		"issue_type":       "product_defect",
 	}
@@ -117,7 +118,7 @@ func bestOfNResponseExample() {
 
 func combinedWorkflow() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	// Step 1: Classify the issue
 	classifySig := dsgo.NewSignature("Classify the customer issue").
@@ -126,7 +127,7 @@ func combinedWorkflow() {
 		AddClassOutput("urgency", []string{"low", "medium", "high", "critical"}, "Urgency level").
 		AddOutput("key_points", dsgo.FieldTypeString, "Key points from message")
 
-	classify := dsgo.NewPredict(classifySig, lm)
+	classify := module.NewPredict(classifySig, lm)
 
 	// Step 2: Generate response
 	responseSig := dsgo.NewSignature("Generate appropriate response").
@@ -136,18 +137,18 @@ func combinedWorkflow() {
 		AddOutput("response", dsgo.FieldTypeString, "Support response").
 		AddOutput("quality_score", dsgo.FieldTypeFloat, "Quality score 0-1")
 
-	responseModule := dsgo.NewPredict(responseSig, lm)
+	responseModule := module.NewPredict(responseSig, lm)
 
 	// Use BestOfN for response generation
-	bestResponse := dsgo.NewBestOfN(responseModule, 2).
-		WithScorer(dsgo.ConfidenceScorer("quality_score"))
+	bestResponse := module.NewBestOfN(responseModule, 2).
+		WithScorer(module.ConfidenceScorer("quality_score"))
 
 	// Create pipeline
-	pipeline := dsgo.NewProgram("Support Pipeline").
+	pipeline := module.NewProgram("Support Pipeline").
 		AddModule(classify).
 		AddModule(bestResponse)
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"message": "I've been trying to access my account for 2 days but keep getting error 500. I have an important meeting tomorrow and need this fixed ASAP!",
 	}
 

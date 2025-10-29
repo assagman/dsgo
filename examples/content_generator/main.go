@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -36,7 +37,7 @@ func main() {
 
 func generateBlogTitle() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	sig := dsgo.NewSignature("Generate an engaging blog post title").
 		AddInput("topic", dsgo.FieldTypeString, "Blog topic").
@@ -46,10 +47,10 @@ func generateBlogTitle() {
 		AddOutput("seo_score", dsgo.FieldTypeFloat, "SEO friendliness 0-1").
 		AddOutput("creativity", dsgo.FieldTypeFloat, "Creativity score 0-1")
 
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 
 	// Custom scorer: balanced scoring across all dimensions
-	customScorer := func(inputs map[string]interface{}, outputs map[string]interface{}) (float64, error) {
+	customScorer := func(inputs map[string]any, outputs map[string]any) (float64, error) {
 		hook, ok1 := outputs["hook_strength"].(float64)
 		seo, ok2 := outputs["seo_score"].(float64)
 		creativity, ok3 := outputs["creativity"].(float64)
@@ -63,12 +64,12 @@ func generateBlogTitle() {
 		return score, nil
 	}
 
-	bestOf := dsgo.NewBestOfN(predict, 4).
+	bestOf := module.NewBestOfN(predict, 4).
 		WithScorer(customScorer).
 		WithReturnAll(true).
 		WithParallel(false)
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"topic":            "artificial intelligence in healthcare",
 		"target_audience":  "healthcare professionals and tech enthusiasts",
 	}
@@ -102,7 +103,7 @@ func generateBlogTitle() {
 
 func generateProductDescription() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	sig := dsgo.NewSignature("Create compelling product description").
 		AddInput("product_name", dsgo.FieldTypeString, "Product name").
@@ -112,10 +113,10 @@ func generateProductDescription() {
 		AddOutput("persuasiveness", dsgo.FieldTypeFloat, "How persuasive 0-1").
 		AddOutput("clarity", dsgo.FieldTypeFloat, "How clear 0-1")
 
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 
 	// Length-aware quality scorer
-	qualityScorer := func(inputs map[string]interface{}, outputs map[string]interface{}) (float64, error) {
+	qualityScorer := func(inputs map[string]any, outputs map[string]any) (float64, error) {
 		description, ok := outputs["description"].(string)
 		if !ok {
 			return 0, fmt.Errorf("description not found")
@@ -145,11 +146,11 @@ func generateProductDescription() {
 		return score, nil
 	}
 
-	bestOf := dsgo.NewBestOfN(predict, 3).
+	bestOf := module.NewBestOfN(predict, 3).
 		WithScorer(qualityScorer).
 		WithReturnAll(true)
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"product_name":  "EcoBottle Pro",
 		"key_features":  "insulated, keeps drinks cold 24h/hot 12h, made from recycled materials, leak-proof",
 		"tone":          "eco-conscious and premium",
@@ -174,7 +175,7 @@ func generateProductDescription() {
 
 func generateSocialMedia() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	sig := dsgo.NewSignature("Create social media post").
 		AddInput("message", dsgo.FieldTypeString, "Core message").
@@ -184,10 +185,10 @@ func generateSocialMedia() {
 		AddOutput("engagement_potential", dsgo.FieldTypeFloat, "Engagement potential 0-1").
 		AddOutput("character_count", dsgo.FieldTypeInt, "Character count")
 
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 
 	// Platform-specific scorer
-	platformScorer := func(inputs map[string]interface{}, outputs map[string]interface{}) (float64, error) {
+	platformScorer := func(inputs map[string]any, outputs map[string]any) (float64, error) {
 		platform := inputs["platform"].(string)
 		post := outputs["post"].(string)
 		engagement, ok1 := outputs["engagement_potential"].(float64)
@@ -230,11 +231,11 @@ func generateSocialMedia() {
 		return score, nil
 	}
 
-	bestOf := dsgo.NewBestOfN(predict, 3).
+	bestOf := module.NewBestOfN(predict, 3).
 		WithScorer(platformScorer).
 		WithReturnAll(true)
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"message":        "Launching our new AI-powered productivity tool that helps teams collaborate better",
 		"platform":       "twitter",
 		"hashtags_count": 3,

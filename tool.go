@@ -20,7 +20,7 @@ type Tool struct {
 }
 
 // ToolFunction is the actual function implementation
-type ToolFunction func(ctx context.Context, args map[string]interface{}) (interface{}, error)
+type ToolFunction func(ctx context.Context, args map[string]any) (any, error)
 
 // NewTool creates a new tool
 func NewTool(name, description string, fn ToolFunction) *Tool {
@@ -56,6 +56,6 @@ func (t *Tool) AddEnumParameter(name, description string, enum []string, require
 }
 
 // Execute executes the tool with given arguments
-func (t *Tool) Execute(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+func (t *Tool) Execute(ctx context.Context, args map[string]any) (any, error) {
 	return t.Function(ctx, args)
 }

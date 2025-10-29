@@ -6,7 +6,8 @@ import (
 	"log"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -25,7 +26,7 @@ func main() {
 
 func cotChatDemo() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	history := dsgo.NewHistoryWithLimit(20)
 	history.AddSystemMessage("You are a math tutor helping a student solve a complex problem step by step. Use previous conversation context.")
@@ -36,7 +37,7 @@ func cotChatDemo() {
 		AddOutput("explanation", dsgo.FieldTypeString, "Step-by-step explanation of the reasoning").
 		AddOutput("answer", dsgo.FieldTypeString, "Answer or next step")
 
-	cot := dsgo.NewChainOfThought(sig, lm)
+	cot := module.NewChainOfThought(sig, lm)
 
 	problemTurns := []string{
 		"I need to calculate the total cost of buying 3 shirts at $25 each and 2 pairs of pants. Can you help me set up the problem?",
@@ -52,7 +53,7 @@ func cotChatDemo() {
 
 		contextStr := formatHistoryContext(history.GetLast(6))
 
-		outputs, err := cot.Forward(ctx, map[string]interface{}{
+		outputs, err := cot.Forward(ctx, map[string]any{
 			"question": question,
 			"context":  contextStr,
 		})

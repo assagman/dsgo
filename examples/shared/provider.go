@@ -1,11 +1,11 @@
-package examples
+package shared
 
 import (
 	"os"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples/openai"
-	"github.com/assagman/dsgo/examples/openrouter"
+	"github.com/assagman/dsgo/providers/openai"
+	"github.com/assagman/dsgo/providers/openrouter"
 )
 
 // GetLM returns an LM based on environment variables

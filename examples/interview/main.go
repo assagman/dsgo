@@ -6,7 +6,8 @@ import (
 	"log"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -25,7 +26,7 @@ func main() {
 
 func generateInterviewQuestion() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	history := dsgo.NewHistoryWithLimit(0)
 	history.AddSystemMessage("You are a software engineer, have expertise on generating technical interview questions")
@@ -36,13 +37,13 @@ func generateInterviewQuestion() {
 		AddOutput("question", dsgo.FieldTypeString, "Clear technical coding question").
 		AddOutput("solution", dsgo.FieldTypeString, "Code for solving the technical question without using builtin packages for search and sort")
 
-	cot := dsgo.NewChainOfThought(sig, lm)
+	cot := module.NewChainOfThought(sig, lm)
 	cot.Options.Temperature = 0.7
 
 	topic := "algorithmic skills"
 	history.AddUserMessage(topic)
 
-	outputs, err := cot.Forward(ctx, map[string]interface{}{
+	outputs, err := cot.Forward(ctx, map[string]any{
 		"topic":   topic,
 		"history": history,
 	})

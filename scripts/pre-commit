@@ -1,0 +1,11 @@
+#!/bin/sh
+
+echo "Running pre-commit checks (make all)..."
+make all
+
+if [ $? -ne 0 ]; then
+    echo "\nPre-commit checks failed. Aborting commit."
+    exit 1
+fi
+
+exit 0

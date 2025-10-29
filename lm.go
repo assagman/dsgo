@@ -34,8 +34,8 @@ type GenerateResult struct {
 
 // ToolCall represents a tool call made by the LM
 type ToolCall struct {
-	ID       string
-	Name     string
+	ID        string
+	Name      string
 	Arguments map[string]interface{}
 }
 
@@ -75,4 +75,9 @@ func DefaultGenerateOptions() *GenerateOptions {
 		FrequencyPenalty: 0.0,
 		PresencePenalty:  0.0,
 	}
+}
+
+// NewGenerateOptions creates GenerateOptions with custom values
+func NewGenerateOptions() *GenerateOptions {
+	return DefaultGenerateOptions()
 }

@@ -1,13 +1,15 @@
-package dsgo
+package module
 
 import (
 	"context"
 	"fmt"
+
+	"github.com/assagman/dsgo"
 )
 
 // Program represents a composable pipeline of modules
 type Program struct {
-	modules []Module
+	modules []dsgo.Module
 	name    string
 }
 
@@ -15,25 +17,25 @@ type Program struct {
 func NewProgram(name string) *Program {
 	return &Program{
 		name:    name,
-		modules: []Module{},
+		modules: []dsgo.Module{},
 	}
 }
 
 // AddModule adds a module to the program pipeline
-func (p *Program) AddModule(module Module) *Program {
+func (p *Program) AddModule(module dsgo.Module) *Program {
 	p.modules = append(p.modules, module)
 	return p
 }
 
 // Forward executes the program by running modules in sequence
 // Each module's outputs become available as inputs to subsequent modules
-func (p *Program) Forward(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (p *Program) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	if len(p.modules) == 0 {
 		return nil, fmt.Errorf("program has no modules")
 	}
 
 	currentInputs := inputs
-	finalOutputs := make(map[string]interface{})
+	finalOutputs := make(map[string]any)
 
 	for i, module := range p.modules {
 		outputs, err := module.Forward(ctx, currentInputs)
@@ -48,7 +50,7 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]interface{}) (m
 
 		// Merge outputs into inputs for next module
 		// This allows modules to access both original inputs and previous outputs
-		merged := make(map[string]interface{})
+		merged := make(map[string]any)
 		for k, v := range currentInputs {
 			merged[k] = v
 		}
@@ -62,7 +64,7 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]interface{}) (m
 }
 
 // GetSignature returns the signature of the last module in the pipeline
-func (p *Program) GetSignature() *Signature {
+func (p *Program) GetSignature() *dsgo.Signature {
 	if len(p.modules) == 0 {
 		return nil
 	}

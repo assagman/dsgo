@@ -9,14 +9,14 @@ func TestTool_Execute(t *testing.T) {
 	tool := NewTool(
 		"test_tool",
 		"A test tool",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			name := args["name"].(string)
 			return "Hello, " + name, nil
 		},
 	).AddParameter("name", "string", "Name parameter", true)
 
 	ctx := context.Background()
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	result, err := tool.Execute(ctx, map[string]any{
 		"name": "World",
 	})
 

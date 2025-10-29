@@ -1,41 +1,43 @@
-package dsgo
+package module
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/assagman/dsgo"
 )
 
 // ChainOfThought module encourages step-by-step reasoning
 type ChainOfThought struct {
-	Signature *Signature
-	LM        LM
-	Options   *GenerateOptions
+	Signature *dsgo.Signature
+	LM        dsgo.LM
+	Options   *dsgo.GenerateOptions
 }
 
 // NewChainOfThought creates a new ChainOfThought module
-func NewChainOfThought(signature *Signature, lm LM) *ChainOfThought {
+func NewChainOfThought(signature *dsgo.Signature, lm dsgo.LM) *ChainOfThought {
 	return &ChainOfThought{
 		Signature: signature,
 		LM:        lm,
-		Options:   DefaultGenerateOptions(),
+		Options:   dsgo.DefaultGenerateOptions(),
 	}
 }
 
 // WithOptions sets custom generation options
-func (cot *ChainOfThought) WithOptions(options *GenerateOptions) *ChainOfThought {
+func (cot *ChainOfThought) WithOptions(options *dsgo.GenerateOptions) *ChainOfThought {
 	cot.Options = options
 	return cot
 }
 
 // GetSignature returns the module's signature
-func (cot *ChainOfThought) GetSignature() *Signature {
+func (cot *ChainOfThought) GetSignature() *dsgo.Signature {
 	return cot.Signature
 }
 
 // Forward executes the chain of thought reasoning
-func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	if err := cot.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
@@ -45,7 +47,7 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]interf
 		return nil, fmt.Errorf("failed to build prompt: %w", err)
 	}
 
-	messages := []Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: prompt},
 	}
 
@@ -71,7 +73,7 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]interf
 	return outputs, nil
 }
 
-func (cot *ChainOfThought) buildChainOfThoughtPrompt(inputs map[string]interface{}) (string, error) {
+func (cot *ChainOfThought) buildChainOfThoughtPrompt(inputs map[string]any) (string, error) {
 	var prompt strings.Builder
 
 	// Add description with CoT instruction
@@ -79,7 +81,7 @@ func (cot *ChainOfThought) buildChainOfThoughtPrompt(inputs map[string]interface
 		prompt.WriteString(cot.Signature.Description)
 		prompt.WriteString("\n\n")
 	}
-	
+
 	prompt.WriteString("Think through this step-by-step before providing your final answer.\n\n")
 
 	// Add input fields
@@ -110,7 +112,7 @@ func (cot *ChainOfThought) buildChainOfThoughtPrompt(inputs map[string]interface
 				optional = " (optional)"
 			}
 			classInfo := ""
-			if field.Type == FieldTypeClass && len(field.Classes) > 0 {
+			if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
 				classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 			}
 			if field.Description != "" {
@@ -124,9 +126,9 @@ func (cot *ChainOfThought) buildChainOfThoughtPrompt(inputs map[string]interface
 	return prompt.String(), nil
 }
 
-func (cot *ChainOfThought) parseOutput(content string) (map[string]interface{}, error) {
+func (cot *ChainOfThought) parseOutput(content string) (map[string]any, error) {
 	content = strings.TrimSpace(content)
-	
+
 	// Try to extract JSON from markdown code blocks
 	if strings.Contains(content, "```json") {
 		start := strings.Index(content, "```json") + 7
@@ -159,16 +161,16 @@ func (cot *ChainOfThought) parseOutput(content string) (map[string]interface{}, 
 			}
 		}
 	}
-	
+
 	content = strings.TrimSpace(content)
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, content)
 	}
 
 	// Always include reasoning in outputs
-	outputs := make(map[string]interface{})
+	outputs := make(map[string]any)
 	for k, v := range result {
 		outputs[k] = v
 	}

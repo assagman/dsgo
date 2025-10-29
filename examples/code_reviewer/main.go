@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -32,7 +33,7 @@ func main() {
 
 func codeAnalysisPipeline() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	// Step 1: Analyze code structure
 	structureSig := dsgo.NewSignature("Analyze code structure and complexity").
@@ -41,7 +42,7 @@ func codeAnalysisPipeline() {
 		AddOutput("complexity", dsgo.FieldTypeString, "Complexity assessment").
 		AddOutput("maintainability_score", dsgo.FieldTypeFloat, "Maintainability score 0-1")
 
-	structureModule := dsgo.NewPredict(structureSig, lm)
+	structureModule := module.NewPredict(structureSig, lm)
 
 	// Step 2: Find issues
 	issuesSig := dsgo.NewSignature("Identify code issues and improvements").
@@ -52,7 +53,7 @@ func codeAnalysisPipeline() {
 		AddOutput("suggestions", dsgo.FieldTypeString, "Improvement suggestions").
 		AddClassOutput("severity", []string{"low", "medium", "high", "critical"}, "Overall severity")
 
-	issuesModule := dsgo.NewPredict(issuesSig, lm)
+	issuesModule := module.NewPredict(issuesSig, lm)
 
 	// Step 3: Generate recommendations
 	recommendSig := dsgo.NewSignature("Generate actionable recommendations").
@@ -62,10 +63,10 @@ func codeAnalysisPipeline() {
 		AddOutput("recommendations", dsgo.FieldTypeJSON, "Prioritized recommendations as JSON array").
 		AddOutput("refactoring_priority", dsgo.FieldTypeString, "What to refactor first")
 
-	recommendModule := dsgo.NewChainOfThought(recommendSig, lm)
+	recommendModule := module.NewChainOfThought(recommendSig, lm)
 
 	// Create pipeline
-	pipeline := dsgo.NewProgram("Code Review Pipeline").
+	pipeline := module.NewProgram("Code Review Pipeline").
 		AddModule(structureModule).
 		AddModule(issuesModule).
 		AddModule(recommendModule)
@@ -82,7 +83,7 @@ func processData(data []int) []int {
 }
 `
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"code": code,
 	}
 
@@ -104,7 +105,7 @@ func processData(data []int) []int {
 
 func comprehensiveReview() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	// Multi-aspect review signature
 	reviewSig := dsgo.NewSignature("Perform comprehensive code review").
@@ -117,7 +118,7 @@ func comprehensiveReview() {
 		AddOutput("overall_quality", dsgo.FieldTypeFloat, "Overall quality score 0-1").
 		AddOutput("summary", dsgo.FieldTypeString, "Executive summary")
 
-	review := dsgo.NewChainOfThought(reviewSig, lm)
+	review := module.NewChainOfThought(reviewSig, lm)
 
 	code := `
 function authenticateUser(username, password) {
@@ -131,7 +132,7 @@ function authenticateUser(username, password) {
 }
 `
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"code":     code,
 		"language": "JavaScript",
 	}

@@ -86,8 +86,8 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 	return o.parseResponse(&apiResp)
 }
 
-func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOptions) map[string]interface{} {
-	req := map[string]interface{}{
+func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOptions) map[string]any {
+	req := map[string]any{
 		"model":    o.Model,
 		"messages": o.convertMessages(messages),
 	}
@@ -116,7 +116,7 @@ func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOpt
 
 	// Add tools if supported
 	if len(options.Tools) > 0 {
-		tools := make([]map[string]interface{}, 0, len(options.Tools))
+		tools := make([]map[string]any, 0, len(options.Tools))
 		for _, tool := range options.Tools {
 			tools = append(tools, o.convertTool(&tool))
 		}
@@ -126,7 +126,7 @@ func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOpt
 			if options.ToolChoice == "none" {
 				req["tool_choice"] = "none"
 			} else {
-				req["tool_choice"] = map[string]interface{}{
+				req["tool_choice"] = map[string]any{
 					"type": "function",
 					"function": map[string]string{
 						"name": options.ToolChoice,
@@ -139,13 +139,13 @@ func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOpt
 	return req
 }
 
-func (o *OpenAI) convertMessages(messages []dsgo.Message) []map[string]interface{} {
-	converted := make([]map[string]interface{}, 0, len(messages))
+func (o *OpenAI) convertMessages(messages []dsgo.Message) []map[string]any {
+	converted := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
-		m := map[string]interface{}{
+		m := map[string]any{
 			"role": msg.Role,
 		}
-		
+
 		// Handle tool responses
 		if msg.Role == "tool" {
 			m["content"] = msg.Content
@@ -157,13 +157,13 @@ func (o *OpenAI) convertMessages(messages []dsgo.Message) []map[string]interface
 			if msg.Content != "" {
 				m["content"] = msg.Content
 			}
-			toolCalls := make([]map[string]interface{}, 0, len(msg.ToolCalls))
+			toolCalls := make([]map[string]any, 0, len(msg.ToolCalls))
 			for _, tc := range msg.ToolCalls {
 				argsBytes, _ := json.Marshal(tc.Arguments)
-				toolCalls = append(toolCalls, map[string]interface{}{
+				toolCalls = append(toolCalls, map[string]any{
 					"id":   tc.ID,
 					"type": "function",
-					"function": map[string]interface{}{
+					"function": map[string]any{
 						"name":      tc.Name,
 						"arguments": string(argsBytes),
 					},
@@ -174,18 +174,18 @@ func (o *OpenAI) convertMessages(messages []dsgo.Message) []map[string]interface
 			// Regular message
 			m["content"] = msg.Content
 		}
-		
+
 		converted = append(converted, m)
 	}
 	return converted
 }
 
-func (o *OpenAI) convertTool(tool *dsgo.Tool) map[string]interface{} {
-	properties := make(map[string]interface{})
+func (o *OpenAI) convertTool(tool *dsgo.Tool) map[string]any {
+	properties := make(map[string]any)
 	required := []string{}
 
 	for _, param := range tool.Parameters {
-		prop := map[string]interface{}{
+		prop := map[string]any{
 			"type":        param.Type,
 			"description": param.Description,
 		}
@@ -199,12 +199,12 @@ func (o *OpenAI) convertTool(tool *dsgo.Tool) map[string]interface{} {
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"type": "function",
-		"function": map[string]interface{}{
+		"function": map[string]any{
 			"name":        tool.Name,
 			"description": tool.Description,
-			"parameters": map[string]interface{}{
+			"parameters": map[string]any{
 				"type":       "object",
 				"properties": properties,
 				"required":   required,
@@ -233,7 +233,7 @@ func (o *OpenAI) parseResponse(resp *openAIResponse) (*dsgo.GenerateResult, erro
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]dsgo.ToolCall, 0, len(choice.Message.ToolCalls))
 		for _, tc := range choice.Message.ToolCalls {
-			var args map[string]interface{}
+			var args map[string]any
 			if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
 				return nil, fmt.Errorf("failed to parse tool arguments: %w", err)
 			}

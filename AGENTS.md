@@ -1,9 +1,9 @@
 # DSGo Development Guide
 
 ## Testing Commands
-- All tests: `go test ./...`
+- All tests: `go test $(go list ./... | grep -v /examples/)`
 - Single test: `go test -run TestName`
-- With coverage: `go test -v -cover ./...`
+- With coverage: `go test -v -cover $(go list ./... | grep -v /examples/)`
 - Build check: `go build ./...`
 
 ## Architecture

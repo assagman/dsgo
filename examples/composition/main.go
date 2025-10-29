@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -38,7 +39,7 @@ func main() {
 
 func programExample() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	// Step 1: Extract key information
 	extractSig := dsgo.NewSignature("Extract key information from the text").
@@ -46,7 +47,7 @@ func programExample() {
 		AddOutput("main_topic", dsgo.FieldTypeString, "The main topic").
 		AddOutput("key_points", dsgo.FieldTypeString, "Key points (comma-separated)")
 
-	extractModule := dsgo.NewPredict(extractSig, lm)
+	extractModule := module.NewPredict(extractSig, lm)
 
 	// Step 2: Analyze sentiment using extracted information
 	sentimentSig := dsgo.NewSignature("Analyze sentiment of the main topic and key points").
@@ -55,15 +56,15 @@ func programExample() {
 		AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "Overall sentiment").
 		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score")
 
-	sentimentModule := dsgo.NewPredict(sentimentSig, lm)
+	sentimentModule := module.NewPredict(sentimentSig, lm)
 
 	// Create a program that chains these modules
-	program := dsgo.NewProgram("Extract and Analyze").
+	program := module.NewProgram("Extract and Analyze").
 		AddModule(extractModule).
 		AddModule(sentimentModule)
 
 	// Execute the pipeline
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"text": "This product is amazing! The quality is outstanding and customer service is excellent. Highly recommended!",
 	}
 
@@ -81,7 +82,7 @@ func programExample() {
 
 func refineExample() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	sig := dsgo.NewSignature("Write a professional email").
 		AddInput("recipient", dsgo.FieldTypeString, "Who the email is for").
@@ -90,9 +91,9 @@ func refineExample() {
 		AddOutput("email", dsgo.FieldTypeString, "The email content").
 		AddOutput("subject", dsgo.FieldTypeString, "Email subject line")
 
-	refine := dsgo.NewRefine(sig, lm).WithMaxIterations(2)
+	refine := module.NewRefine(sig, lm).WithMaxIterations(2)
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"recipient": "hiring manager",
 		"purpose":   "follow up after job interview",
 		"feedback":  "make it more concise and add a specific timeline",
@@ -110,7 +111,7 @@ func refineExample() {
 
 func bestOfNExample() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	sig := dsgo.NewSignature("Generate a creative tagline").
 		AddInput("product", dsgo.FieldTypeString, "The product name").
@@ -118,14 +119,14 @@ func bestOfNExample() {
 		AddOutput("tagline", dsgo.FieldTypeString, "Creative tagline").
 		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score")
 
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 
 	// Use BestOfN to generate 3 taglines and pick the best based on confidence
-	bestOf3 := dsgo.NewBestOfN(predict, 3).
-		WithScorer(dsgo.ConfidenceScorer("confidence")).
+	bestOf3 := module.NewBestOfN(predict, 3).
+		WithScorer(module.ConfidenceScorer("confidence")).
 		WithReturnAll(true)
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"product":     "SmartWatch Pro",
 		"description": "A fitness tracker with advanced health monitoring and AI coaching",
 	}
@@ -146,7 +147,7 @@ func bestOfNExample() {
 
 func combinedExample() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	// Step 1: Analyze the problem
 	analyzeSig := dsgo.NewSignature("Analyze the problem and break it down").
@@ -154,7 +155,7 @@ func combinedExample() {
 		AddOutput("analysis", dsgo.FieldTypeString, "Problem analysis").
 		AddOutput("approach", dsgo.FieldTypeString, "Recommended approach")
 
-	analyzeModule := dsgo.NewChainOfThought(analyzeSig, lm)
+	analyzeModule := module.NewChainOfThought(analyzeSig, lm)
 
 	// Step 2: Generate solution
 	solveSig := dsgo.NewSignature("Generate a solution based on the analysis").
@@ -163,18 +164,18 @@ func combinedExample() {
 		AddOutput("solution", dsgo.FieldTypeString, "The solution").
 		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence in solution")
 
-	solveModule := dsgo.NewPredict(solveSig, lm)
+	solveModule := module.NewPredict(solveSig, lm)
 
 	// Use BestOfN on the solve module
-	bestSolve := dsgo.NewBestOfN(solveModule, 2).
-		WithScorer(dsgo.ConfidenceScorer("confidence"))
+	bestSolve := module.NewBestOfN(solveModule, 2).
+		WithScorer(module.ConfidenceScorer("confidence"))
 
 	// Create a program that chains analysis with best-of-n solving
-	program := dsgo.NewProgram("Analyze and Solve").
+	program := module.NewProgram("Analyze and Solve").
 		AddModule(analyzeModule).
 		AddModule(bestSolve)
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"problem": "How can I reduce the latency of my web application's database queries?",
 	}
 
@@ -191,7 +192,7 @@ func combinedExample() {
 }
 
 // Custom scorer based on solution length and detail
-func solutionQualityScorer(inputs map[string]interface{}, outputs map[string]interface{}) (float64, error) {
+func solutionQualityScorer(inputs map[string]any, outputs map[string]any) (float64, error) {
 	solution, ok := outputs["solution"].(string)
 	if !ok {
 		return 0, fmt.Errorf("solution field not found or not a string")

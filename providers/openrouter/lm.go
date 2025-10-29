@@ -18,10 +18,10 @@ const (
 
 // OpenRouter implements the LM interface for OpenRouter models
 type OpenRouter struct {
-	APIKey  string
-	Model   string
-	BaseURL string
-	Client  *http.Client
+	APIKey   string
+	Model    string
+	BaseURL  string
+	Client   *http.Client
 	SiteName string
 	SiteURL  string
 }
@@ -96,8 +96,8 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []dsgo.Message, opti
 	return o.parseResponse(&apiResp)
 }
 
-func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOptions) map[string]interface{} {
-	req := map[string]interface{}{
+func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOptions) map[string]any {
+	req := map[string]any{
 		"model":    o.Model,
 		"messages": o.convertMessages(messages),
 	}
@@ -126,7 +126,7 @@ func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.Generat
 
 	// Add tools if supported
 	if len(options.Tools) > 0 {
-		tools := make([]map[string]interface{}, 0, len(options.Tools))
+		tools := make([]map[string]any, 0, len(options.Tools))
 		for _, tool := range options.Tools {
 			tools = append(tools, o.convertTool(&tool))
 		}
@@ -136,7 +136,7 @@ func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.Generat
 			if options.ToolChoice == "none" {
 				req["tool_choice"] = "none"
 			} else {
-				req["tool_choice"] = map[string]interface{}{
+				req["tool_choice"] = map[string]any{
 					"type": "function",
 					"function": map[string]string{
 						"name": options.ToolChoice,
@@ -149,13 +149,13 @@ func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.Generat
 	return req
 }
 
-func (o *OpenRouter) convertMessages(messages []dsgo.Message) []map[string]interface{} {
-	converted := make([]map[string]interface{}, 0, len(messages))
+func (o *OpenRouter) convertMessages(messages []dsgo.Message) []map[string]any {
+	converted := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
-		m := map[string]interface{}{
+		m := map[string]any{
 			"role": msg.Role,
 		}
-		
+
 		// Handle tool responses
 		if msg.Role == "tool" {
 			m["content"] = msg.Content
@@ -167,13 +167,13 @@ func (o *OpenRouter) convertMessages(messages []dsgo.Message) []map[string]inter
 			if msg.Content != "" {
 				m["content"] = msg.Content
 			}
-			toolCalls := make([]map[string]interface{}, 0, len(msg.ToolCalls))
+			toolCalls := make([]map[string]any, 0, len(msg.ToolCalls))
 			for _, tc := range msg.ToolCalls {
 				argsBytes, _ := json.Marshal(tc.Arguments)
-				toolCalls = append(toolCalls, map[string]interface{}{
+				toolCalls = append(toolCalls, map[string]any{
 					"id":   tc.ID,
 					"type": "function",
-					"function": map[string]interface{}{
+					"function": map[string]any{
 						"name":      tc.Name,
 						"arguments": string(argsBytes),
 					},
@@ -184,18 +184,18 @@ func (o *OpenRouter) convertMessages(messages []dsgo.Message) []map[string]inter
 			// Regular message
 			m["content"] = msg.Content
 		}
-		
+
 		converted = append(converted, m)
 	}
 	return converted
 }
 
-func (o *OpenRouter) convertTool(tool *dsgo.Tool) map[string]interface{} {
-	properties := make(map[string]interface{})
+func (o *OpenRouter) convertTool(tool *dsgo.Tool) map[string]any {
+	properties := make(map[string]any)
 	required := []string{}
 
 	for _, param := range tool.Parameters {
-		prop := map[string]interface{}{
+		prop := map[string]any{
 			"type":        param.Type,
 			"description": param.Description,
 		}
@@ -209,12 +209,12 @@ func (o *OpenRouter) convertTool(tool *dsgo.Tool) map[string]interface{} {
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"type": "function",
-		"function": map[string]interface{}{
+		"function": map[string]any{
 			"name":        tool.Name,
 			"description": tool.Description,
-			"parameters": map[string]interface{}{
+			"parameters": map[string]any{
 				"type":       "object",
 				"properties": properties,
 				"required":   required,
@@ -243,7 +243,7 @@ func (o *OpenRouter) parseResponse(resp *openRouterResponse) (*dsgo.GenerateResu
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]dsgo.ToolCall, 0, len(choice.Message.ToolCalls))
 		for _, tc := range choice.Message.ToolCalls {
-			var args map[string]interface{}
+			var args map[string]any
 			if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
 				return nil, fmt.Errorf("failed to parse tool arguments: %w", err)
 			}
@@ -265,9 +265,9 @@ type openRouterResponse struct {
 	Created int64  `json:"created"`
 	Model   string `json:"model"`
 	Choices []struct {
-		Index        int                `json:"index"`
-		Message      openRouterMessage  `json:"message"`
-		FinishReason string             `json:"finish_reason"`
+		Index        int               `json:"index"`
+		Message      openRouterMessage `json:"message"`
+		FinishReason string            `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`

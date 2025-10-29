@@ -9,7 +9,8 @@ import (
 	"strings"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -28,7 +29,7 @@ func main() {
 
 func dataAnalystAgent() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	// Define analytical tools
 	
@@ -36,7 +37,7 @@ func dataAnalystAgent() {
 	statsTool := dsgo.NewTool(
 		"calculate_statistics",
 		"Calculate statistics (mean, median, std dev) for a dataset",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			dataStr := args["data"].(string)
 			numbers := parseNumbers(dataStr)
 			
@@ -66,7 +67,7 @@ func dataAnalystAgent() {
 	outlierTool := dsgo.NewTool(
 		"find_outliers",
 		"Identify outliers in a dataset using IQR method",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			dataStr := args["data"].(string)
 			numbers := parseNumbers(dataStr)
 			
@@ -107,7 +108,7 @@ func dataAnalystAgent() {
 	compareTool := dsgo.NewTool(
 		"compare_datasets",
 		"Compare two datasets and provide insights",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			data1Str := args["dataset1"].(string)
 			data2Str := args["dataset2"].(string)
 			
@@ -139,7 +140,7 @@ func dataAnalystAgent() {
 	trendTool := dsgo.NewTool(
 		"analyze_trend",
 		"Analyze trend in time series data",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			dataStr := args["data"].(string)
 			numbers := parseNumbers(dataStr)
 			
@@ -190,13 +191,13 @@ func dataAnalystAgent() {
 
 	tools := []dsgo.Tool{*statsTool, *outlierTool, *compareTool, *trendTool}
 
-	react := dsgo.NewReAct(sig, lm, tools).
+	react := module.NewReAct(sig, lm, tools).
 		WithMaxIterations(5).
 		WithVerbose(true)
 
 	// Example 1: Basic analysis
 	fmt.Println("--- Example 1: Sales data analysis ---")
-	inputs1 := map[string]interface{}{
+	inputs1 := map[string]any{
 		"question": "Analyze this monthly sales data. Are there any outliers? What's the trend?",
 		"data":     "45000, 47000, 46500, 48000, 51000, 49000, 52000, 95000, 53000, 54000, 55000, 56000",
 	}
@@ -217,7 +218,7 @@ func dataAnalystAgent() {
 
 	// Example 2: Comparison
 	fmt.Println("\n\n--- Example 2: Compare two products' ratings ---")
-	inputs2 := map[string]interface{}{
+	inputs2 := map[string]any{
 		"question": "Compare Product A and Product B ratings. Which one performs better and by how much?",
 		"data":     "Product A: 4.2, 4.5, 4.3, 4.6, 4.4, 4.7 | Product B: 3.8, 3.9, 4.0, 3.7, 3.9, 3.8",
 	}

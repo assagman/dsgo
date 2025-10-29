@@ -1,4 +1,4 @@
-package dsgo
+package module
 
 import (
 	"context"
@@ -6,25 +6,27 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/assagman/dsgo"
 )
 
 // ProgramOfThought generates and executes code to solve problems
 // This is useful for mathematical reasoning, data processing, etc.
 type ProgramOfThought struct {
-	Signature        *Signature
-	LM               LM
-	Options          *GenerateOptions
+	Signature        *dsgo.Signature
+	LM               dsgo.LM
+	Options          *dsgo.GenerateOptions
 	Language         string // "python", "javascript", "go"
 	AllowExecution   bool
 	ExecutionTimeout int // seconds
 }
 
 // NewProgramOfThought creates a new ProgramOfThought module
-func NewProgramOfThought(signature *Signature, lm LM, language string) *ProgramOfThought {
+func NewProgramOfThought(signature *dsgo.Signature, lm dsgo.LM, language string) *ProgramOfThought {
 	return &ProgramOfThought{
 		Signature:        signature,
 		LM:               lm,
-		Options:          DefaultGenerateOptions(),
+		Options:          dsgo.DefaultGenerateOptions(),
 		Language:         language,
 		AllowExecution:   false, // Disabled by default for safety
 		ExecutionTimeout: 30,
@@ -32,7 +34,7 @@ func NewProgramOfThought(signature *Signature, lm LM, language string) *ProgramO
 }
 
 // WithOptions sets custom generation options
-func (pot *ProgramOfThought) WithOptions(options *GenerateOptions) *ProgramOfThought {
+func (pot *ProgramOfThought) WithOptions(options *dsgo.GenerateOptions) *ProgramOfThought {
 	pot.Options = options
 	return pot
 }
@@ -50,12 +52,12 @@ func (pot *ProgramOfThought) WithExecutionTimeout(seconds int) *ProgramOfThought
 }
 
 // GetSignature returns the module's signature
-func (pot *ProgramOfThought) GetSignature() *Signature {
+func (pot *ProgramOfThought) GetSignature() *dsgo.Signature {
 	return pot.Signature
 }
 
 // Forward executes the program of thought
-func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	if err := pot.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
@@ -65,7 +67,7 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]inte
 		return nil, fmt.Errorf("failed to build prompt: %w", err)
 	}
 
-	messages := []Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: prompt},
 	}
 
@@ -103,7 +105,7 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]inte
 	return outputs, nil
 }
 
-func (pot *ProgramOfThought) buildPrompt(inputs map[string]interface{}) (string, error) {
+func (pot *ProgramOfThought) buildPrompt(inputs map[string]any) (string, error) {
 	var prompt strings.Builder
 
 	// Add description
@@ -147,7 +149,7 @@ func (pot *ProgramOfThought) buildPrompt(inputs map[string]interface{}) (string,
 				optional = " (optional)"
 			}
 			classInfo := ""
-			if field.Type == FieldTypeClass && len(field.Classes) > 0 {
+			if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
 				classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 			}
 			if field.Description != "" {
@@ -161,7 +163,7 @@ func (pot *ProgramOfThought) buildPrompt(inputs map[string]interface{}) (string,
 	return prompt.String(), nil
 }
 
-func (pot *ProgramOfThought) parseOutput(content string) (map[string]interface{}, error) {
+func (pot *ProgramOfThought) parseOutput(content string) (map[string]any, error) {
 	content = strings.TrimSpace(content)
 
 	// Try to extract JSON from markdown code blocks
@@ -199,7 +201,7 @@ func (pot *ProgramOfThought) parseOutput(content string) (map[string]interface{}
 
 	content = strings.TrimSpace(content)
 
-	var outputs map[string]interface{}
+	var outputs map[string]any
 	if err := json.Unmarshal([]byte(content), &outputs); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, content)
 	}

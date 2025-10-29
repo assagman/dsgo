@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -50,16 +51,16 @@ func researchAssistant() {
 	}
 
 	// Create LM (auto-detects provider from environment)
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	// Create ReAct module for intelligent research
-	react := dsgo.NewReAct(sig, lm, tools).
+	react := module.NewReAct(sig, lm, tools).
 		WithMaxIterations(15).
 		WithVerbose(true)
 
 	// Execute with complex inputs
 	ctx := context.Background()
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"topic":              "Impact of AI on software development productivity",
 		"focus_areas":        "code generation, testing automation, developer experience",
 		"depth_level":        2,
@@ -109,7 +110,7 @@ func createSearchTool() *dsgo.Tool {
 	return dsgo.NewTool(
 		"search",
 		"Search for information on a specific topic or question",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			query := args["query"].(string)
 
 			// Simulate search results based on query
@@ -139,7 +140,7 @@ func createStatisticsTool() *dsgo.Tool {
 	return dsgo.NewTool(
 		"get_statistics",
 		"Retrieve statistical data about a specific metric or study",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			metric := args["metric"].(string)
 
 			stats := map[string]string{
@@ -167,7 +168,7 @@ func createFactCheckerTool() *dsgo.Tool {
 	return dsgo.NewTool(
 		"fact_check",
 		"Verify a claim or statement for accuracy",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			claim := args["claim"].(string)
 
 			// Simulate fact checking
@@ -189,7 +190,7 @@ func createDateTool() *dsgo.Tool {
 	return dsgo.NewTool(
 		"get_current_date",
 		"Get the current date and time for temporal context",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			now := time.Now()
 			return fmt.Sprintf("Current date: %s (Studies from 2024 are most recent)", now.Format("January 2, 2006")), nil
 		},

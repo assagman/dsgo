@@ -3,24 +3,24 @@ package dsgo
 // Prediction wraps module outputs with metadata and provenance
 type Prediction struct {
 	// Core output
-	Outputs map[string]interface{}
-	
+	Outputs map[string]any
+
 	// Metadata
-	Rationale    string              // Reasoning trace (for CoT, etc.)
-	Score        float64             // Confidence/quality score
-	Completions  []map[string]interface{} // Alternative completions (for BestOfN)
-	Usage        Usage               // Token usage statistics
-	
+	Rationale   string           // Reasoning trace (for CoT, etc.)
+	Score       float64          // Confidence/quality score
+	Completions []map[string]any // Alternative completions (for BestOfN)
+	Usage       Usage            // Token usage statistics
+
 	// Provenance
-	ModuleName   string              // Name of module that generated this
-	Inputs       map[string]interface{} // Original inputs
+	ModuleName string         // Name of module that generated this
+	Inputs     map[string]any // Original inputs
 }
 
 // NewPrediction creates a new prediction from outputs
-func NewPrediction(outputs map[string]interface{}) *Prediction {
+func NewPrediction(outputs map[string]any) *Prediction {
 	return &Prediction{
 		Outputs:     outputs,
-		Completions: []map[string]interface{}{},
+		Completions: []map[string]any{},
 	}
 }
 
@@ -37,7 +37,7 @@ func (p *Prediction) WithScore(score float64) *Prediction {
 }
 
 // WithCompletions adds alternative completions
-func (p *Prediction) WithCompletions(completions []map[string]interface{}) *Prediction {
+func (p *Prediction) WithCompletions(completions []map[string]any) *Prediction {
 	p.Completions = completions
 	return p
 }
@@ -55,13 +55,13 @@ func (p *Prediction) WithModuleName(name string) *Prediction {
 }
 
 // WithInputs records the original inputs
-func (p *Prediction) WithInputs(inputs map[string]interface{}) *Prediction {
+func (p *Prediction) WithInputs(inputs map[string]any) *Prediction {
 	p.Inputs = inputs
 	return p
 }
 
 // Get retrieves a value from outputs
-func (p *Prediction) Get(key string) (interface{}, bool) {
+func (p *Prediction) Get(key string) (any, bool) {
 	val, ok := p.Outputs[key]
 	return val, ok
 }
@@ -92,7 +92,7 @@ func (p *Prediction) GetInt(key string) (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	
+
 	// Handle both int and float64 (from JSON)
 	switch v := val.(type) {
 	case int:

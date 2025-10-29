@@ -6,7 +6,8 @@ import (
 	"log"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -25,7 +26,7 @@ func main() {
 
 func predictChatDemo() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	history := dsgo.NewHistoryWithLimit(20)
 	history.AddSystemMessage("You are a helpful travel assistant. Keep responses concise and remember context from the conversation.")
@@ -35,7 +36,7 @@ func predictChatDemo() {
 		AddInput("context", dsgo.FieldTypeString, "Previous conversation context").
 		AddOutput("answer", dsgo.FieldTypeString, "Answer that builds on previous context")
 
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 
 	conversationTurns := []string{
 		"I'm planning a trip to Japan in spring. What's the best time to visit?",
@@ -52,7 +53,7 @@ func predictChatDemo() {
 
 		contextStr := formatHistoryContext(history.GetLast(6))
 
-		outputs, err := predict.Forward(ctx, map[string]interface{}{
+		outputs, err := predict.Forward(ctx, map[string]any{
 			"question": question,
 			"context":  contextStr,
 		})

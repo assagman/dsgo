@@ -6,7 +6,8 @@ import (
 	"log"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -32,14 +33,14 @@ func basicPredict() {
 		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score between 0 and 1")
 
 	// Create LM (auto-detects provider based on API keys)
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	// Create Predict module
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 
 	// Execute
 	ctx := context.Background()
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"text": "I absolutely love this product! It exceeded all my expectations.",
 	}
 
@@ -61,14 +62,14 @@ func chainOfThought() {
 		AddOutput("explanation", dsgo.FieldTypeString, "Step-by-step explanation")
 
 	// Create LM
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	// Create ChainOfThought module
-	cot := dsgo.NewChainOfThought(sig, lm)
+	cot := module.NewChainOfThought(sig, lm)
 
 	// Execute
 	ctx := context.Background()
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"problem": "If John has 5 apples and gives 2 to Mary, then buys 3 more apples, how many apples does John have?",
 	}
 

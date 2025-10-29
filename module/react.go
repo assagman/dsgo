@@ -1,10 +1,12 @@
-package dsgo
+package module
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/assagman/dsgo"
 )
 
 const (
@@ -13,28 +15,28 @@ const (
 
 // ReAct implements the Reasoning and Acting pattern
 type ReAct struct {
-	Signature      *Signature
-	LM             LM
-	Tools          []Tool
-	Options        *GenerateOptions
-	MaxIterations  int
-	Verbose        bool
+	Signature     *dsgo.Signature
+	LM            dsgo.LM
+	Tools         []dsgo.Tool
+	Options       *dsgo.GenerateOptions
+	MaxIterations int
+	Verbose       bool
 }
 
 // NewReAct creates a new ReAct module
-func NewReAct(signature *Signature, lm LM, tools []Tool) *ReAct {
+func NewReAct(signature *dsgo.Signature, lm dsgo.LM, tools []dsgo.Tool) *ReAct {
 	return &ReAct{
 		Signature:     signature,
 		LM:            lm,
 		Tools:         tools,
-		Options:       DefaultGenerateOptions(),
+		Options:       dsgo.DefaultGenerateOptions(),
 		MaxIterations: MaxReActIterations,
 		Verbose:       false,
 	}
 }
 
 // WithOptions sets custom generation options
-func (r *ReAct) WithOptions(options *GenerateOptions) *ReAct {
+func (r *ReAct) WithOptions(options *dsgo.GenerateOptions) *ReAct {
 	r.Options = options
 	return r
 }
@@ -52,27 +54,27 @@ func (r *ReAct) WithVerbose(verbose bool) *ReAct {
 }
 
 // GetSignature returns the module's signature
-func (r *ReAct) GetSignature() *Signature {
+func (r *ReAct) GetSignature() *dsgo.Signature {
 	return r.Signature
 }
 
 // Forward executes the ReAct loop
-func (r *ReAct) Forward(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	if err := r.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
 
-	messages := []Message{}
+	messages := []dsgo.Message{}
 	systemPrompt := r.buildSystemPrompt()
 	if systemPrompt != "" {
-		messages = append(messages, Message{Role: "system", Content: systemPrompt})
+		messages = append(messages, dsgo.Message{Role: "system", Content: systemPrompt})
 	}
 
 	userPrompt, err := r.buildInitialPrompt(inputs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build initial prompt: %w", err)
 	}
-	messages = append(messages, Message{Role: "user", Content: userPrompt})
+	messages = append(messages, dsgo.Message{Role: "user", Content: userPrompt})
 
 	// ReAct loop: Thought -> Action -> Observation
 	for i := 0; i < r.MaxIterations; i++ {
@@ -111,7 +113,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]interface{}) (map
 		}
 
 		// Add assistant's response with tool calls
-		messages = append(messages, Message{
+		messages = append(messages, dsgo.Message{
 			Role:      "assistant",
 			Content:   result.Content,
 			ToolCalls: result.ToolCalls,
@@ -130,7 +132,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]interface{}) (map
 			tool := r.findTool(toolCall.Name)
 			if tool == nil {
 				observation := fmt.Sprintf("Error: Tool '%s' not found", toolCall.Name)
-				messages = append(messages, Message{
+				messages = append(messages, dsgo.Message{
 					Role:    "tool",
 					Content: observation,
 					ToolID:  toolCall.ID,
@@ -144,7 +146,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]interface{}) (map
 			result, err := tool.Execute(ctx, toolCall.Arguments)
 			if err != nil {
 				observation := fmt.Sprintf("Error executing tool: %v", err)
-				messages = append(messages, Message{
+				messages = append(messages, dsgo.Message{
 					Role:    "tool",
 					Content: observation,
 					ToolID:  toolCall.ID,
@@ -156,7 +158,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]interface{}) (map
 			}
 
 			observation := fmt.Sprintf("%v", result)
-			messages = append(messages, Message{
+			messages = append(messages, dsgo.Message{
 				Role:    "tool",
 				Content: observation,
 				ToolID:  toolCall.ID,
@@ -187,7 +189,7 @@ func (r *ReAct) buildSystemPrompt() string {
 	return prompt.String()
 }
 
-func (r *ReAct) buildInitialPrompt(inputs map[string]interface{}) (string, error) {
+func (r *ReAct) buildInitialPrompt(inputs map[string]any) (string, error) {
 	var prompt strings.Builder
 
 	if r.Signature.Description != "" {
@@ -223,7 +225,7 @@ func (r *ReAct) buildInitialPrompt(inputs map[string]interface{}) (string, error
 				optional = " (optional)"
 			}
 			classInfo := ""
-			if field.Type == FieldTypeClass && len(field.Classes) > 0 {
+			if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
 				classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 			}
 			if field.Description != "" {
@@ -237,7 +239,7 @@ func (r *ReAct) buildInitialPrompt(inputs map[string]interface{}) (string, error
 	return prompt.String(), nil
 }
 
-func (r *ReAct) findTool(name string) *Tool {
+func (r *ReAct) findTool(name string) *dsgo.Tool {
 	for i := range r.Tools {
 		if r.Tools[i].Name == name {
 			return &r.Tools[i]
@@ -246,9 +248,9 @@ func (r *ReAct) findTool(name string) *Tool {
 	return nil
 }
 
-func (r *ReAct) parseFinalAnswer(content string) (map[string]interface{}, error) {
+func (r *ReAct) parseFinalAnswer(content string) (map[string]any, error) {
 	content = strings.TrimSpace(content)
-	
+
 	// Try to extract JSON from markdown code blocks
 	if strings.Contains(content, "```json") {
 		start := strings.Index(content, "```json") + 7
@@ -296,13 +298,13 @@ func (r *ReAct) parseFinalAnswer(content string) (map[string]interface{}, error)
 			}
 		}
 	}
-	
+
 	content = strings.TrimSpace(content)
-	
+
 	// Fix common JSON issues: unescaped newlines in strings
 	content = fixJSONNewlines(content)
 
-	var outputs map[string]interface{}
+	var outputs map[string]any
 	if err := json.Unmarshal([]byte(content), &outputs); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, content)
 	}
@@ -315,28 +317,28 @@ func fixJSONNewlines(jsonStr string) string {
 	var result strings.Builder
 	inString := false
 	escape := false
-	
+
 	for i := 0; i < len(jsonStr); i++ {
 		ch := jsonStr[i]
-		
+
 		if escape {
 			result.WriteByte(ch)
 			escape = false
 			continue
 		}
-		
+
 		if ch == '\\' {
 			result.WriteByte(ch)
 			escape = true
 			continue
 		}
-		
+
 		if ch == '"' {
 			inString = !inString
 			result.WriteByte(ch)
 			continue
 		}
-		
+
 		// If we're inside a string and encounter a newline, escape it
 		if inString && (ch == '\n' || ch == '\r') {
 			if ch == '\n' {
@@ -345,9 +347,9 @@ func fixJSONNewlines(jsonStr string) string {
 			// Skip \r as it's often paired with \n
 			continue
 		}
-		
+
 		result.WriteByte(ch)
 	}
-	
+
 	return result.String()
 }

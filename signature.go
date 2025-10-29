@@ -10,13 +10,13 @@ import (
 type FieldType string
 
 const (
-	FieldTypeString  FieldType = "string"
-	FieldTypeInt     FieldType = "int"
-	FieldTypeFloat   FieldType = "float"
-	FieldTypeBool    FieldType = "bool"
-	FieldTypeJSON    FieldType = "json"
-	FieldTypeClass   FieldType = "class"
-	FieldTypeImage   FieldType = "image"
+	FieldTypeString   FieldType = "string"
+	FieldTypeInt      FieldType = "int"
+	FieldTypeFloat    FieldType = "float"
+	FieldTypeBool     FieldType = "bool"
+	FieldTypeJSON     FieldType = "json"
+	FieldTypeClass    FieldType = "class"
+	FieldTypeImage    FieldType = "image"
 	FieldTypeDatetime FieldType = "datetime"
 )
 
@@ -91,7 +91,7 @@ func (s *Signature) AddClassOutput(name string, classes []string, description st
 }
 
 // BuildPrompt constructs a prompt from the signature
-func (s *Signature) BuildPrompt(inputs map[string]interface{}) (string, error) {
+func (s *Signature) BuildPrompt(inputs map[string]any) (string, error) {
 	var prompt strings.Builder
 
 	// Add description
@@ -143,7 +143,7 @@ func (s *Signature) BuildPrompt(inputs map[string]interface{}) (string, error) {
 }
 
 // ValidateInputs validates that all required inputs are present
-func (s *Signature) ValidateInputs(inputs map[string]interface{}) error {
+func (s *Signature) ValidateInputs(inputs map[string]any) error {
 	for _, field := range s.InputFields {
 		if _, exists := inputs[field.Name]; !exists {
 			return fmt.Errorf("missing required input field: %s", field.Name)
@@ -163,7 +163,7 @@ func (s *Signature) GetOutputField(name string) *Field {
 }
 
 // ValidateOutputs validates that all required outputs are present and of correct type
-func (s *Signature) ValidateOutputs(outputs map[string]interface{}) error {
+func (s *Signature) ValidateOutputs(outputs map[string]any) error {
 	for _, field := range s.OutputFields {
 		value, exists := outputs[field.Name]
 		if !exists && !field.Optional {
@@ -196,7 +196,7 @@ func (s *Signature) ValidateOutputs(outputs map[string]interface{}) error {
 	return nil
 }
 
-func (s *Signature) validateFieldType(field Field, value interface{}) error {
+func (s *Signature) validateFieldType(field Field, value any) error {
 	if value == nil {
 		if field.Optional {
 			return nil

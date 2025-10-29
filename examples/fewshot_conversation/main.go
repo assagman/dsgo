@@ -6,7 +6,8 @@ import (
 	"log"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -35,7 +36,7 @@ func main() {
 
 func conversationDemo() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	// Create conversation history
 	history := dsgo.NewHistoryWithLimit(10) // Keep last 10 messages
@@ -53,7 +54,7 @@ func conversationDemo() {
 		AddInput("question", dsgo.FieldTypeString, "The question").
 		AddOutput("answer", dsgo.FieldTypeString, "Concise answer")
 	
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 	
 	for i, question := range questions {
 		fmt.Printf("\n[Turn %d]\n", i+1)
@@ -63,7 +64,7 @@ func conversationDemo() {
 		history.AddUserMessage(question)
 		
 		// Get response (in real usage, you'd incorporate history into the prompt)
-		outputs, err := predict.Forward(ctx, map[string]interface{}{
+		outputs, err := predict.Forward(ctx, map[string]any{
 			"question": question,
 		})
 		if err != nil {
@@ -89,7 +90,7 @@ func conversationDemo() {
 
 func predictionDemo() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 	
 	sig := dsgo.NewSignature("Classify sentiment with confidence").
 		AddInput("text", dsgo.FieldTypeString, "Text to analyze").
@@ -97,11 +98,11 @@ func predictionDemo() {
 		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score 0-1").
 		AddOutput("reasoning", dsgo.FieldTypeString, "Brief explanation")
 	
-	predict := dsgo.NewPredict(sig, lm)
+	predict := module.NewPredict(sig, lm)
 	
 	text := "This product exceeded my expectations! Highly recommended."
 	
-	outputs, err := predict.Forward(ctx, map[string]interface{}{
+	outputs, err := predict.Forward(ctx, map[string]any{
 		"text": text,
 	})
 	if err != nil {
@@ -113,7 +114,7 @@ func predictionDemo() {
 		WithRationale(outputs["reasoning"].(string)).
 		WithScore(outputs["confidence"].(float64)).
 		WithModuleName("SentimentClassifier").
-		WithInputs(map[string]interface{}{"text": text})
+		WithInputs(map[string]any{"text": text})
 	
 	fmt.Printf("Input: %s\n\n", text)
 	fmt.Printf("📦 Prediction Details:\n")
@@ -130,7 +131,7 @@ func predictionDemo() {
 
 func fewShotDemo() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 	
 	// Create signature for movie genre classification
 	sig := dsgo.NewSignature("Classify movie genre from plot description").
@@ -142,26 +143,26 @@ func fewShotDemo() {
 	examples_set := dsgo.NewExampleSet("movie-genres")
 	
 	examples_set.AddPair(
-		map[string]interface{}{
+		map[string]any{
 			"plot": "A group of astronauts discovers an alien artifact on Mars that changes humanity's understanding of the universe.",
 		},
-		map[string]interface{}{
+		map[string]any{
 			"genre": "sci-fi",
 			"confidence": 0.95,
 		},
 	).AddPair(
-		map[string]interface{}{
+		map[string]any{
 			"plot": "Two rival chefs compete in a cooking competition while falling in love.",
 		},
-		map[string]interface{}{
+		map[string]any{
 			"genre": "romance",
 			"confidence": 0.90,
 		},
 	).AddPair(
-		map[string]interface{}{
+		map[string]any{
 			"plot": "A detective races against time to stop a bomb from destroying the city.",
 		},
-		map[string]interface{}{
+		map[string]any{
 			"genre": "action",
 			"confidence": 0.92,
 		},
@@ -180,12 +181,12 @@ func fewShotDemo() {
 	extendedSig.InputFields = sig.InputFields
 	extendedSig.OutputFields = sig.OutputFields
 	
-	predict := dsgo.NewPredict(extendedSig, lm)
+	predict := module.NewPredict(extendedSig, lm)
 	
 	// Test with a new movie plot
 	testPlot := "A young wizard attends a magical school and battles dark forces threatening the wizarding world."
 	
-	outputs, err := predict.Forward(ctx, map[string]interface{}{
+	outputs, err := predict.Forward(ctx, map[string]any{
 		"plot": testPlot,
 	})
 	if err != nil {

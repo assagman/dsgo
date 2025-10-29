@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -26,7 +27,7 @@ func reactAgent() {
 	searchTool := dsgo.NewTool(
 		"search",
 		"Search for information on the internet",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			query := args["query"].(string)
 			// Simulate search results
 			return fmt.Sprintf("Search results for '%s': DSPy is a framework for programming language models, developed at Stanford.", query), nil
@@ -36,7 +37,7 @@ func reactAgent() {
 	calculatorTool := dsgo.NewTool(
 		"calculator",
 		"Perform mathematical calculations",
-		func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		func(ctx context.Context, args map[string]any) (any, error) {
 			expression := args["expression"].(string)
 			// Simple calculation simulation
 			if strings.Contains(expression, "2024-2020") {
@@ -55,16 +56,16 @@ func reactAgent() {
 		AddOutput("sources", dsgo.FieldTypeString, "Sources used to answer the question")
 
 	// Create LM (auto-detects provider from environment)
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	// Create ReAct module
-	react := dsgo.NewReAct(sig, lm, tools).
+	react := module.NewReAct(sig, lm, tools).
 		WithMaxIterations(5).
 		WithVerbose(true)
 
 	// Execute
 	ctx := context.Background()
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"question": "What is DSPy and how many years has it been since 2020?",
 	}
 

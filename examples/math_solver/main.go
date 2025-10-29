@@ -6,7 +6,8 @@ import (
 	"log"
 
 	"github.com/assagman/dsgo"
-	"github.com/assagman/dsgo/examples"
+	"github.com/assagman/dsgo/examples/shared"
+	"github.com/assagman/dsgo/module"
 	"github.com/joho/godotenv"
 )
 
@@ -35,7 +36,7 @@ func main() {
 
 func simpleCalculation() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4")
+	lm := shared.GetLM("gpt-4")
 
 	sig := dsgo.NewSignature("Solve the mathematical problem using Python code").
 		AddInput("problem", dsgo.FieldTypeString, "The problem to solve").
@@ -43,10 +44,10 @@ func simpleCalculation() {
 		AddOutput("explanation", dsgo.FieldTypeString, "Explanation").
 		AddOutput("answer", dsgo.FieldTypeString, "Final answer")
 
-	pot := dsgo.NewProgramOfThought(sig, lm, "python").
+	pot := module.NewProgramOfThought(sig, lm, "python").
 		WithAllowExecution(false) // Don't execute for safety
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"problem": "Calculate the compound interest on $1000 invested at 5% annually for 3 years",
 	}
 
@@ -66,7 +67,7 @@ func simpleCalculation() {
 
 func complexProblem() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	sig := dsgo.NewSignature("Solve complex math word problem with code").
 		AddInput("problem", dsgo.FieldTypeString, "The word problem").
@@ -74,9 +75,9 @@ func complexProblem() {
 		AddOutput("explanation", dsgo.FieldTypeString, "Step-by-step explanation").
 		AddOutput("answer", dsgo.FieldTypeString, "Final numerical answer")
 
-	pot := dsgo.NewProgramOfThought(sig, lm, "python")
+	pot := module.NewProgramOfThought(sig, lm, "python")
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"problem": "A train travels 120 km in 2 hours, then 180 km in 3 hours. What is the average speed for the entire journey?",
 	}
 
@@ -94,7 +95,7 @@ func complexProblem() {
 
 func statisticalAnalysis() {
 	ctx := context.Background()
-	lm := examples.GetLM("gpt-4o-mini")
+	lm := shared.GetLM("gpt-4o-mini")
 
 	sig := dsgo.NewSignature("Perform statistical analysis using Python").
 		AddInput("data_description", dsgo.FieldTypeString, "Description of the data").
@@ -103,9 +104,9 @@ func statisticalAnalysis() {
 		AddOutput("explanation", dsgo.FieldTypeString, "Explanation of the code").
 		AddOutput("interpretation", dsgo.FieldTypeString, "How to interpret results")
 
-	pot := dsgo.NewProgramOfThought(sig, lm, "python")
+	pot := module.NewProgramOfThought(sig, lm, "python")
 
-	inputs := map[string]interface{}{
+	inputs := map[string]any{
 		"data_description": "Dataset of exam scores: [75, 82, 90, 68, 85, 92, 78, 88, 95, 72]",
 		"analysis_type":    "mean, median, standard deviation, and identify outliers",
 	}
