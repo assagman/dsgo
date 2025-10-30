@@ -1,6 +1,17 @@
 package dsgo
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// Common errors
+var (
+	ErrLMGeneration = errors.New("LM generation failed")
+)
+
+// StreamCallback is called for each chunk during streaming
+type StreamCallback func(Chunk)
 
 // Message represents a single message in a conversation
 type Message struct {
@@ -20,6 +31,7 @@ type GenerateOptions struct {
 	Tools            []Tool
 	ToolChoice       string // "auto", "none", or specific tool name
 	Stream           bool
+	StreamCallback   StreamCallback // Optional callback for each streaming chunk
 	FrequencyPenalty float64
 	PresencePenalty  float64
 }

@@ -22,7 +22,10 @@ graph LR
 ```
 
 ## Testing Commands
-- **Everything**: `make test` (runs race detector + coverage + examples + summary)
+- **Everything**: `make test` (runs race detector + coverage + summary)
+- **Examples Quick**: `make test-matrix-quick` (single model, fast)
+- **Examples Sample**: `make test-matrix-sample N=3` (3 random models)
+- **Examples Full**: `make test-matrix` (all models, comprehensive)
 - Single test: `go test -run TestName`
 - Run example: `go run examples/sentiment/main.go`
 - Lint: `make lint` (requires golangci-lint)

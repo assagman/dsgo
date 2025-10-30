@@ -1,10 +1,10 @@
-.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks test-matrix
+.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks test-matrix test-matrix-quick test-matrix-sample
 
 PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts)
 
 all: clean check check-eof test
 
-all-with-examples: clean check check-eof test test-examples
+all-with-examples: clean check check-eof test test-matrix-quick
 
 test:
 	@echo "Running comprehensive tests (race detector + coverage)..."
@@ -12,13 +12,20 @@ test:
 	@echo "\nTest coverage summary:"
 	@go tool cover -func=coverage.txt | grep total
 
-test-examples:
-	@echo "\nRunning example tests..."
-	@go run scripts/test_examples.go
+# Quick test: single model (default)
+test-matrix-quick:
+	@echo "\nRunning examples with single model (quick)..."
+	@go run scripts/test_examples_matrix/main.go -n 1
 
+# Sample test: N random models (usage: make test-matrix-sample N=3)
+test-matrix-sample:
+	@echo "\nRunning examples with $(N) random model(s)..."
+	@go run scripts/test_examples_matrix/main.go -n $(N)
+
+# Full test: all models (comprehensive)
 test-matrix:
-	@echo "Running comprehensive test matrix ❄︎"
-	@go run scripts/test_matrix.go
+	@echo "Running comprehensive test matrix (all models) ❄︎"
+	@go run scripts/test_examples_matrix/main.go -n 0
 
 build:
 	go build $(PACKAGES)

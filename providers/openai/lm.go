@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/retry"
 )
 
 const (
@@ -24,6 +25,7 @@ type OpenAI struct {
 	Model   string
 	BaseURL string
 	Client  *http.Client
+	Cache   dsgo.Cache
 }
 
 // NewOpenAI creates a new OpenAI LM
@@ -54,6 +56,14 @@ func (o *OpenAI) SupportsTools() bool {
 
 // Generate generates a response from OpenAI
 func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	// Check cache if available
+	if o.Cache != nil {
+		cacheKey := dsgo.GenerateCacheKey(o.Model, messages, options)
+		if cached, ok := o.Cache.Get(cacheKey); ok {
+			return cached, nil
+		}
+	}
+
 	reqBody := o.buildRequest(messages, options)
 
 	bodyBytes, err := json.Marshal(reqBody)
@@ -61,15 +71,15 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.APIKey)
-
-	resp, err := o.Client.Do(req)
+	resp, err := retry.WithExponentialBackoff(ctx, func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+o.APIKey)
+		return o.Client.Do(req)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -85,7 +95,18 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	return o.parseResponse(&apiResp)
+	result, err := o.parseResponse(&apiResp)
+	if err != nil {
+		return nil, err
+	}
+
+	// Store in cache if available
+	if o.Cache != nil {
+		cacheKey := dsgo.GenerateCacheKey(o.Model, messages, options)
+		o.Cache.Set(cacheKey, result)
+	}
+
+	return result, nil
 }
 
 func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOptions) map[string]any {

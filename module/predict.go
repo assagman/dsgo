@@ -204,6 +204,11 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 			// Forward chunk to caller
 			outputChunks <- chunk
 
+			// Call user callback if provided
+			if options.StreamCallback != nil {
+				options.StreamCallback(chunk)
+			}
+
 			// Accumulate content
 			fullContent.WriteString(chunk.Content)
 
@@ -231,8 +236,17 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 			return
 		}
 
-		if err := p.Signature.ValidateOutputs(outputs); err != nil {
-			errorChan <- fmt.Errorf("output validation failed: %w", err)
+		// Use partial validation for robustness
+		diag := p.Signature.ValidateOutputsPartial(outputs)
+
+		// Check for critical errors (type errors that cannot be recovered)
+		if len(diag.TypeErrors) > 0 {
+			// Type errors are critical - send error
+			var errMsgs []string
+			for field, err := range diag.TypeErrors {
+				errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", field, err))
+			}
+			errorChan <- fmt.Errorf("output validation failed with type errors: %v", strings.Join(errMsgs, "; "))
 			return
 		}
 
@@ -264,6 +278,11 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		// Add adapter metrics if available
 		if adapterUsed != "" {
 			prediction.WithAdapterMetrics(adapterUsed, parseAttempts, fallbackUsed)
+		}
+
+		// Attach diagnostics if there were any issues (missing fields or class errors)
+		if diag.HasErrors() {
+			prediction.WithParseDiagnostics(diag)
 		}
 
 		// Send final prediction
