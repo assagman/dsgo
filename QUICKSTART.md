@@ -205,6 +205,9 @@ sig := dsgo.NewSignature("Research topic").
 ### Building production research tool?
 → `examples/research_assistant/` - Complete example
 
+### Need logging and tracing?
+→ `examples/logging_tracing/` - Request ID propagation & observability
+
 ## Debugging
 
 ### Enable verbose mode (see what the agent is thinking)

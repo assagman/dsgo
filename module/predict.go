@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/logging"
 )
 
 // Predict is the basic prediction module
@@ -59,14 +61,27 @@ func (p *Predict) GetSignature() *dsgo.Signature {
 
 // Forward executes the prediction
 func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+	// Ensure context has a request ID
+	ctx = logging.EnsureRequestID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, "Predict", p.Signature.Description)
+
+	var predErr error
+	defer func() {
+		logging.LogPredictionEnd(ctx, "Predict", time.Since(startTime), predErr)
+	}()
+
 	if err := p.Signature.ValidateInputs(inputs); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+		predErr = fmt.Errorf("input validation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Use adapter to format messages with demos
 	newMessages, err := p.Adapter.Format(p.Signature, inputs, p.Demos)
 	if err != nil {
-		return nil, fmt.Errorf("failed to format messages: %w", err)
+		predErr = fmt.Errorf("failed to format messages: %w", err)
+		return nil, predErr
 	}
 
 	// Build final message list
@@ -92,17 +107,20 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 
 	result, err := p.LM.Generate(ctx, messages, options)
 	if err != nil {
-		return nil, fmt.Errorf("LM generation failed: %w", err)
+		predErr = fmt.Errorf("LM generation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Use adapter to parse output
 	outputs, err := p.Adapter.Parse(p.Signature, result.Content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse output: %w", err)
+		predErr = fmt.Errorf("failed to parse output: %w", err)
+		return nil, predErr
 	}
 
 	if err := p.Signature.ValidateOutputs(outputs); err != nil {
-		return nil, fmt.Errorf("output validation failed: %w", err)
+		predErr = fmt.Errorf("output validation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Update history if present
@@ -151,7 +169,14 @@ type StreamResult struct {
 // The prediction channel emits the final parsed prediction after the stream completes
 // The errors channel emits any errors that occur during streaming or parsing
 func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamResult, error) {
+	// Ensure context has a request ID
+	ctx = logging.EnsureRequestID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, "Predict.Stream", p.Signature.Description)
+
 	if err := p.Signature.ValidateInputs(inputs); err != nil {
+		logging.LogPredictionEnd(ctx, "Predict.Stream", time.Since(startTime), err)
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
 
@@ -196,6 +221,11 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		defer close(predictionChan)
 		defer close(errorChan)
 
+		var streamErr error
+		defer func() {
+			logging.LogPredictionEnd(ctx, "Predict.Stream", time.Since(startTime), streamErr)
+		}()
+
 		var fullContent strings.Builder
 		var finalUsage dsgo.Usage
 
@@ -222,7 +252,8 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		select {
 		case err := <-errChan:
 			if err != nil {
-				errorChan <- fmt.Errorf("LM streaming failed: %w", err)
+				streamErr = fmt.Errorf("LM streaming failed: %w", err)
+				errorChan <- streamErr
 				return
 			}
 		default:
@@ -232,7 +263,8 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		content := fullContent.String()
 		outputs, err := p.Adapter.Parse(p.Signature, content)
 		if err != nil {
-			errorChan <- fmt.Errorf("failed to parse output: %w", err)
+			streamErr = fmt.Errorf("failed to parse output: %w", err)
+			errorChan <- streamErr
 			return
 		}
 
@@ -246,7 +278,8 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 			for field, err := range diag.TypeErrors {
 				errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", field, err))
 			}
-			errorChan <- fmt.Errorf("output validation failed with type errors: %v", strings.Join(errMsgs, "; "))
+			streamErr = fmt.Errorf("output validation failed with type errors: %v", strings.Join(errMsgs, "; "))
+			errorChan <- streamErr
 			return
 		}
 

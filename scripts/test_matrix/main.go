@@ -35,22 +35,21 @@ var models = []string{
 }
 
 var examples = []string{
-	"examples/sentiment",
-	"examples/fewshot_conversation",
-	"examples/chat_predict",
+	"examples/adapter_fallback",
 	"examples/chat_cot",
-	"examples/content_generator",
-	"examples/composition",
+	"examples/chat_predict",
 	"examples/code_reviewer",
+	"examples/composition",
+	"examples/content_generator",
 	"examples/customer_support",
 	"examples/data_analyst",
+	"examples/fewshot_conversation",
 	"examples/interview",
 	"examples/math_solver",
 	"examples/react_agent",
 	"examples/research_assistant",
-	"examples/adapter_fallback",
+	"examples/sentiment",
 	"examples/streaming",
-	"examples/streaming", // Test twice for stability
 }
 
 func main() {

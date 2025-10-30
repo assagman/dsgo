@@ -1,8 +1,116 @@
 package dsgo
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 )
+
+// MockLM is a mock language model for testing
+type MockLM struct {
+	GenerateFunc     func(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error)
+	NameValue        string
+	SupportsJSONVal  bool
+	SupportsToolsVal bool
+}
+
+func (m *MockLM) Generate(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+	if m.GenerateFunc != nil {
+		return m.GenerateFunc(ctx, messages, options)
+	}
+	return &GenerateResult{Content: "{}"}, nil
+}
+
+func (m *MockLM) Name() string {
+	if m.NameValue != "" {
+		return m.NameValue
+	}
+	return "mock-lm"
+}
+
+func (m *MockLM) SupportsJSON() bool {
+	return m.SupportsJSONVal
+}
+
+func (m *MockLM) SupportsTools() bool {
+	return m.SupportsToolsVal
+}
+
+func (m *MockLM) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
+	chunkChan := make(chan Chunk, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		chunkChan <- Chunk{
+			Content:      result.Content,
+			FinishReason: result.FinishReason,
+			Usage:        result.Usage,
+		}
+	}()
+
+	return chunkChan, errChan
+}
+
+// NewMockLM creates a new mock LM with default behavior
+func NewMockLM() *MockLM {
+	return &MockLM{
+		NameValue:        "mock-lm",
+		SupportsJSONVal:  true,
+		SupportsToolsVal: false,
+	}
+}
+
+// WithJSONResponse configures the mock to return a JSON response
+func (m *MockLM) WithJSONResponse(data map[string]interface{}) *MockLM {
+	m.GenerateFunc = func(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+		jsonBytes, _ := json.Marshal(data)
+		return &GenerateResult{
+			Content: string(jsonBytes),
+			Usage: Usage{
+				PromptTokens:     10,
+				CompletionTokens: 20,
+				TotalTokens:      30,
+			},
+		}, nil
+	}
+	return m
+}
+
+// WithError configures the mock to return an error
+func (m *MockLM) WithError(err error) *MockLM {
+	m.GenerateFunc = func(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+		return nil, err
+	}
+	return m
+}
+
+// WithTextResponse configures the mock to return a text response
+func (m *MockLM) WithTextResponse(text string) *MockLM {
+	m.GenerateFunc = func(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+		return &GenerateResult{Content: text}, nil
+	}
+	return m
+}
+
+// WithToolCalls configures the mock to return tool calls
+func (m *MockLM) WithToolCalls(toolCalls []ToolCall) *MockLM {
+	m.GenerateFunc = func(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+		return &GenerateResult{
+			Content:   "Let me use a tool",
+			ToolCalls: toolCalls,
+		}, nil
+	}
+	return m
+}
 
 func TestGenerateOptions_Copy(t *testing.T) {
 	original := &GenerateOptions{
@@ -91,5 +199,50 @@ func TestGenerateOptions_Copy_EmptySlices(t *testing.T) {
 	}
 	if copied.Tools != nil {
 		t.Errorf("Expected nil Tools slice, got %v", copied.Tools)
+	}
+}
+
+func TestGenerateOptions_Copy_StreamCallback(t *testing.T) {
+	options := DefaultGenerateOptions()
+	options.StreamCallback = func(chunk Chunk) {
+		// Mock callback
+	}
+
+	copied := options.Copy()
+	if copied == nil {
+		t.Fatal("Expected copy to be non-nil")
+	}
+
+	if copied.Temperature != options.Temperature {
+		t.Error("Temperature not copied correctly")
+	}
+	if copied.MaxTokens != options.MaxTokens {
+		t.Error("MaxTokens not copied correctly")
+	}
+}
+
+func TestDefaultGenerateOptions(t *testing.T) {
+	opts := DefaultGenerateOptions()
+
+	if opts == nil {
+		t.Fatal("DefaultGenerateOptions should not return nil")
+	}
+	if opts.Temperature != 0.7 {
+		t.Errorf("Expected default temperature 0.7, got %v", opts.Temperature)
+	}
+	if opts.MaxTokens != 2048 {
+		t.Errorf("Expected default max tokens 2048, got %v", opts.MaxTokens)
+	}
+	if opts.TopP != 1.0 {
+		t.Errorf("Expected default TopP 1.0, got %v", opts.TopP)
+	}
+	if opts.ResponseFormat != "text" {
+		t.Errorf("Expected default response format 'text', got '%s'", opts.ResponseFormat)
+	}
+	if opts.ToolChoice != "auto" {
+		t.Errorf("Expected default tool choice 'auto', got '%s'", opts.ToolChoice)
+	}
+	if opts.Stream != false {
+		t.Errorf("Expected default stream false, got %v", opts.Stream)
 	}
 }

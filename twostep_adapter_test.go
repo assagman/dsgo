@@ -286,3 +286,51 @@ func TestTwoStepAdapter_WithReasoning(t *testing.T) {
 		t.Error("Expected reasoning to be enabled")
 	}
 }
+
+// TestTwoStepAdapter_Format_MultipleInputs tests formatting with multiple inputs
+func TestTwoStepAdapter_Format_MultipleInputs(t *testing.T) {
+	sig := NewSignature("Summarize").
+		AddInput("title", FieldTypeString, "").
+		AddInput("body", FieldTypeString, "").
+		AddOutput("summary", FieldTypeString, "")
+
+	adapter := NewTwoStepAdapter(nil)
+	inputs := map[string]any{
+		"title": "Important News",
+		"body":  "This is the full article text...",
+	}
+
+	messages, err := adapter.Format(sig, inputs, nil)
+	if err != nil {
+		t.Fatalf("Format failed: %v", err)
+	}
+
+	if len(messages) == 0 {
+		t.Error("Expected at least one message")
+	}
+}
+
+// TestTwoStepAdapter_FormatHistory_Coverage tests TwoStepAdapter FormatHistory
+func TestTwoStepAdapter_FormatHistory_Coverage(t *testing.T) {
+	adapter := NewTwoStepAdapter(nil)
+
+	history := NewHistory()
+	history.Add(Message{Role: "user", Content: "Question 1"})
+	history.Add(Message{Role: "assistant", Content: "Answer 1"})
+	history.Add(Message{Role: "user", Content: "Question 2"})
+
+	messages := adapter.FormatHistory(history)
+
+	if len(messages) != 3 {
+		t.Errorf("Expected 3 messages, got %d", len(messages))
+	}
+
+	for i, msg := range messages {
+		if msg.Role == "" {
+			t.Errorf("Message %d has empty role", i)
+		}
+		if msg.Content == "" {
+			t.Errorf("Message %d has empty content", i)
+		}
+	}
+}

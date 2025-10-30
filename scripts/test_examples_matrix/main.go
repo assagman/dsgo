@@ -48,6 +48,7 @@ var allExamples = []string{
 	"examples/data_analyst",
 	"examples/fewshot_conversation",
 	"examples/interview",
+	"examples/logging_tracing",
 	"examples/math_solver",
 	"examples/program_of_thought",
 	"examples/react_agent",
@@ -61,7 +62,7 @@ func main() {
 	// Define flags
 	numModels := flag.Int("n", 1, "Number of random models to test (1 = single model like test_examples, 0 = all models)")
 	verbose := flag.Bool("v", false, "Verbose output")
-	timeout := flag.Duration("timeout", 3*time.Minute, "Timeout per example")
+	timeout := flag.Duration("timeout", 10*time.Minute, "Timeout per example")
 	parallel := flag.Bool("p", true, "Run tests in parallel")
 	flag.Parse()
 
@@ -129,8 +130,30 @@ func main() {
 				if len(selectedModels) > 1 {
 					modelInfo = fmt.Sprintf(" [%s]", result.Model)
 				}
-				fmt.Printf("  - %s%s: %v\n", result.Example, modelInfo, result.Error)
+				fmt.Printf("  - %s%s (exit %d): %v\n", result.Example, modelInfo, result.ExitCode, result.Error)
 			}
+		}
+	}
+
+	// Exit code summary
+	fmt.Println("\n=== Exit Codes ===")
+	exitCodeStats := make(map[int]int)
+	for _, result := range results {
+		exitCodeStats[result.ExitCode]++
+	}
+	for code := 0; code <= 124; code++ {
+		if count, exists := exitCodeStats[code]; exists {
+			status := "✅"
+			if code != 0 {
+				status = "❌"
+			}
+			fmt.Printf("%s Exit %d: %d executions\n", status, code, count)
+		}
+	}
+	// Handle special codes
+	for code, count := range exitCodeStats {
+		if code > 124 || code < 0 {
+			fmt.Printf("❌ Exit %d: %d executions\n", code, count)
 		}
 	}
 

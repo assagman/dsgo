@@ -328,6 +328,30 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:     "with TopP exactly 1.0 (should be omitted)",
+			messages: []dsgo.Message{{Role: "user", Content: "test"}},
+			options: &dsgo.GenerateOptions{
+				TopP: 1.0,
+			},
+			check: func(t *testing.T, req map[string]any) {
+				if _, exists := req["top_p"]; exists {
+					t.Error("expected top_p to be omitted when exactly 1.0")
+				}
+			},
+		},
+		{
+			name:     "with TopP non-default (should be included)",
+			messages: []dsgo.Message{{Role: "user", Content: "test"}},
+			options: &dsgo.GenerateOptions{
+				TopP: 0.7,
+			},
+			check: func(t *testing.T, req map[string]any) {
+				if req["top_p"] != 0.7 {
+					t.Errorf("expected top_p 0.7, got %v", req["top_p"])
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -576,5 +600,439 @@ func TestOpenAI_Generate_ToolChoiceNone(t *testing.T) {
 	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, options)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// fakeCache is a simple in-memory cache for testing
+type fakeCache struct {
+	data   map[string]*dsgo.GenerateResult
+	setKey string
+	setVal *dsgo.GenerateResult
+}
+
+func (f *fakeCache) Get(key string) (*dsgo.GenerateResult, bool) {
+	if f.data == nil {
+		return nil, false
+	}
+	val, ok := f.data[key]
+	return val, ok
+}
+
+func (f *fakeCache) Set(key string, result *dsgo.GenerateResult) {
+	f.setKey = key
+	f.setVal = result
+}
+
+func (f *fakeCache) Clear() {
+	if f.data != nil {
+		f.data = make(map[string]*dsgo.GenerateResult)
+	}
+}
+
+func (f *fakeCache) Size() int {
+	if f.data == nil {
+		return 0
+	}
+	return len(f.data)
+}
+
+func (f *fakeCache) Stats() dsgo.CacheStats {
+	return dsgo.CacheStats{
+		Hits:   0,
+		Misses: 0,
+		Size:   f.Size(),
+	}
+}
+
+func TestOpenAI_Generate_CacheHit(t *testing.T) {
+	cachedResult := &dsgo.GenerateResult{
+		Content:      "cached response",
+		FinishReason: "stop",
+		Usage: dsgo.Usage{
+			PromptTokens:     5,
+			CompletionTokens: 3,
+			TotalTokens:      8,
+		},
+	}
+
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	options := dsgo.DefaultGenerateOptions()
+	cacheKey := dsgo.GenerateCacheKey("gpt-4", messages, options)
+
+	cache := &fakeCache{
+		data: map[string]*dsgo.GenerateResult{
+			cacheKey: cachedResult,
+		},
+	}
+
+	lm := &OpenAI{
+		APIKey: "test-key",
+		Model:  "gpt-4",
+		Cache:  cache,
+		Client: nil, // Should not be used if cache hits
+	}
+
+	result, err := lm.Generate(context.Background(), messages, options)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Content != "cached response" {
+		t.Errorf("expected cached content, got %s", result.Content)
+	}
+	if result.Usage.PromptTokens != 5 {
+		t.Errorf("expected 5 prompt tokens, got %d", result.Usage.PromptTokens)
+	}
+}
+
+func TestOpenAI_Generate_CacheSet(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := openAIResponse{
+			Choices: []struct {
+				Index        int           `json:"index"`
+				Message      openAIMessage `json:"message"`
+				FinishReason string        `json:"finish_reason"`
+			}{{Message: openAIMessage{Content: "fresh response"}, FinishReason: "stop"}},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	cache := &fakeCache{data: map[string]*dsgo.GenerateResult{}}
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	options := dsgo.DefaultGenerateOptions()
+	expectedKey := dsgo.GenerateCacheKey("gpt-4", messages, options)
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+		Cache:   cache,
+	}
+
+	result, err := lm.Generate(context.Background(), messages, options)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Content != "fresh response" {
+		t.Errorf("expected fresh response, got %s", result.Content)
+	}
+
+	if cache.setKey != expectedKey {
+		t.Errorf("expected cache key %s, got %s", expectedKey, cache.setKey)
+	}
+	if cache.setVal != result {
+		t.Error("expected result to be cached")
+	}
+}
+
+func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{invalid json"))
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	if err == nil {
+		t.Fatal("expected error for invalid JSON response")
+	}
+	if !containsString(err.Error(), "failed to decode response") {
+		t.Errorf("expected 'failed to decode response' error, got %v", err)
+	}
+}
+
+func TestOpenAI_Generate_ParseResponseError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := openAIResponse{
+			Choices: []struct {
+				Index        int           `json:"index"`
+				Message      openAIMessage `json:"message"`
+				FinishReason string        `json:"finish_reason"`
+			}{
+				{
+					Message: openAIMessage{
+						ToolCalls: []openAIToolCall{
+							{
+								ID:   "call_123",
+								Type: "function",
+								Function: struct {
+									Name      string `json:"name"`
+									Arguments string `json:"arguments"`
+								}{
+									Name:      "test_tool",
+									Arguments: "not valid json",
+								},
+							},
+						},
+					},
+					FinishReason: "tool_calls",
+				},
+			},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	if err == nil {
+		t.Fatal("expected error for invalid tool arguments")
+	}
+	if !containsString(err.Error(), "failed to parse tool arguments") {
+		t.Errorf("expected 'failed to parse tool arguments' error, got %v", err)
+	}
+}
+
+// containsString checks if a string contains a substring
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			len(s) > len(substr) && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestOpenAI_Stream_HappyPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		if req["stream"] != true {
+			t.Error("expected stream to be true")
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		_, _ = w.Write([]byte("data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"created\":123,\"model\":\"gpt-4\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel\"},\"finish_reason\":\"\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"created\":123,\"model\":\"gpt-4\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+
+	var chunks []dsgo.Chunk
+	var streamErr error
+	done := false
+
+	for !done {
+		select {
+		case chunk, ok := <-chunkChan:
+			if !ok {
+				done = true
+				break
+			}
+			chunks = append(chunks, chunk)
+		case err, ok := <-errChan:
+			if ok && err != nil {
+				streamErr = err
+			}
+			done = true
+		}
+	}
+
+	if streamErr != nil {
+		t.Fatalf("unexpected stream error: %v", streamErr)
+	}
+
+	if len(chunks) < 1 {
+		t.Fatalf("expected at least 1 chunk, got %d", len(chunks))
+	}
+
+	var fullContent string
+	var lastChunk dsgo.Chunk
+	for _, chunk := range chunks {
+		fullContent += chunk.Content
+		lastChunk = chunk
+	}
+
+	if fullContent != "Hello" {
+		t.Errorf("expected content 'Hello', got %s", fullContent)
+	}
+
+	if lastChunk.FinishReason != "stop" {
+		t.Errorf("expected finish reason 'stop', got %s", lastChunk.FinishReason)
+	}
+
+	if lastChunk.Usage.PromptTokens != 1 || lastChunk.Usage.CompletionTokens != 2 || lastChunk.Usage.TotalTokens != 3 {
+		t.Errorf("expected usage 1/2/3, got %d/%d/%d",
+			lastChunk.Usage.PromptTokens, lastChunk.Usage.CompletionTokens, lastChunk.Usage.TotalTokens)
+	}
+}
+
+func TestOpenAI_Stream_NonOKStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("bad request"))
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+
+	var streamErr error
+	done := false
+
+	for !done {
+		select {
+		case _, ok := <-chunkChan:
+			if !ok {
+				done = true
+			}
+		case err, ok := <-errChan:
+			if ok && err != nil {
+				streamErr = err
+			}
+			done = true
+		}
+	}
+
+	if streamErr == nil {
+		t.Fatal("expected error for non-OK status")
+	}
+	if !containsString(streamErr.Error(), "API request failed with status") {
+		t.Errorf("expected 'API request failed' error, got %v", streamErr)
+	}
+}
+
+func TestOpenAI_Stream_InvalidJSONChunk(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		_, _ = w.Write([]byte("data: invalid json\n\n"))
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+
+	var streamErr error
+	done := false
+
+	for !done {
+		select {
+		case _, ok := <-chunkChan:
+			if !ok {
+				done = true
+			}
+		case err, ok := <-errChan:
+			if ok && err != nil {
+				streamErr = err
+			}
+			done = true
+		}
+	}
+
+	if streamErr == nil {
+		t.Fatal("expected error for invalid JSON chunk")
+	}
+	if !containsString(streamErr.Error(), "failed to parse stream chunk") {
+		t.Errorf("expected 'failed to parse stream chunk' error, got %v", streamErr)
+	}
+}
+
+func TestOpenAI_Stream_SkipsNonDataLines(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		_, _ = w.Write([]byte("\n"))
+		_, _ = w.Write([]byte("event: message\n"))
+		_, _ = w.Write([]byte("data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"created\":123,\"model\":\"gpt-4\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+
+	var chunks []dsgo.Chunk
+	var streamErr error
+	done := false
+
+	for !done {
+		select {
+		case chunk, ok := <-chunkChan:
+			if !ok {
+				done = true
+				break
+			}
+			chunks = append(chunks, chunk)
+		case err, ok := <-errChan:
+			if ok {
+				streamErr = err
+			}
+			done = true
+		}
+	}
+
+	if streamErr != nil {
+		t.Fatalf("unexpected stream error: %v", streamErr)
+	}
+
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+	}
+
+	if chunks[0].Content != "OK" {
+		t.Errorf("expected content 'OK', got %s", chunks[0].Content)
 	}
 }

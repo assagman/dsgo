@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/internal/retry"
+	"github.com/assagman/dsgo/logging"
 )
 
 const (
@@ -56,6 +58,17 @@ func (o *OpenAI) SupportsTools() bool {
 
 // Generate generates a response from OpenAI
 func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	startTime := time.Now()
+
+	// Calculate prompt length for logging
+	promptLength := 0
+	for _, msg := range messages {
+		promptLength += len(msg.Content)
+	}
+
+	// Log API request start
+	logging.LogAPIRequest(ctx, o.Model, promptLength)
+
 	// Check cache if available
 	if o.Cache != nil {
 		cacheKey := dsgo.GenerateCacheKey(o.Model, messages, options)
@@ -81,24 +94,33 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 		return o.Client.Do(req)
 	})
 	if err != nil {
+		logging.LogAPIError(ctx, o.Model, err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		logging.LogAPIError(ctx, o.Model, err)
+		return nil, err
 	}
 
 	var apiResp openAIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		logging.LogAPIError(ctx, o.Model, err)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	result, err := o.parseResponse(&apiResp)
 	if err != nil {
+		logging.LogAPIError(ctx, o.Model, err)
 		return nil, err
 	}
+
+	// Log API response
+	duration := time.Since(startTime)
+	logging.LogAPIResponse(ctx, o.Model, resp.StatusCode, duration, result.Usage)
 
 	// Store in cache if available
 	if o.Cache != nil {

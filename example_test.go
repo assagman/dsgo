@@ -97,6 +97,11 @@ func TestExampleSet_GetN_EdgeCases(t *testing.T) {
 	if len(all) != 2 {
 		t.Error("GetN(n > length) should return all examples")
 	}
+
+	negativeGetN := es.GetN(-1)
+	if len(negativeGetN) != 2 {
+		t.Error("GetN(negative) should return all examples")
+	}
 }
 
 func TestExampleSet_Clear(t *testing.T) {
@@ -112,12 +117,46 @@ func TestExampleSet_Clear(t *testing.T) {
 
 func TestExampleSet_GetRandom(t *testing.T) {
 	es := NewExampleSet("test")
-	es.AddPair(map[string]any{"x": 1}, map[string]any{"y": 1})
-	es.AddPair(map[string]any{"x": 2}, map[string]any{"y": 2})
 
-	random := es.GetRandom(1)
-	if len(random) != 1 {
-		t.Error("GetRandom should return requested number")
+	for i := 0; i < 10; i++ {
+		es.AddPair(
+			map[string]any{"input": i},
+			map[string]any{"output": i * 2},
+		)
+	}
+
+	tests := []struct {
+		name     string
+		n        int
+		wantSize int
+	}{
+		{"get 1 random", 1, 1},
+		{"get 5 random", 5, 5},
+		{"get more than available", 20, 10},
+		{"get 0", 0, 0},
+		{"get negative", -1, 0},
+		{"get all", 10, 10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			random := es.GetRandom(tt.n)
+			if len(random) != tt.wantSize {
+				t.Errorf("GetRandom(%d) returned %d examples, want %d", tt.n, len(random), tt.wantSize)
+			}
+		})
+	}
+
+	results := make(map[int]bool)
+	for i := 0; i < 5; i++ {
+		random := es.GetRandom(3)
+		if len(random) > 0 {
+			firstInput := random[0].Inputs["input"].(int)
+			results[firstInput] = true
+		}
+	}
+	if len(results) == 1 && es.Len() > 3 {
+		t.Log("GetRandom might not be random (or got unlucky in test)")
 	}
 }
 

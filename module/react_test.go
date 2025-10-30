@@ -376,3 +376,396 @@ func TestReAct_StagnationDetection(t *testing.T) {
 		t.Errorf("Expected at least 3 LM calls (stagnation + recovery), got %d", callCount)
 	}
 }
+
+// TestReAct_Forward_WithHistory tests history management
+func TestReAct_Forward_WithHistory(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			return &dsgo.GenerateResult{
+				Content: `{"answer": "final answer with history"}`,
+			}, nil
+		},
+	}
+
+	history := dsgo.NewHistory()
+	history.Add(dsgo.Message{Role: "user", Content: "previous question"})
+	history.Add(dsgo.Message{Role: "assistant", Content: "previous answer"})
+
+	react := NewReAct(sig, lm, []dsgo.Tool{}).WithHistory(history)
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "current question",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if outputs.Outputs["answer"] != "final answer with history" {
+		t.Errorf("Expected answer with history, got %v", outputs.Outputs["answer"])
+	}
+
+	// Verify history was updated
+	if history.Len() != 4 { // 2 previous + 1 user + 1 assistant
+		t.Errorf("Expected 4 messages in history, got %d", history.Len())
+	}
+}
+
+// TestReAct_Forward_WithFinishTool tests the "finish" tool detection
+func TestReAct_Forward_WithFinishTool(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence")
+
+	lm := &MockLM{
+		SupportsToolsVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			return &dsgo.GenerateResult{
+				Content: "I have the answer",
+				ToolCalls: []dsgo.ToolCall{
+					{
+						ID:   "finish-1",
+						Name: "finish",
+						Arguments: map[string]interface{}{
+							"answer":     "The answer is 42",
+							"confidence": 0.95,
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []dsgo.Tool{})
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "What is the answer?",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if outputs.Outputs["answer"] != "The answer is 42" {
+		t.Errorf("Expected finish tool answer, got %v", outputs.Outputs["answer"])
+	}
+
+	if outputs.Outputs["confidence"] != 0.95 {
+		t.Errorf("Expected confidence 0.95, got %v", outputs.Outputs["confidence"])
+	}
+}
+
+// TestReAct_Forward_WithFinishTool_InvalidOutputs tests finish tool with validation errors
+func TestReAct_Forward_WithFinishTool_InvalidOutputs(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer").
+		AddOutput("score", dsgo.FieldTypeInt, "Score")
+
+	callCount := 0
+	lm := &MockLM{
+		SupportsToolsVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			callCount++
+			if callCount == 1 {
+				// First call: finish tool with invalid outputs (missing score)
+				return &dsgo.GenerateResult{
+					Content: "Trying to finish",
+					ToolCalls: []dsgo.ToolCall{
+						{
+							ID:   "finish-1",
+							Name: "finish",
+							Arguments: map[string]interface{}{
+								"answer": "incomplete",
+							},
+						},
+					},
+				}, nil
+			}
+			// Second call: proper final answer
+			return &dsgo.GenerateResult{
+				Content: `{"answer": "complete answer", "score": 85}`,
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []dsgo.Tool{})
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if outputs.Outputs["answer"] != "complete answer" {
+		t.Error("Should recover from invalid finish tool and provide proper answer")
+	}
+
+	if callCount != 2 {
+		t.Errorf("Expected 2 calls (invalid finish + recovery), got %d", callCount)
+	}
+}
+
+// TestReAct_Forward_WithReasoning tests reasoning field extraction and cleanup
+func TestReAct_Forward_WithReasoning(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			return &dsgo.GenerateResult{
+				Content: `{"reasoning": "Let me think about this...", "answer": "The answer"}`,
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []dsgo.Tool{})
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	// Reasoning should be extracted to rationale
+	if outputs.Rationale != "Let me think about this..." {
+		t.Errorf("Expected rationale to be set, got %q", outputs.Rationale)
+	}
+
+	// Reasoning should be removed from outputs if not in signature
+	if _, exists := outputs.Outputs["reasoning"]; exists {
+		t.Error("Reasoning should be removed from outputs when not in signature")
+	}
+}
+
+// TestReAct_Forward_WithReasoningInSignature tests when reasoning is part of the signature
+func TestReAct_Forward_WithReasoningInSignature(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("reasoning", dsgo.FieldTypeString, "Reasoning").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			return &dsgo.GenerateResult{
+				Content: `{"reasoning": "Thinking step by step", "answer": "42"}`,
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []dsgo.Tool{})
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	// Reasoning should be in rationale
+	if outputs.Rationale != "Thinking step by step" {
+		t.Errorf("Expected rationale to be set, got %q", outputs.Rationale)
+	}
+
+	// Reasoning should remain in outputs when it's in the signature
+	if _, exists := outputs.Outputs["reasoning"]; !exists {
+		t.Error("Reasoning should remain in outputs when it's part of the signature")
+	}
+}
+
+// TestReAct_Forward_JSONModeWithJSONAdapter tests JSON mode enablement with JSONAdapter
+func TestReAct_Forward_JSONModeWithJSONAdapter(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	optionsCaptured := false
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			if options.ResponseFormat == "json" {
+				optionsCaptured = true
+			}
+			return &dsgo.GenerateResult{
+				Content: `{"answer": "json mode answer"}`,
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []dsgo.Tool{}).WithAdapter(dsgo.NewJSONAdapter())
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if !optionsCaptured {
+		t.Error("JSON mode should be enabled when using JSONAdapter and LM supports JSON")
+	}
+
+	if outputs.Outputs["answer"] != "json mode answer" {
+		t.Errorf("Expected answer, got %v", outputs.Outputs["answer"])
+	}
+}
+
+// TestReAct_Forward_MultipleToolCalls tests multiple tool calls in one iteration
+func TestReAct_Forward_MultipleToolCalls(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	callCount := 0
+	lm := &MockLM{
+		SupportsToolsVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			callCount++
+			if callCount == 1 {
+				return &dsgo.GenerateResult{
+					Content: "Using multiple tools",
+					ToolCalls: []dsgo.ToolCall{
+						{ID: "1", Name: "search", Arguments: map[string]interface{}{"query": "test1"}},
+						{ID: "2", Name: "calculate", Arguments: map[string]interface{}{"expr": "2+2"}},
+					},
+				}, nil
+			}
+			return &dsgo.GenerateResult{
+				Content: `{"answer": "combined result"}`,
+			}, nil
+		},
+	}
+
+	searchTool := dsgo.NewTool("search", "Search", func(ctx context.Context, args map[string]any) (any, error) {
+		return "search result", nil
+	})
+	calcTool := dsgo.NewTool("calculate", "Calculate", func(ctx context.Context, args map[string]any) (any, error) {
+		return "4", nil
+	})
+
+	react := NewReAct(sig, lm, []dsgo.Tool{*searchTool, *calcTool})
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if outputs.Outputs["answer"] != "combined result" {
+		t.Error("Should handle multiple tool calls in one iteration")
+	}
+}
+
+// TestReAct_Forward_WithDemos tests few-shot examples
+func TestReAct_Forward_WithDemos(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			return &dsgo.GenerateResult{
+				Content: `{"answer": "demo-informed answer"}`,
+			}, nil
+		},
+	}
+
+	demos := []dsgo.Example{
+		{
+			Inputs:  map[string]any{"question": "What is 2+2?"},
+			Outputs: map[string]any{"answer": "4"},
+		},
+	}
+
+	react := NewReAct(sig, lm, []dsgo.Tool{}).WithDemos(demos)
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "What is 3+3?",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if outputs.Outputs["answer"] != "demo-informed answer" {
+		t.Errorf("Expected demo-informed answer, got %v", outputs.Outputs["answer"])
+	}
+}
+
+// TestReAct_Forward_AdapterMetrics tests adapter metadata extraction
+func TestReAct_Forward_AdapterMetrics(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			return &dsgo.GenerateResult{
+				Content: `{"answer": "test", "__adapter_used": "JSONAdapter", "__parse_attempts": 2, "__fallback_used": true}`,
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []dsgo.Tool{})
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if outputs.AdapterUsed == "" {
+		t.Error("Expected adapter metadata to be extracted")
+	}
+
+	if outputs.ParseAttempts != 2 {
+		t.Errorf("Expected 2 parse attempts, got %d", outputs.ParseAttempts)
+	}
+
+	if !outputs.FallbackUsed {
+		t.Error("Expected fallback_used to be true")
+	}
+}
+
+// TestReAct_Forward_OutputValidationError tests validation errors after parsing
+func TestReAct_Forward_OutputValidationError(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer").
+		AddOutput("score", dsgo.FieldTypeInt, "Required score")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			// Missing required "score" field
+			return &dsgo.GenerateResult{
+				Content: `{"answer": "incomplete"}`,
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []dsgo.Tool{})
+	_, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err == nil {
+		t.Error("Forward() should error when output validation fails")
+	}
+
+	if !contains(err.Error(), "validation failed") {
+		t.Errorf("Expected validation error, got %v", err)
+	}
+}
