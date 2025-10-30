@@ -150,3 +150,64 @@ func TestTool_Execute_WithValidation(t *testing.T) {
 		t.Errorf("expected 'success', got %v", result)
 	}
 }
+
+func TestTool_NormalizeArguments(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected string
+	}{
+		{
+			name:     "array of interfaces",
+			input:    map[string]any{"data": []interface{}{1, 2, 3}},
+			expected: "1,2,3",
+		},
+		{
+			name:     "array of strings",
+			input:    map[string]any{"data": []string{"a", "b", "c"}},
+			expected: "a,b,c",
+		},
+		{
+			name:     "array of ints",
+			input:    map[string]any{"data": []int{10, 20, 30}},
+			expected: "10,20,30",
+		},
+		{
+			name:     "array of floats",
+			input:    map[string]any{"data": []float64{1.5, 2.5, 3.5}},
+			expected: "1.5,2.5,3.5",
+		},
+		{
+			name:     "single string value",
+			input:    map[string]any{"data": "single"},
+			expected: "single",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var receivedValue string
+			tool := NewTool(
+				"test_normalize",
+				"Test normalization",
+				func(ctx context.Context, args map[string]any) (any, error) {
+					receivedValue = args["data"].(string)
+					return receivedValue, nil
+				},
+			).AddParameter("data", "string", "Data parameter", true)
+
+			result, err := tool.Execute(context.Background(), tt.input)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+
+			if receivedValue != tt.expected {
+				t.Errorf("Expected normalized value '%s', got '%s'", tt.expected, receivedValue)
+			}
+
+			if result != tt.expected {
+				t.Errorf("Expected result '%s', got '%v'", tt.expected, result)
+			}
+		})
+	}
+}

@@ -267,3 +267,244 @@ func fixJSONNewlines(jsonStr string) string {
 
 	return result.String()
 }
+
+// RepairJSON attempts to repair common JSON errors to make it parseable.
+// This handles issues like:
+// - Single quotes instead of double quotes for keys/values
+// - Missing quotes around keys
+// - Trailing commas
+// - Smart quotes (""”)
+// - Extra whitespace
+//
+// Returns the repaired JSON string. If repair is not possible, returns original.
+func RepairJSON(jsonStr string) string {
+	original := jsonStr
+	jsonStr = strings.TrimSpace(jsonStr)
+
+	// Strip markdown code fences if present
+	if strings.HasPrefix(jsonStr, "```json") {
+		jsonStr = strings.TrimPrefix(jsonStr, "```json")
+		if idx := strings.Index(jsonStr, "```"); idx >= 0 {
+			jsonStr = jsonStr[:idx]
+		}
+	} else if strings.HasPrefix(jsonStr, "```") {
+		jsonStr = strings.TrimPrefix(jsonStr, "```")
+		if idx := strings.Index(jsonStr, "```"); idx >= 0 {
+			jsonStr = jsonStr[:idx]
+		}
+	}
+	jsonStr = strings.TrimSpace(jsonStr)
+
+	// Replace smart quotes with regular quotes
+	replacer := strings.NewReplacer(
+		"\u201c", "\"", // "
+		"\u201d", "\"", // "
+		"\u2018", "'", // '
+		"\u2019", "'", // '
+		"\u2032", "'", // ′ (prime)
+		"\u2033", "\"", // ″ (double prime)
+	)
+	jsonStr = replacer.Replace(jsonStr)
+
+	// Fix single quotes to double quotes (carefully)
+	jsonStr = fixSingleQuotes(jsonStr)
+
+	// Fix unquoted keys: {key: "value"} -> {"key": "value"}
+	jsonStr = fixUnquotedKeys(jsonStr)
+
+	// Remove trailing commas before } or ]
+	jsonStr = removeTrailingCommas(jsonStr)
+
+	// Find outermost {...} if multiple JSON objects
+	if start := strings.Index(jsonStr, "{"); start >= 0 {
+		end := findClosingBraceStringAware(jsonStr, start)
+		if end > start {
+			jsonStr = jsonStr[start : end+1]
+		}
+	}
+
+	// Verify repair worked
+	var test map[string]any
+	if err := json.Unmarshal([]byte(jsonStr), &test); err != nil {
+		// Repair failed, return original
+		return original
+	}
+
+	return jsonStr
+}
+
+// fixSingleQuotes replaces single quotes with double quotes for JSON strings
+func fixSingleQuotes(jsonStr string) string {
+	var result strings.Builder
+	inDoubleQuote := false
+	escape := false
+
+	for i := 0; i < len(jsonStr); i++ {
+		ch := jsonStr[i]
+
+		if escape {
+			result.WriteByte(ch)
+			escape = false
+			continue
+		}
+
+		if ch == '\\' {
+			result.WriteByte(ch)
+			escape = true
+			continue
+		}
+
+		// Track double quotes
+		if ch == '"' && !escape {
+			inDoubleQuote = !inDoubleQuote
+			result.WriteByte(ch)
+			continue
+		}
+
+		// Convert single quotes to double quotes when not inside double-quoted strings
+		if ch == '\'' && !inDoubleQuote {
+			result.WriteByte('"')
+			continue
+		}
+
+		result.WriteByte(ch)
+	}
+
+	return result.String()
+}
+
+// fixUnquotedKeys adds quotes around unquoted object keys
+func fixUnquotedKeys(jsonStr string) string {
+	var result strings.Builder
+	inString := false
+	escape := false
+	afterBrace := false
+
+	for i := 0; i < len(jsonStr); i++ {
+		ch := jsonStr[i]
+
+		if escape {
+			result.WriteByte(ch)
+			escape = false
+			continue
+		}
+
+		if ch == '\\' {
+			result.WriteByte(ch)
+			escape = true
+			continue
+		}
+
+		if ch == '"' {
+			inString = !inString
+			result.WriteByte(ch)
+			afterBrace = false
+			continue
+		}
+
+		if !inString {
+			if ch == '{' || ch == ',' {
+				result.WriteByte(ch)
+				afterBrace = true
+				continue
+			}
+
+			// If we see a key character after { or ,, and it's not quoted
+			if afterBrace && !isWhitespace(ch) && ch != '"' && ch != '}' {
+				// This might be an unquoted key
+				keyStart := i
+				keyEnd := i
+
+				// Find the end of the key (up to :)
+				for keyEnd < len(jsonStr) && jsonStr[keyEnd] != ':' && jsonStr[keyEnd] != '}' {
+					keyEnd++
+				}
+
+				if keyEnd < len(jsonStr) && jsonStr[keyEnd] == ':' {
+					// Extract the key
+					key := strings.TrimSpace(jsonStr[keyStart:keyEnd])
+
+					// Check if it's already quoted or is a number/boolean
+					if !strings.HasPrefix(key, "\"") && !isJSONLiteral(key) {
+						// Add quotes around the key
+						result.WriteByte('"')
+						result.WriteString(key)
+						result.WriteByte('"')
+						i = keyEnd - 1 // -1 because loop will increment
+						afterBrace = false
+						continue
+					}
+				}
+			}
+		}
+
+		result.WriteByte(ch)
+
+		if !inString && !isWhitespace(ch) {
+			afterBrace = false
+		}
+	}
+
+	return result.String()
+}
+
+// removeTrailingCommas removes trailing commas before } or ]
+func removeTrailingCommas(jsonStr string) string {
+	var result strings.Builder
+	inString := false
+	escape := false
+
+	for i := 0; i < len(jsonStr); i++ {
+		ch := jsonStr[i]
+
+		if escape {
+			result.WriteByte(ch)
+			escape = false
+			continue
+		}
+
+		if ch == '\\' {
+			result.WriteByte(ch)
+			escape = true
+			continue
+		}
+
+		if ch == '"' {
+			inString = !inString
+			result.WriteByte(ch)
+			continue
+		}
+
+		if !inString && ch == ',' {
+			// Look ahead to see if only whitespace before } or ]
+			j := i + 1
+			for j < len(jsonStr) && isWhitespace(jsonStr[j]) {
+				j++
+			}
+			if j < len(jsonStr) && (jsonStr[j] == '}' || jsonStr[j] == ']') {
+				// Skip this comma
+				continue
+			}
+		}
+
+		result.WriteByte(ch)
+	}
+
+	return result.String()
+}
+
+// isWhitespace checks if a character is JSON whitespace
+func isWhitespace(ch byte) bool {
+	return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
+}
+
+// isJSONLiteral checks if a string is a JSON literal (true, false, null, number)
+func isJSONLiteral(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "true" || s == "false" || s == "null" {
+		return true
+	}
+	// Check if it's a number
+	var f float64
+	return json.Unmarshal([]byte(s), &f) == nil
+}

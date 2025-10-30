@@ -9,7 +9,6 @@ import (
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 // This example demonstrates the robustness of the FallbackAdapter system.
@@ -18,10 +17,10 @@ import (
 
 func main() {
 	// Load .env file (optional - will use environment variables if not present)
-	_ = godotenv.Load()
+	shared.LoadEnv()
 
 	// Get LM (OpenRouter or OpenAI based on environment)
-	lm := shared.GetLM("gpt-4")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Create signature for sentiment analysis
 	sig := dsgo.NewSignature("Analyze the sentiment of the given text").

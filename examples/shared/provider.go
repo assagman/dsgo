@@ -1,31 +1,35 @@
 package shared
 
 import (
-	"os"
+	"strings"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/providers/openai"
 	"github.com/assagman/dsgo/providers/openrouter"
 )
 
-// GetLM returns an LM based on environment variables
-// Priority: OPENROUTER_API_KEY > OPENAI_API_KEY
+// GetLM returns an LM based on model name prefix
 // Usage:
 //
-//	lm := examples.GetLM("gpt-4") // Uses OpenAI
-//	lm := examples.GetLM("anthropic/claude-3.5-sonnet") // Uses OpenRouter
+//	lm := examples.GetLM("openai/gpt-4o-mini") // Uses OpenAI with "gpt-4o-mini"
+//	lm := examples.GetLM("openrouter/minimax/minimax-m2") // Uses OpenRouter with "minimax/minimax-m2"
+//	lm := examples.GetLM("openrouter/openai/gpt-4o-mini") // Uses OpenRouter with "openai/gpt-4o-mini"
 func GetLM(model string) dsgo.LM {
-	// Check for OpenRouter API key first
-	if os.Getenv("OPENROUTER_API_KEY") != "" {
-		return openrouter.NewOpenRouter(model)
+	// Check if model name starts with "openrouter/"
+	if strings.HasPrefix(model, "openrouter/") {
+		// Strip "openrouter/" prefix
+		actualModel := strings.TrimPrefix(model, "openrouter/")
+		return openrouter.NewOpenRouter(actualModel)
 	}
 
-	// Fall back to OpenAI
-	if os.Getenv("OPENAI_API_KEY") != "" {
-		return openai.NewOpenAI(model)
+	// Check if model name starts with "openai/"
+	if strings.HasPrefix(model, "openai/") {
+		// Strip "openai/" prefix
+		actualModel := strings.TrimPrefix(model, "openai/")
+		return openai.NewOpenAI(actualModel)
 	}
 
-	// Default to OpenAI (will fail if no key is set)
+	// Default to OpenAI without prefix stripping
 	return openai.NewOpenAI(model)
 }
 

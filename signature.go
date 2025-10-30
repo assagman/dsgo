@@ -3,6 +3,7 @@ package dsgo
 import (
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 // FieldType represents the type of a signature field
@@ -21,11 +22,12 @@ const (
 
 // Field represents a signature field (input or output)
 type Field struct {
-	Name        string
-	Type        FieldType
-	Description string
-	Optional    bool
-	Classes     []string // For class/enum types
+	Name         string
+	Type         FieldType
+	Description  string
+	Optional     bool
+	Classes      []string          // For class/enum types
+	ClassAliases map[string]string // Synonym mapping for class values (e.g., "pos" -> "positive")
 }
 
 // Signature defines the structure of inputs and outputs for an LM call
@@ -129,6 +131,18 @@ func (s *Signature) GetOutputField(name string) *Field {
 	return nil
 }
 
+// ValidationDiagnostics contains detailed validation error information
+type ValidationDiagnostics struct {
+	MissingFields []string         // Required fields that are missing
+	TypeErrors    map[string]error // Type validation errors by field name
+	ClassErrors   map[string]error // Class/enum validation errors by field name
+}
+
+// HasErrors returns true if there are any validation errors
+func (d *ValidationDiagnostics) HasErrors() bool {
+	return len(d.MissingFields) > 0 || len(d.TypeErrors) > 0 || len(d.ClassErrors) > 0
+}
+
 // ValidateOutputs validates that all required outputs are present and of correct type
 func (s *Signature) ValidateOutputs(outputs map[string]any) error {
 	for _, field := range s.OutputFields {
@@ -143,10 +157,14 @@ func (s *Signature) ValidateOutputs(outputs map[string]any) error {
 		// Validate class types
 		if field.Type == FieldTypeClass && len(field.Classes) > 0 {
 			valueStr := fmt.Sprintf("%v", value)
+			// Normalize the value for comparison
+			normalized := normalizeClassValue(valueStr, field)
 			valid := false
 			for _, class := range field.Classes {
-				if valueStr == class {
+				if normalized == class {
 					valid = true
+					// Update output with normalized value
+					outputs[field.Name] = normalized
 					break
 				}
 			}
@@ -161,6 +179,59 @@ func (s *Signature) ValidateOutputs(outputs map[string]any) error {
 		}
 	}
 	return nil
+}
+
+// ValidateOutputsPartial performs validation but allows missing fields and captures diagnostics.
+// Missing required fields are set to nil in the outputs map.
+func (s *Signature) ValidateOutputsPartial(outputs map[string]any) *ValidationDiagnostics {
+	diag := &ValidationDiagnostics{
+		MissingFields: []string{},
+		TypeErrors:    make(map[string]error),
+		ClassErrors:   make(map[string]error),
+	}
+
+	for _, field := range s.OutputFields {
+		value, exists := outputs[field.Name]
+		if !exists && !field.Optional {
+			diag.MissingFields = append(diag.MissingFields, field.Name)
+			outputs[field.Name] = nil // Set to nil for partial output
+			continue
+		}
+		if !exists {
+			continue
+		}
+
+		// Skip validation if value is nil
+		if value == nil {
+			continue
+		}
+
+		// Validate class types
+		if field.Type == FieldTypeClass && len(field.Classes) > 0 {
+			valueStr := fmt.Sprintf("%v", value)
+			// Normalize the value for comparison
+			normalized := normalizeClassValue(valueStr, field)
+			valid := false
+			for _, class := range field.Classes {
+				if normalized == class {
+					valid = true
+					// Update output with normalized value
+					outputs[field.Name] = normalized
+					break
+				}
+			}
+			if !valid {
+				diag.ClassErrors[field.Name] = fmt.Errorf("invalid class value: %v (must be one of %v)", valueStr, field.Classes)
+			}
+		}
+
+		// Basic type validation
+		if err := s.validateFieldType(field, value); err != nil {
+			diag.TypeErrors[field.Name] = err
+		}
+	}
+
+	return diag
 }
 
 func (s *Signature) validateFieldType(field Field, value any) error {
@@ -216,4 +287,26 @@ func (s *Signature) validateFieldType(field Field, value any) error {
 		}
 	}
 	return nil
+}
+
+// normalizeClassValue normalizes a class value for comparison using case-insensitive matching and aliases
+func normalizeClassValue(value string, field Field) string {
+	v := strings.ToLower(strings.TrimSpace(value))
+
+	// Check if there's an exact case-insensitive match first
+	for _, class := range field.Classes {
+		if strings.EqualFold(v, class) {
+			return class
+		}
+	}
+
+	// Check aliases
+	if field.ClassAliases != nil {
+		if normalized, ok := field.ClassAliases[v]; ok {
+			return normalized
+		}
+	}
+
+	// Return original if no match found
+	return value
 }

@@ -20,6 +20,9 @@ type Prediction struct {
 	ParseSuccess  bool   // Whether parsing succeeded on first attempt
 	ParseAttempts int    // Number of parse attempts (for fallback adapters)
 	FallbackUsed  bool   // Whether fallback to another adapter was needed
+
+	// Parse diagnostics (for partial outputs and validation tracking)
+	ParseDiagnostics *ValidationDiagnostics // Validation diagnostics for partial outputs
 }
 
 // NewPrediction creates a new prediction from outputs
@@ -63,6 +66,12 @@ func (p *Prediction) WithModuleName(name string) *Prediction {
 // WithInputs records the original inputs
 func (p *Prediction) WithInputs(inputs map[string]any) *Prediction {
 	p.Inputs = inputs
+	return p
+}
+
+// WithParseDiagnostics adds validation diagnostics for partial outputs
+func (p *Prediction) WithParseDiagnostics(diag *ValidationDiagnostics) *Prediction {
+	p.ParseDiagnostics = diag
 	return p
 }
 

@@ -1,6 +1,7 @@
 package jsonutil
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -237,6 +238,112 @@ func TestFixJSONNewlines(t *testing.T) {
 	}
 }
 
+func TestRepairJSON(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  map[string]any
+	}{
+		{
+			name:  "trailing comma",
+			input: `{"key": "val",}`,
+			want:  map[string]any{"key": "val"},
+		},
+		{
+			name:  "single quotes",
+			input: `{'key': 'val'}`,
+			want:  map[string]any{"key": "val"},
+		},
+		{
+			name:  "mixed quotes",
+			input: `{name: 'test', value: "ok"}`,
+			want:  map[string]any{"name": "test", "value": "ok"},
+		},
+		{
+			name:  "unquoted keys",
+			input: `{name: "test", age: 25}`,
+			want:  map[string]any{"name": "test", "age": float64(25)},
+		},
+		{
+			name:  "smart quotes",
+			input: `{"key": "value"}`,
+			want:  map[string]any{"key": "value"},
+		},
+		{
+			name:  "multiple trailing commas",
+			input: `{"a": "1", "b": "2",}`,
+			want:  map[string]any{"a": "1", "b": "2"},
+		},
+		{
+			name:  "markdown fenced",
+			input: "```json\n{key: 'value'}\n```",
+			want:  map[string]any{"key": "value"},
+		},
+		{
+			name:  "complex mixed issues",
+			input: `{name: 'John', age: 30, active: true,}`,
+			want:  map[string]any{"name": "John", "age": float64(30), "active": true},
+		},
+		{
+			name:  "nested object with issues",
+			input: `{user: {name: 'Alice', id: 1}, status: 'active',}`,
+			want: map[string]any{
+				"user":   map[string]any{"name": "Alice", "id": float64(1)},
+				"status": "active",
+			},
+		},
+		{
+			name:  "already valid JSON",
+			input: `{"key": "value", "num": 42}`,
+			want:  map[string]any{"key": "value", "num": float64(42)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repaired := RepairJSON(tt.input)
+
+			// Parse the repaired JSON
+			var got map[string]any
+			err := json.Unmarshal([]byte(repaired), &got)
+			if err != nil {
+				t.Fatalf("RepairJSON() produced invalid JSON: %v\nRepaired: %s", err, repaired)
+			}
+
+			// Compare results
+			if !mapsEqual(got, tt.want) {
+				t.Errorf("RepairJSON() result mismatch\nGot:  %+v\nWant: %+v\nRepaired JSON: %s", got, tt.want, repaired)
+			}
+		})
+	}
+}
+
+func mapsEqual(a, b map[string]any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		bv, ok := b[k]
+		if !ok {
+			return false
+		}
+		// Handle nested maps
+		if av, ok := v.(map[string]any); ok {
+			if bv, ok := bv.(map[string]any); ok {
+				if !mapsEqual(av, bv) {
+					return false
+				}
+				continue
+			}
+			return false
+		}
+		if v != bv {
+			return false
+		}
+	}
+	return true
+}
+
 func BenchmarkExtractJSON(b *testing.B) {
 	inputs := []string{
 		`{"simple": "json"}`,
@@ -249,6 +356,22 @@ func BenchmarkExtractJSON(b *testing.B) {
 		b.Run(string(rune('A'+i)), func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				_, _ = ExtractJSON(input)
+			}
+		})
+	}
+}
+
+func BenchmarkRepairJSON(b *testing.B) {
+	inputs := []string{
+		`{'key': 'value'}`,
+		`{name: 'test', age: 30,}`,
+		`{"key": "value"}`,
+	}
+
+	for i, input := range inputs {
+		b.Run(string(rune('A'+i)), func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				_ = RepairJSON(input)
 			}
 		})
 	}

@@ -300,3 +300,79 @@ func TestReAct_FindTool(t *testing.T) {
 		t.Error("Should return nil for missing tool")
 	}
 }
+
+func TestReAct_StagnationDetection(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	callCount := 0
+	var capturedMessages []dsgo.Message
+	lm := &MockLM{
+		SupportsToolsVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			callCount++
+			capturedMessages = messages
+
+			switch callCount {
+			case 1:
+				// First call: make a tool call
+				return &dsgo.GenerateResult{
+					Content: "Let me search",
+					ToolCalls: []dsgo.ToolCall{
+						{ID: "1", Name: "search", Arguments: map[string]interface{}{"query": "test"}},
+					},
+				}, nil
+			case 2:
+				// Second call: make same tool call (stagnation)
+				return &dsgo.GenerateResult{
+					Content: "Let me search again",
+					ToolCalls: []dsgo.ToolCall{
+						{ID: "2", Name: "search", Arguments: map[string]interface{}{"query": "test"}},
+					},
+				}, nil
+			default:
+				// After stagnation message: provide final answer
+				return &dsgo.GenerateResult{
+					Content: `{"answer": "forced final answer"}`,
+				}, nil
+			}
+		},
+	}
+
+	searchTool := dsgo.NewTool("search", "Search for info", func(ctx context.Context, args map[string]any) (any, error) {
+		return "same result", nil
+	})
+
+	react := NewReAct(sig, lm, []dsgo.Tool{*searchTool}).WithMaxIterations(10)
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	// Verify that the final answer was forced after stagnation
+	if outputs.Outputs["answer"] != "forced final answer" {
+		t.Errorf("Expected forced final answer after stagnation, got %v", outputs.Outputs["answer"])
+	}
+
+	// Verify that a stagnation prevention message was injected
+	stagnationMessageFound := false
+	for _, msg := range capturedMessages {
+		if msg.Role == "user" && contains(msg.Content, "same observation twice") {
+			stagnationMessageFound = true
+			break
+		}
+	}
+
+	if !stagnationMessageFound {
+		t.Error("Expected stagnation prevention message to be injected")
+	}
+
+	// Verify the model was called at least 3 times (2 tool calls + 1 final answer after stagnation)
+	if callCount < 3 {
+		t.Errorf("Expected at least 3 LM calls (stagnation + recovery), got %d", callCount)
+	}
+}

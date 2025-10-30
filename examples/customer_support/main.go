@@ -8,14 +8,10 @@ import (
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
+	shared.LoadEnv()
 
 	fmt.Println("=== Customer Support Response Generator ===")
 	fmt.Println("Demonstrates: Refine + BestOfN modules")
@@ -34,7 +30,7 @@ func main() {
 
 func refineResponseExample() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4")
+	lm := shared.GetLM(shared.GetModel())
 
 	sig := dsgo.NewSignature("Generate a professional customer support response").
 		AddInput("customer_message", dsgo.FieldTypeString, "The customer's message").
@@ -66,7 +62,7 @@ func refineResponseExample() {
 
 func bestOfNResponseExample() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4")
+	lm := shared.GetLM(shared.GetModel())
 
 	sig := dsgo.NewSignature("Generate a customer support response").
 		AddInput("customer_message", dsgo.FieldTypeString, "The customer's message").
@@ -118,7 +114,7 @@ func bestOfNResponseExample() {
 
 func combinedWorkflow() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Step 1: Classify the issue
 	classifySig := dsgo.NewSignature("Classify the customer issue").

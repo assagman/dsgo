@@ -30,8 +30,10 @@ graph LR
 - Complete: `make all` (clean, check, test, eof-check)
 
 ## Current Test Coverage
-- **Core**: 61.9% (target: 75%+)
+- **Total**: 79.4% ✅
+- **Core**: 61.9%
 - **Module**: 84.2% ✅
+- **jsonutil**: 100% ✅ (includes RepairJSON tests)
 - **OpenAI Provider**: 94.4% ✅
 - **OpenRouter Provider**: 94.7% ✅
 
@@ -40,13 +42,14 @@ graph LR
 Go port of DSPy (Declarative Self-improving Language Programs).
 
 ### Core Files (Root Directory)
-- `signature.go` - I/O field definitions (Field, Signature types)
+- `signature.go` - I/O field definitions (Field, Signature types, ValidationDiagnostics)
 - `lm.go` - LM interface (Message, GenerateOptions, GenerateResult)
 - `module.go` - Base Module interface
-- `prediction.go` - Prediction wrapper with metadata
+- `prediction.go` - Prediction wrapper with metadata + parse diagnostics
 - `history.go` - Conversation history management
 - `example.go` - Few-shot learning support
 - `tool.go` - Tool/function calling support
+- `adapter.go` - Adapter interface + implementations (JSON, Chat, TwoStep, Fallback)
 
 ### Module Implementations (`module/`)
 - `predict.go` - Basic prediction
@@ -56,6 +59,11 @@ Go port of DSPy (Declarative Self-improving Language Programs).
 - `best_of_n.go` - Multiple sampling
 - `program_of_thought.go` - Code generation
 - `program.go` - Module composition
+
+### Internal Utilities (`internal/`)
+- `jsonutil/` - JSON extraction and repair (RepairJSON, ExtractJSON)
+  - Handles malformed JSON from models
+  - 100% test coverage
 
 ### Providers (`providers/`)
 - `openai/` - OpenAI LM provider
@@ -76,6 +84,7 @@ Go port of DSPy (Declarative Self-improving Language Programs).
 
 ## Development Workflow
 - Always run `go build ./...` and `go test ./...` during development
+- All new developments requires unit test update.
 - Run `make check` locally (fmt, vet, build); CI handles lint separately
 - Use `go test -race` when working with concurrency (e.g., BestOfN parallel)
 - Pre-commit hook automatically runs `make all` (tests + checks) when installed via `make install-hooks`
@@ -94,6 +103,31 @@ Go port of DSPy (Declarative Self-improving Language Programs).
     execute examples from top-level dir since the .env loading is designed in that way.
 - run `make all` when you're done
 
+
+## Production-Grade Robustness Features
+
+✅ **Automatic JSON Repair** - Models often emit malformed JSON; DSGo fixes it automatically:
+- Single quotes → double quotes: `{'key': 'val'}` → `{"key": "val"}`
+- Unquoted keys: `{key: "val"}` → `{"key": "val"}`
+- Trailing commas: `{"a": 1,}` → `{"a": 1}`
+- Smart quotes normalization
+- Tracked with `__json_repair` metadata
+
+✅ **Partial Output Validation** - For training/optimization:
+- `ValidateOutputsPartial()` returns diagnostics instead of failing
+- Missing fields set to `nil` with detailed tracking
+- `ParseDiagnostics` attached to predictions for telemetry
+
+✅ **Class/Enum Normalization** - Flexible matching:
+- Case-insensitive: `"POSITIVE"` → `"positive"`
+- Configurable aliases: `"pos"` → `"positive"`
+- Applied automatically in validation
+
+✅ **Smart Numeric Extraction** - From text descriptions:
+- `"High (95%)"` → `95`
+- `"Medium"` → `0.7` (qualitative mapping)
+
+See [ROBUSTNESS_ENHANCEMENTS.md](ROBUSTNESS_ENHANCEMENTS.md) and [FRAMEWORK_COMPARISON.md](FRAMEWORK_COMPARISON.md) for details.
 
 ## Known Issues & Warnings
 

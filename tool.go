@@ -3,6 +3,7 @@ package dsgo
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // ToolParameter represents a parameter for a tool
@@ -93,10 +94,61 @@ func (t *Tool) Validate(args map[string]any) error {
 
 // Execute executes the tool with given arguments
 func (t *Tool) Execute(ctx context.Context, args map[string]any) (any, error) {
+	// Normalize arguments (convert arrays to strings for string parameters)
+	normalizedArgs := t.normalizeArguments(args)
+
 	// Validate arguments before execution
-	if err := t.Validate(args); err != nil {
+	if err := t.Validate(normalizedArgs); err != nil {
 		return nil, fmt.Errorf("argument validation failed: %w", err)
 	}
 
-	return t.Function(ctx, args)
+	return t.Function(ctx, normalizedArgs)
+}
+
+// normalizeArguments converts array arguments to strings when parameter type is string
+func (t *Tool) normalizeArguments(args map[string]any) map[string]any {
+	normalized := make(map[string]any)
+
+	for key, value := range args {
+		// Find the parameter definition
+		var paramType string
+		for _, param := range t.Parameters {
+			if param.Name == key {
+				paramType = param.Type
+				break
+			}
+		}
+
+		// If parameter is string type and value is array, convert to comma-separated string
+		if paramType == "string" {
+			switch v := value.(type) {
+			case []interface{}:
+				parts := make([]string, len(v))
+				for i, val := range v {
+					parts[i] = fmt.Sprintf("%v", val)
+				}
+				normalized[key] = strings.Join(parts, ",")
+			case []string:
+				normalized[key] = strings.Join(v, ",")
+			case []int:
+				parts := make([]string, len(v))
+				for i, val := range v {
+					parts[i] = fmt.Sprintf("%d", val)
+				}
+				normalized[key] = strings.Join(parts, ",")
+			case []float64:
+				parts := make([]string, len(v))
+				for i, val := range v {
+					parts[i] = fmt.Sprintf("%v", val)
+				}
+				normalized[key] = strings.Join(parts, ",")
+			default:
+				normalized[key] = value
+			}
+		} else {
+			normalized[key] = value
+		}
+	}
+
+	return normalized
 }

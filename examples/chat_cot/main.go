@@ -8,14 +8,10 @@ import (
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
+	shared.LoadEnv()
 
 	fmt.Println("=== Chain of Thought with Multi-Turn Reasoning ===")
 	fmt.Println("Demonstrates: ChainOfThought module with conversation context")
@@ -26,7 +22,7 @@ func main() {
 
 func cotChatDemo() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	history := dsgo.NewHistoryWithLimit(20)
 	history.AddSystemMessage("You are a math tutor helping a student solve a complex problem step by step. Use previous conversation context.")

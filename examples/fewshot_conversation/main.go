@@ -8,14 +8,10 @@ import (
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
+	shared.LoadEnv()
 
 	fmt.Println("=== DSGo Phase 1: Primitives Demo ===")
 	fmt.Println("Demonstrates: History, Prediction, and Example (few-shot)")
@@ -36,7 +32,7 @@ func main() {
 
 func conversationDemo() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Create conversation history
 	history := dsgo.NewHistoryWithLimit(10) // Keep last 10 messages
@@ -90,7 +86,7 @@ func conversationDemo() {
 
 func predictionDemo() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	sig := dsgo.NewSignature("Classify sentiment with confidence").
 		AddInput("text", dsgo.FieldTypeString, "Text to analyze").
@@ -131,7 +127,7 @@ func predictionDemo() {
 
 func fewShotDemo() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Create signature for movie genre classification
 	sig := dsgo.NewSignature("Classify movie genre from plot description").

@@ -8,14 +8,10 @@ import (
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
+	shared.LoadEnv()
 
 	fmt.Println("=== Math Solver with Program of Thought ===")
 	fmt.Println("Demonstrates: ProgramOfThought module for mathematical reasoning")
@@ -36,7 +32,7 @@ func main() {
 
 func simpleCalculation() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4")
+	lm := shared.GetLM(shared.GetModel())
 
 	sig := dsgo.NewSignature("Solve the mathematical problem using Python code").
 		AddInput("problem", dsgo.FieldTypeString, "The problem to solve").
@@ -67,7 +63,7 @@ func simpleCalculation() {
 
 func complexProblem() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	sig := dsgo.NewSignature("Solve complex math word problem with code").
 		AddInput("problem", dsgo.FieldTypeString, "The word problem").
@@ -95,7 +91,7 @@ func complexProblem() {
 
 func statisticalAnalysis() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	sig := dsgo.NewSignature("Perform statistical analysis using Python").
 		AddInput("data_description", dsgo.FieldTypeString, "Description of the data").

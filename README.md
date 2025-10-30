@@ -25,9 +25,9 @@
 ✨ Features:
   • Type-Safe Signatures (8 field types)
   • Composable Modules (Predict, ChainOfThought, ReAct)
+  • Production-Grade Robustness (JSON repair, partial outputs)
   • Tool/Function Calling
   • OpenAI and Openrouter support
-  • Experiment-Ready
 
 📚 Documentation:
   • QUICKSTART.md  - Get started in 30 seconds
@@ -42,10 +42,15 @@ DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordn
 
 - ✅ **Signatures**: Define structured inputs and outputs for LM calls
 - ✅ **Type Safety**: Strong typing with validation for inputs and outputs
+- ✅ **Production-Grade Robustness** ([details](ROBUSTNESS_ENHANCEMENTS.md)):
+  - **JSON Repair**: Automatic fixing of malformed JSON (`{key: 'value'}` → `{"key": "value"}`)
+  - **Partial Outputs**: Validation diagnostics for training/optimization loops
+  - **Class Normalization**: Case-insensitive + alias matching (`"POSITIVE"` → `"positive"`)
+  - **Smart Extraction**: Numeric values from text (`"High (95%)"` → `95`)
 - ✅ **Robust Adapters**: Multiple parsing strategies with automatic fallback
-  - `JSONAdapter`: Structured JSON outputs with schema validation
-  - `ChatAdapter`: Field marker format `[[ ## field ## ]]` for reliable parsing
-  - `TwoStepAdapter`: Two-stage approach for reasoning models (o1/o3/gpt-5)
+  - `JSONAdapter`: Structured JSON with repair + schema validation
+  - `ChatAdapter`: Field marker format `[[ ## field ## ]]` with heuristics
+  - `TwoStepAdapter`: Two-stage for reasoning models (o1/o3/gpt-5)
   - `FallbackAdapter`: Automatic retry chain (Chat → JSON) with >95% parse success
 - ✅ **Modules**: Composable building blocks for LM programs
   - `Predict`: Basic prediction module
@@ -58,7 +63,7 @@ DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordn
 - ✅ **LM Abstraction**: Easy integration with different language models
 - ✅ **Tool Support**: Define and use tools in ReAct agents
 - ✅ **Structured Outputs**: JSON-based structured responses with validation
-- ✅ **Observability**: Adapter metrics tracking (parse success, fallback usage)
+- ✅ **Observability**: Adapter metrics tracking (parse success, fallback usage, repair usage)
 
 ## Quick Start
 

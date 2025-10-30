@@ -8,14 +8,10 @@ import (
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
+	shared.LoadEnv()
 
 	// Example 1: Basic Predict
 	fmt.Println("=== Example 1: Basic Predict ===")
@@ -33,7 +29,7 @@ func basicPredict() {
 		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score between 0 and 1")
 
 	// Create LM (auto-detects provider based on API keys)
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Create Predict module
 	predict := module.NewPredict(sig, lm)
@@ -62,7 +58,7 @@ func chainOfThought() {
 		AddOutput("explanation", dsgo.FieldTypeString, "Step-by-step explanation")
 
 	// Create LM
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Create ChainOfThought module
 	cot := module.NewChainOfThought(sig, lm)

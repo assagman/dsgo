@@ -109,6 +109,9 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 	// Add new messages from adapter
 	messages = append(messages, newMessages...)
 
+	// Track observations for stagnation detection
+	var lastObservation string
+
 	// ReAct loop: Thought -> Action -> Observation
 	for i := 0; i < r.MaxIterations; i++ {
 		if r.Verbose {
@@ -207,9 +210,47 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 		}
 
 		// Execute tool calls and add observations
+		var currentObservation string
 		for _, toolCall := range result.ToolCalls {
 			if r.Verbose {
 				fmt.Printf("Action: %s(%v)\n", toolCall.Name, toolCall.Arguments)
+			}
+
+			// Check if this is a "finish" tool call - treat as final answer
+			if strings.ToLower(toolCall.Name) == "finish" {
+				if r.Verbose {
+					fmt.Println("Finish tool called - extracting final answer")
+				}
+
+				// Extract outputs from finish tool arguments
+				outputs := make(map[string]any)
+				for k, v := range toolCall.Arguments {
+					outputs[k] = v
+				}
+
+				// Validate outputs match signature
+				if err := r.Signature.ValidateOutputs(outputs); err != nil {
+					// If finish tool args don't match signature, continue and let model try again
+					observation := fmt.Sprintf("Error: finish tool arguments don't match required outputs: %v", err)
+					messages = append(messages, dsgo.Message{
+						Role:    "tool",
+						Content: observation,
+						ToolID:  toolCall.ID,
+					})
+					if r.Verbose {
+						fmt.Printf("Observation: %s\n", observation)
+					}
+					currentObservation = observation
+					continue
+				}
+
+				// Build prediction and return
+				prediction := dsgo.NewPrediction(outputs).
+					WithUsage(result.Usage).
+					WithModuleName("ReAct").
+					WithInputs(inputs)
+
+				return prediction, nil
 			}
 
 			tool := r.findTool(toolCall.Name)
@@ -223,6 +264,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 				if r.Verbose {
 					fmt.Printf("Observation: %s\n", observation)
 				}
+				currentObservation = observation
 				continue
 			}
 
@@ -237,6 +279,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 				if r.Verbose {
 					fmt.Printf("Observation: %s\n", observation)
 				}
+				currentObservation = observation
 				continue
 			}
 
@@ -249,7 +292,20 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 			if r.Verbose {
 				fmt.Printf("Observation: %s\n", observation)
 			}
+			currentObservation = observation
 		}
+
+		// Detect stagnation: if same observation appears twice in a row, force final answer
+		if currentObservation != "" && currentObservation == lastObservation {
+			if r.Verbose {
+				fmt.Println("\n⚠️  Stagnation detected - forcing final answer")
+			}
+			messages = append(messages, dsgo.Message{
+				Role:    "user",
+				Content: "You've received the same observation twice. Please provide your final answer now without making any more tool calls.",
+			})
+		}
+		lastObservation = currentObservation
 	}
 
 	return nil, fmt.Errorf("exceeded maximum iterations (%d) without reaching final answer", r.MaxIterations)

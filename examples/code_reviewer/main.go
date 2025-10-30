@@ -9,14 +9,10 @@ import (
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
+	shared.LoadEnv()
 
 	fmt.Println("=== AI Code Reviewer ===")
 	fmt.Println("Demonstrates: Program pipeline for multi-stage code review")
@@ -33,7 +29,7 @@ func main() {
 
 func codeAnalysisPipeline() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Step 1: Analyze code structure
 	structureSig := dsgo.NewSignature("Analyze code structure and complexity").
@@ -105,7 +101,7 @@ func processData(data []int) []int {
 
 func comprehensiveReview() {
 	ctx := context.Background()
-	lm := shared.GetLM("gpt-4o-mini")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Multi-aspect review signature
 	reviewSig := dsgo.NewSignature("Perform comprehensive code review").

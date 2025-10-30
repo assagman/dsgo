@@ -1,8 +1,10 @@
-.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks
+.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks test-matrix
 
 PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts)
 
-all: clean check check-eof test test-examples
+all: clean check check-eof test
+
+all-with-examples: clean check check-eof test test-examples
 
 test:
 	@echo "Running comprehensive tests (race detector + coverage)..."
@@ -14,8 +16,12 @@ test-examples:
 	@echo "\nRunning example tests..."
 	@go run scripts/test_examples.go
 
+test-matrix:
+	@echo "Running comprehensive test matrix ❄︎"
+	@go run scripts/test_matrix.go
+
 build:
-	go build ./...
+	go build $(PACKAGES)
 
 fmt:
 	@FMT_FILES=$$(gofmt -s -l . 2>/dev/null | grep -v 'examples/' || true); \
@@ -47,6 +53,7 @@ check-eof:
 
 clean:
 	rm -f coverage.txt coverage.out
+	rm -rf test_matrix_logs
 	go clean -cache -testcache
 
 install-hooks:

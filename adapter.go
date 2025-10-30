@@ -58,6 +58,8 @@ func coerceOutputs(sig *Signature, outputs map[string]any, allowArrayToString bo
 		case FieldTypeInt:
 			// string → int, float64 → int
 			if s, ok := value.(string); ok {
+				// Extract numeric value first (handles "High (95%)" → "95")
+				s = extractNumericValue(s)
 				if i, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
 					result[key] = i
 					continue
@@ -71,6 +73,8 @@ func coerceOutputs(sig *Signature, outputs map[string]any, allowArrayToString bo
 		case FieldTypeFloat:
 			// string → float64, int → float64
 			if s, ok := value.(string); ok {
+				// Extract numeric value first (handles "High (0.95)" → "0.95")
+				s = extractNumericValue(s)
 				trimmed := strings.TrimSpace(s)
 				if f, err := strconv.ParseFloat(trimmed, 64); err == nil {
 					result[key] = f
@@ -234,7 +238,13 @@ func (a *JSONAdapter) Parse(sig *Signature, content string) (map[string]any, err
 
 	var outputs map[string]any
 	if err := json.Unmarshal([]byte(jsonStr), &outputs); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, jsonStr)
+		// Try to repair the JSON before failing
+		repairedJSON := jsonutil.RepairJSON(jsonStr)
+		if err := json.Unmarshal([]byte(repairedJSON), &outputs); err != nil {
+			return nil, fmt.Errorf("failed to parse JSON output: %w (content: %s)", err, jsonStr)
+		}
+		// Track that repair was used
+		outputs["__json_repair"] = true
 	}
 
 	// Coerce types to match signature expectations
@@ -435,9 +445,15 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 		}
 
 		if startIdx == -1 {
-			// Field not found - check if optional
+			// Field not found with markers - try heuristic extraction for required fields
 			field := sig.GetOutputField(fieldName)
 			if field != nil && !field.Optional {
+				// Attempt heuristic extraction before failing
+				extracted := a.heuristicExtract(content, fieldName, field.Type)
+				if extracted != "" {
+					outputs[fieldName] = extracted
+					continue
+				}
 				return nil, fmt.Errorf("required field '%s' not found in response (expected marker: [[ ## %s ## ]])", fieldName, fieldName)
 			}
 			continue
@@ -493,6 +509,132 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 	outputs = a.coerceTypes(sig, outputs)
 
 	return outputs, nil
+}
+
+// heuristicExtract attempts to extract a field value using simple heuristics when markers aren't found
+func (a *ChatAdapter) heuristicExtract(content string, fieldName string, fieldType FieldType) string {
+	// Try common field name synonyms
+	synonyms := map[string][]string{
+		"answer":      {"answer", "final answer", "final_answer", "result", "output", "solution", "conclusion", "response"},
+		"title":       {"title", "heading", "name"},
+		"summary":     {"summary", "synopsis", "overview"},
+		"explanation": {"explanation", "reasoning", "rationale"},
+		"sources":     {"sources", "source", "references", "citations"},
+	}
+
+	searchTerms := []string{fieldName}
+	if syns, ok := synonyms[strings.ToLower(fieldName)]; ok {
+		searchTerms = append(searchTerms, syns...)
+	}
+
+	// Try to find field name followed by colon (common in free-form output)
+	for _, term := range searchTerms {
+		patterns := []string{
+			term + ":",
+			strings.Title(term) + ":",
+			strings.ToUpper(term) + ":",
+		}
+
+		for _, pattern := range patterns {
+			idx := strings.Index(strings.ToLower(content), strings.ToLower(pattern))
+			if idx != -1 {
+				// Found the pattern, extract value after it
+				valueStart := idx + len(pattern)
+				if valueStart >= len(content) {
+					continue
+				}
+
+				// Extract until newline or end
+				remaining := content[valueStart:]
+				lines := strings.SplitN(remaining, "\n", 2)
+				value := strings.TrimSpace(lines[0])
+
+				if value != "" {
+					return value
+				}
+			}
+		}
+	}
+
+	// ReAct-style final answer detection (only when content has ReAct markers)
+	hasReActStructure := strings.Contains(strings.ToLower(content), "thought:") ||
+		strings.Contains(strings.ToLower(content), "action:") ||
+		strings.Contains(strings.ToLower(content), "observation:")
+
+	if hasReActStructure && (strings.ToLower(fieldName) == "answer" || strings.ToLower(fieldName) == "result") {
+		// Look for "Action: None (Final Answer)" or similar patterns
+		finalMarkers := []string{
+			"action: none (final answer)",
+			"action: none",
+			"final answer:",
+		}
+
+		for _, marker := range finalMarkers {
+			idx := strings.Index(strings.ToLower(content), marker)
+			if idx != -1 {
+				// Extract everything after this marker
+				afterMarker := content[idx+len(marker):]
+				lines := strings.Split(afterMarker, "\n")
+
+				// Collect non-empty lines after the marker, skipping ReAct scaffolding
+				var extracted strings.Builder
+				for _, line := range lines {
+					trimmed := strings.TrimSpace(line)
+					// Skip empty lines and ReAct structural elements
+					if trimmed == "" ||
+						strings.HasPrefix(strings.ToLower(trimmed), "thought:") ||
+						strings.HasPrefix(strings.ToLower(trimmed), "action:") ||
+						strings.HasPrefix(strings.ToLower(trimmed), "observation:") ||
+						strings.Contains(trimmed, "[[ ##") {
+						continue
+					}
+					if extracted.Len() > 0 {
+						extracted.WriteString(" ")
+					}
+					extracted.WriteString(trimmed)
+				}
+
+				result := strings.TrimSpace(extracted.String())
+				if result != "" {
+					return result
+				}
+			}
+		}
+
+		// Fallback: use last substantial paragraph for answer fields (only in ReAct context)
+		paragraphs := strings.Split(content, "\n\n")
+		for i := len(paragraphs) - 1; i >= 0; i-- {
+			p := strings.TrimSpace(paragraphs[i])
+			// Skip empty, markers, or ReAct scaffolding
+			if p != "" &&
+				!strings.Contains(p, "[[ ##") &&
+				!strings.HasPrefix(strings.ToLower(p), "thought:") &&
+				!strings.HasPrefix(strings.ToLower(p), "action:") &&
+				len(p) > 20 {
+				return p
+			}
+		}
+	}
+
+	// For "story" field specifically, if content is long and no other fields found,
+	// assume the entire content is the story
+	if strings.ToLower(fieldName) == "story" && len(content) > 100 {
+		return strings.TrimSpace(content)
+	}
+
+	// For "title" field, try first non-empty line
+	if strings.ToLower(fieldName) == "title" {
+		lines := strings.Split(content, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			// Skip empty lines and lines that look like markers
+			if line != "" && !strings.Contains(line, "##") && len(line) < 200 {
+				return line
+			}
+		}
+	}
+
+	return ""
 }
 
 // coerceTypes attempts to convert output values to expected types
