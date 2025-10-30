@@ -21,15 +21,14 @@ func main() {
 	shared.LoadEnv()
 
 	fmt.Println("=== LM Caching Example ===")
-	fmt.Println("Demonstrating cache hits, misses, and performance benefits\n")
+	fmt.Println("Demonstrating cache hits, misses, and performance benefits")
 
 	// Create LM with caching enabled
 	model := shared.GetModel()
 	var lm dsgo.LM
-	var cache dsgo.Cache
 
 	// Create cache
-	cache = dsgo.NewLMCache(100) // Cache up to 100 requests
+	cache := dsgo.NewLMCache(100) // Cache up to 100 requests
 
 	// Create LM based on model prefix
 	if strings.HasPrefix(model, "openrouter/") {

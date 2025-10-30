@@ -53,7 +53,7 @@ func TestWithExponentialBackoff_Success(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func TestWithExponentialBackoff_RetryOn429(t *testing.T) {
@@ -84,7 +84,7 @@ func TestWithExponentialBackoff_RetryOn429(t *testing.T) {
 	if callCount != 3 {
 		t.Errorf("Expected 3 calls, got %d", callCount)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func TestWithExponentialBackoff_NetworkError(t *testing.T) {
@@ -189,7 +189,7 @@ func TestWithExponentialBackoff_Non200Success(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("Expected status 201, got %d", resp.StatusCode)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func TestCalculateBackoff(t *testing.T) {

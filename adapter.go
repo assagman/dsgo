@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/assagman/dsgo/internal/jsonutil"
 )
@@ -531,7 +532,7 @@ func (a *ChatAdapter) heuristicExtract(content string, fieldName string, fieldTy
 	for _, term := range searchTerms {
 		patterns := []string{
 			term + ":",
-			strings.Title(term) + ":",
+			toTitle(term) + ":",
 			strings.ToUpper(term) + ":",
 		}
 
@@ -944,4 +945,14 @@ func (a *TwoStepAdapter) FormatHistory(history *History) []Message {
 		return []Message{}
 	}
 	return history.Get()
+}
+
+// toTitle converts the first rune of a string to uppercase (replacement for deprecated strings.Title)
+func toTitle(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
 }

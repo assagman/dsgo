@@ -23,7 +23,7 @@ func main() {
 	shared.LoadEnv()
 
 	fmt.Println("=== Program of Thought Example ===")
-	fmt.Println("Solving problems with code generation and execution\n")
+	fmt.Println("Solving problems with code generation and execution")
 
 	lm := shared.GetLM(shared.GetModel())
 

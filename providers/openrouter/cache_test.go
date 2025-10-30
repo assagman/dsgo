@@ -15,7 +15,7 @@ func TestOpenRouter_WithCache(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"id": "test",
 			"object": "chat.completion",
 			"created": 1234567890,
@@ -86,7 +86,7 @@ func TestOpenRouter_WithoutCache(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"id": "test",
 			"choices": [{"message": {"role": "assistant", "content": "Hi"}, "finish_reason": "stop"}],
 			"usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}
@@ -126,12 +126,12 @@ func TestOpenRouter_RetryOn429(t *testing.T) {
 		// Fail with 429 on first two attempts, succeed on third
 		if callCount <= 2 {
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
+			_, _ = w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"id": "test",
 			"choices": [{"message": {"role": "assistant", "content": "Success after retry"}, "finish_reason": "stop"}],
 			"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
@@ -169,15 +169,15 @@ func TestOpenRouter_RetryOn503(t *testing.T) {
 		// Fail with 503 on first attempt, succeed on second
 		if callCount == 1 {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte(`{"error": {"message": "Service unavailable"}}`))
+			_, _ = w.Write([]byte(`{"error": {"message": "Service unavailable"}}`))
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
-			"id": "test",
-			"choices": [{"message": {"role": "assistant", "content": "Recovered from 503"}, "finish_reason": "stop"}],
-			"usage": {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12}
+		_, _ = w.Write([]byte(`{
+		"id": "test",
+		"choices": [{"message": {"role": "assistant", "content": "Recovered from 503"}, "finish_reason": "stop"}],
+		"usage": {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12}
 		}`))
 	}))
 	defer server.Close()
@@ -209,7 +209,7 @@ func TestOpenRouter_RetryExhaustion(t *testing.T) {
 		// Always fail with 429
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
+		_, _ = w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
 	}))
 	defer server.Close()
 
@@ -239,17 +239,17 @@ func TestOpenRouter_RetryMixed500And429(t *testing.T) {
 		// Mix of 500 and 429 errors
 		if callCount == 1 {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error": {"message": "Internal server error"}}`))
+			_, _ = w.Write([]byte(`{"error": {"message": "Internal server error"}}`))
 			return
 		}
 		if callCount == 2 {
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
+			_, _ = w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"id": "test",
 			"choices": [{"message": {"role": "assistant", "content": "Success"}, "finish_reason": "stop"}],
 			"usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}

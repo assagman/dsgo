@@ -14,7 +14,7 @@ import (
 func main() {
 	shared.LoadEnv()
 
-	fmt.Println("=== Logging & Tracing Example ===\n")
+	fmt.Println("=== Logging & Tracing Example ===")
 
 	// Example 1: Basic logging with automatic Request ID
 	fmt.Println("--- Example 1: Automatic Request ID ---")

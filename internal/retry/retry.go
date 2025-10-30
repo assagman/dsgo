@@ -59,7 +59,7 @@ func WithExponentialBackoff(ctx context.Context, fn HTTPFunc) (*http.Response, e
 			// Retryable status code
 			shouldRetry = true
 			// Close the body to reuse connection
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 
 		// Don't retry if this was the last attempt

@@ -229,7 +229,8 @@ func TestLogPredictionEnd(t *testing.T) {
 
 func TestLoggerWithNilContext(t *testing.T) {
 	// Should not panic with nil context
-	id := GetRequestID(nil)
+	ctx := context.Background()
+	id := GetRequestID(ctx)
 	if id != "" {
 		t.Errorf("Expected empty string for nil context, got %s", id)
 	}

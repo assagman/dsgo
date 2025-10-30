@@ -25,7 +25,7 @@ func main() {
 	shared.LoadEnv()
 
 	fmt.Println("=== BestOfN Parallel Execution Example ===")
-	fmt.Println("Generate multiple solutions and select the best one\n")
+	fmt.Println("Generate multiple solutions and select the best one")
 
 	lm := shared.GetLM(shared.GetModel())
 

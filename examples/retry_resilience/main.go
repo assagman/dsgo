@@ -23,7 +23,7 @@ func main() {
 	shared.LoadEnv()
 
 	fmt.Println("=== Retry & Resilience Example ===")
-	fmt.Println("Demonstrating automatic retry with exponential backoff\n")
+	fmt.Println("Demonstrating automatic retry with exponential backoff")
 
 	// Get LM (retry logic is built-in)
 	lm := shared.GetLM(shared.GetModel())
@@ -42,7 +42,7 @@ func main() {
 	fmt.Println("✓ Automatic retry on network errors")
 	fmt.Println("✓ Exponential backoff with jitter (prevents thundering herd)")
 	fmt.Println("✓ Maximum 3 retries (4 total attempts)")
-	fmt.Println("✓ Context cancellation support\n")
+	fmt.Println("✓ Context cancellation support")
 
 	// Example 1: Normal request (demonstrates retry is transparent)
 	fmt.Println("--- Example 1: Normal Request ---")
@@ -71,11 +71,11 @@ func main() {
 	fmt.Println("Attempt 3: Retry...")
 	fmt.Println("  ↓ If fails, wait 4s (with jitter)")
 	fmt.Println("Attempt 4: Final retry...")
-	fmt.Println("  ↓ If fails, return error\n")
+	fmt.Println("  ↓ If fails, return error")
 
 	// Example 3: Multiple requests (retry is automatic)
 	fmt.Println("--- Example 3: Multiple Requests ---")
-	fmt.Println("Making several requests (retries are automatic)...\n")
+	fmt.Println("Making several requests (retries are automatic)...")
 
 	questions := []string{
 		"What is 2 + 2?",
@@ -101,7 +101,7 @@ func main() {
 
 	// Example 4: ChainOfThought with retry
 	fmt.Println("--- Example 4: Chain of Thought with Retry ---")
-	fmt.Println("Complex reasoning also benefits from retry resilience...\n")
+	fmt.Println("Complex reasoning also benefits from retry resilience...")
 
 	cotSig := dsgo.NewSignature("Solve the given math word problem").
 		AddInput("problem", dsgo.FieldTypeString, "Math problem to solve").

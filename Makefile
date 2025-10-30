@@ -2,7 +2,7 @@
 
 PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts)
 
-all: clean check check-eof test
+all: clean check check-eof check-lint test
 
 all-with-examples: clean check check-eof test test-matrix-quick
 
@@ -60,7 +60,7 @@ check-eof:
 
 clean:
 	rm -f coverage.txt coverage.out
-	rm -rf test_matrix_logs
+	rm -rf test_matrix_logs test_examples_logs
 	go clean -cache -testcache
 
 install-hooks:
