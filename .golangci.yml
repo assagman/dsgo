@@ -5,18 +5,13 @@ linters:
     - errcheck
     - staticcheck
     - unused
-    - gosimple
     - govet
     - ineffassign
-
-linters-settings:
-  errcheck:
-    check-blank: false
-    check-type-assertions: false
+  settings:
+    errcheck:
+      check-blank: false
+      check-type-assertions: false
 
 run:
   timeout: 5m
   tests: true
-
-issues:
-  exclude-use-default: false

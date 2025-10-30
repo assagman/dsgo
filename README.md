@@ -616,6 +616,34 @@ optsCopy := opts.Copy()  // Deep copy including slices
 
 Contributions are welcome! This is an early-stage implementation.
 
+### Development Setup
+
+Install golangci-lint v2.6.0 (required for linting):
+```bash
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.6.0
+```
+
+Note: `go install` only installs v1.x; v2.x requires binary installation.
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage
+make test-cover
+
+# Run tests with race detector
+make test-race
+
+# Run checks (fmt, vet, build)
+make check
+
+# Run checks and lint (requires golangci-lint v2.6.0)
+make check-lint
+```
+
 ## License
 
 MIT License

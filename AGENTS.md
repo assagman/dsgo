@@ -76,13 +76,18 @@ Go port of DSPy (Declarative Self-improving Language Programs).
 - Interfaces: Small, composable (Module, LM)
 - Tests: Table-driven with subtests (`t.Run(tt.name, ...)`)
 - No external deps except godotenv for examples (use stdlib)
-- Linting: All code must pass `golangci-lint` (errcheck, staticcheck, unused, gosimple, govet, ineffassign)
+- Linting: All code must pass `golangci-lint` (errcheck, staticcheck, unused, govet, ineffassign)
 
 ## Development Workflow
 - Always run `go build ./...` and `go test ./...` during development
 - Run `make check` locally (fmt, vet, build); CI handles lint separately
 - Use `go test -race` when working with concurrency (e.g., BestOfN parallel)
 - Pre-commit hook automatically runs `make all` (tests + checks) when installed via `make install-hooks`
+- **Install golangci-lint v2.6.0** (required for linting):
+  ```bash
+  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.6.0
+  ```
+  Note: `go install` only installs v1.x; v2.x requires binary installation
 - No temporary UPPER_CASE.md files (SUMMARY.md, CHANGES.md, etc.) - update existing docs only
 - Keep responses concise
 - Ask user for feedback/choices at important checkpoints
