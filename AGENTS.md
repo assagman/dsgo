@@ -76,7 +76,7 @@ Go port of DSPy (Declarative Self-improving Language Programs).
 - Interfaces: Small, composable (Module, LM)
 - Tests: Table-driven with subtests (`t.Run(tt.name, ...)`)
 - No external deps except godotenv for examples (use stdlib)
-- Linting: All code must pass `golangci-lint` (errcheck, staticcheck, unused, gosimple, govet, ineffassign, typecheck)
+- Linting: All code must pass `golangci-lint` (errcheck, staticcheck, unused, gosimple, govet, ineffassign)
 
 ## Development Workflow
 - Always run `go build ./...` and `go test ./...` during development
