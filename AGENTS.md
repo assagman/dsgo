@@ -22,16 +22,12 @@ graph LR
 ```
 
 ## Testing Commands
-- All tests: `go test $(go list ./... | grep -v /examples/)`
+- **Everything**: `make test` (runs race detector + coverage + examples + summary)
 - Single test: `go test -run TestName`
-- With coverage: `go test -v -cover $(go list ./... | grep -v /examples/)`
-- With race detector: `go test -race $(go list ./... | grep -v /examples/)`
-- Build check: `go build ./...`
+- Run example: `go run examples/sentiment/main.go`
 - Lint: `make lint` (requires golangci-lint)
 - Full check: `make check` (fmt, vet, build)
-- Check + lint: `make check-lint` (requires golangci-lint)
-- Run example: `go run examples/sentiment/main.go`
-- Test all examples: `go run scripts/test_examples.go` (runs all 15 examples concurrently with 3-min timeout)
+- Complete: `make all` (clean, check, test, eof-check)
 
 ## Current Test Coverage
 - **Core**: 61.9% (target: 75%+)

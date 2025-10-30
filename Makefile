@@ -1,17 +1,18 @@
-.PHONY: test test-cover test-race build fmt vet lint check check-eof verify clean all install-hooks
+.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks
 
-PACKAGES := $$(go list ./... | grep -v /examples/)
+PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts)
 
-all: clean check test-race check-eof
+all: clean check test check-eof
 
 test:
-	go test $(PACKAGES)
+	@echo "Running comprehensive tests (race detector + coverage)..."
+	@go test -v -race -coverpkg=./... -coverprofile=coverage.txt $(PACKAGES)
+	@echo "\nTest coverage summary:"
+	@go tool cover -func=coverage.txt | grep total
 
-test-cover:
-	go test -v -cover $(PACKAGES)
-
-test-race:
-	go test -v -race -coverpkg=./... -coverprofile=coverage.out $(PACKAGES)
+test-examples:
+	@echo "\nRunning example tests..."
+	@go run scripts/test_examples.go
 
 build:
 	go build ./...
@@ -45,7 +46,7 @@ check-eof:
 	./scripts/check-eof.sh
 
 clean:
-	rm -f coverage.out
+	rm -f coverage.txt coverage.out
 	go clean -cache -testcache
 
 install-hooks:
