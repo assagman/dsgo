@@ -2,7 +2,7 @@
 
 PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts)
 
-all: clean check test check-eof
+all: clean check check-eof test test-examples
 
 test:
 	@echo "Running comprehensive tests (race detector + coverage)..."
