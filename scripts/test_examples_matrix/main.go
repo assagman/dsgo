@@ -209,9 +209,9 @@ func main() {
 		fmt.Println("    Check test_examples_logs/ for detailed failure logs.")
 		os.Exit(0) // Exit 0 but show warning
 	} else {
-		fmt.Println("⚠️  Quality criteria not met.")
+		fmt.Println("❌  Quality criteria not met.")
 		fmt.Println("    Check test_examples_logs/ for detailed failure logs.")
-		os.Exit(0) // Exit 0 but show warning
+		os.Exit(1)
 	}
 }
 
