@@ -60,11 +60,17 @@ func loadEnvFiles(dir string) {
 	}
 }
 
-// GetModel returns the model to use from EXAMPLES_MODEL env var, or a default
+// GetModel returns the model to use from env vars, or a default
+// Priority: OPENROUTER_MODEL (test matrix) > EXAMPLES_MODEL (manual) > default
 func GetModel() string {
-	model := os.Getenv("EXAMPLES_MODEL")
-	if model == "" {
-		return "openai/gpt-4o-mini"
+	// Check OPENROUTER_MODEL first (used by test matrix script)
+	if model := os.Getenv("OPENROUTER_MODEL"); model != "" {
+		return model
 	}
-	return model
+	// Check EXAMPLES_MODEL (manual override)
+	if model := os.Getenv("EXAMPLES_MODEL"); model != "" {
+		return model
+	}
+	// Default model
+	return "openai/gpt-4o-mini"
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 // This example demonstrates streaming support for real-time output.
@@ -16,11 +15,10 @@ import (
 // chunk by chunk, providing a better user experience for long-running tasks.
 
 func main() {
-	// Load .env file (optional - will use environment variables if not present)
-	_ = godotenv.Load()
+	shared.LoadEnv()
 
 	// Get LM (OpenRouter or OpenAI based on environment)
-	lm := shared.GetLM("gpt-4")
+	lm := shared.GetLM(shared.GetModel())
 
 	// Create signature for story generation
 	sig := dsgo.NewSignature("Generate a creative short story based on the given prompt").

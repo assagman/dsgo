@@ -25,22 +25,18 @@ func main() {
 
 	// Create LM with caching enabled
 	model := shared.GetModel()
-	var lm dsgo.LM
+	lm := shared.GetLM(model)
 
 	// Create cache
 	cache := dsgo.NewLMCache(100) // Cache up to 100 requests
 
-	// Create LM based on model prefix
+	// Attach cache to LM
 	if strings.HasPrefix(model, "openrouter/") {
-		actualModel := strings.TrimPrefix(model, "openrouter/")
-		or := openrouter.NewOpenRouter(actualModel)
+		or := lm.(*openrouter.OpenRouter)
 		or.Cache = cache
-		lm = or
 	} else {
-		actualModel := strings.TrimPrefix(model, "openai/")
-		oa := openai.NewOpenAI(actualModel)
+		oa := lm.(*openai.OpenAI)
 		oa.Cache = cache
-		lm = oa
 	}
 
 	// Create signature for translation
