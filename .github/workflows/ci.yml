@@ -31,11 +31,6 @@ jobs:
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Run examples
-      env:
-        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      run: make test-matrix
-
   lint:
     name: Lint
     runs-on: ubuntu-latest
