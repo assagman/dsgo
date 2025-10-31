@@ -8,7 +8,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// LoadEnv loads .env.local from the examples directory
+// LoadEnv loads .env.local or .env from the examples directory
+// Priority: .env.local (local development) > .env (CI/shared) > existing env vars
 func LoadEnv() {
 	// Get current working directory
 	cwd, err := os.Getwd()
@@ -23,19 +24,13 @@ func LoadEnv() {
 		// Check if we're in or have an examples directory
 		examplesDir := filepath.Join(dir, "examples")
 		if stat, err := os.Stat(examplesDir); err == nil && stat.IsDir() {
-			envPath := filepath.Join(examplesDir, ".env.local")
-			if err := godotenv.Load(envPath); err != nil {
-				log.Printf("No .env.local file found at %s, using environment variables\n", envPath)
-			}
+			loadEnvFiles(examplesDir)
 			return
 		}
 
 		// If we're already in examples directory
 		if filepath.Base(dir) == "examples" {
-			envPath := filepath.Join(dir, ".env.local")
-			if err := godotenv.Load(envPath); err != nil {
-				log.Printf("No .env.local file found at %s, using environment variables\n", envPath)
-			}
+			loadEnvFiles(dir)
 			return
 		}
 
@@ -47,6 +42,21 @@ func LoadEnv() {
 			return
 		}
 		dir = parent
+	}
+}
+
+// loadEnvFiles tries to load .env.local first, then .env
+func loadEnvFiles(dir string) {
+	// Try .env.local first (for local development)
+	envLocalPath := filepath.Join(dir, ".env.local")
+	if err := godotenv.Load(envLocalPath); err == nil {
+		return // Successfully loaded .env.local
+	}
+
+	// Fall back to .env (for CI or shared config)
+	envPath := filepath.Join(dir, ".env")
+	if err := godotenv.Load(envPath); err != nil {
+		log.Printf("No .env or .env.local file found in %s, using environment variables\n", dir)
 	}
 }
 
