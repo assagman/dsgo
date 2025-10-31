@@ -143,8 +143,6 @@ gantt
 
 ### **Phase 2.7: Production-Grade Robustness** (Priority: CRITICAL) ✅ COMPLETE
 
-Based on comprehensive DSPy framework analysis ([FRAMEWORK_COMPARISON.md](FRAMEWORK_COMPARISON.md))
-
 10. **JSON Repair System** ✅
     - [x] `jsonutil.RepairJSON()` - handles malformed JSON from models
     - [x] Single quotes → double quotes conversion
@@ -190,15 +188,6 @@ Based on comprehensive DSPy framework analysis ([FRAMEWORK_COMPARISON.md](FRAMEW
     - [x] Smart scaffolding removal (Thought/Action/Observation)
     - [x] **Impact**: Handles models that prefer natural language
 
-**Phase 2.7 Summary**:
-- ✅ DSPy alignment score: 7.5/10 → **9/10**
-- ✅ All P1 (critical) features implemented
-- ✅ Test coverage: 79.4%
-- ✅ 100% backward compatible
-- ✅ ~755 lines added (code + tests)
-- ✅ Production-ready robustness
-- 📄 See [ROBUSTNESS_ENHANCEMENTS.md](ROBUSTNESS_ENHANCEMENTS.md) for details
-
 ### **Phase 3: Advanced Modules** (Priority: HIGH)
 
 15. **Parallel**
@@ -219,29 +208,171 @@ Based on comprehensive DSPy framework analysis ([FRAMEWORK_COMPARISON.md](FRAMEW
 
 ### **Phase 4: Essential Utilities** (Priority: HIGH) 🔥
 
-18. **Streaming Support**
-- [ ] `StreamCallback` in GenerateOptions
-- [ ] Token-by-token callbacks
-- [ ] Incremental parsing in adapters
-- [ ] Example: streaming_chat
+#### **Phase 4A: Critical Cache Fixes** (Priority: CRITICAL) 🔴
 
-19. **Caching System**
-- [ ] In-memory LRU cache (1000 entries default)
-- [ ] Cache key generation from request
-- [ ] `configure_cache()` utility
-- [ ] Cache hit/miss metrics
+18. **Cache Key Fidelity**
+- [ ] **CRITICAL BUG**: Add missing params to cache key
+  - [ ] ToolsFingerprint (SHA-256 of sorted tool schemas)
+  - [ ] ToolChoice
+  - [ ] FrequencyPenalty
+  - [ ] PresencePenalty
+- [ ] Implement `generateToolsFingerprint(tools []Tool) string`
+- [ ] Update all providers to pass these params
+- [ ] Test: same messages + different tools → different cache keys
+- **Impact**: Prevents cache collisions returning incorrect responses
 
-20. **Logging & Tracing**
+19. **Cache Key Determinism**
+- [ ] **CRITICAL BUG**: Canonicalize maps in cache keys
+- [ ] Implement `canonicalize(v any) any` - recursively sort map keys
+- [ ] Apply to ToolCall.Arguments and other maps before hashing
+- [ ] Test: same ToolCall with different map order → same cache key
+- **Impact**: Fixes nondeterministic cache misses
+
+20. **Cache Entry Safety**
+- [ ] **CRITICAL BUG**: Implement deep copy for cache entries
+- [ ] Implement `deepCopy(*GenerateResult) *GenerateResult`
+- [ ] Call on Get() and Set() operations
+- [ ] Test: mutating retrieved result doesn't affect cache
+- **Impact**: Prevents cache corruption from mutations
+
+21. **Quota Error Handling**
+- [ ] **CRITICAL BUG**: Return error on quota exhaustion
+- [ ] Define `var ErrQuotaExhausted = errors.New("quota exhausted")`
+- [ ] Return error instead of (resp, nil) in retry logic
+- [ ] Test: quota exhausted response → error returned
+- **Impact**: Prevents silent failures
+
+#### **Phase 4B: Production Hardening** (Priority: HIGH) 🟡
+
+22. **Retry-After Header Support**
+- [ ] Implement `parseRetryAfter(*http.Response) time.Duration`
+  - [ ] Parse as seconds (integer format)
+  - [ ] Parse as HTTP date (fallback)
+  - [ ] Return 0 if invalid/missing
+- [ ] Check Retry-After before exponential backoff
+- [ ] Use max(retryAfter, exponentialBackoff) for safety
+- [ ] Test: 429 with Retry-After: 60 → waits 60s
+- **Impact**: Respects server rate limit guidance
+
+23. **Configurable Retry Parameters**
+- [ ] Define `RetryConfig` struct (MaxRetries, InitialDelay, MaxDelay, Jitter)
+- [ ] Add to `GenerateOptions` as optional field
+- [ ] Update `WithExponentialBackoff` to accept RetryConfig
+- [ ] Default to current values if nil
+- [ ] Consider env var overrides (DSGO_MAX_RETRIES, etc.)
+- [ ] Test: custom config → uses custom delays
+- **Impact**: Allows tuning per provider/request
+
+24. **Jitter Randomness** (15 min)
+- [ ] Create package-level seeded RNG
+- [ ] Use `rand.New(rand.NewSource(time.Now().UnixNano()))`
+- [ ] Replace `rand.Float64()` with `rng.Float64()`
+- [ ] Test: multiple runs produce different jitter
+- **Impact**: Non-deterministic retry timing
+
+25. **TwoStepAdapter Improvements** (30 min)
+- [ ] Pass context to extractionLM.Generate
+- [ ] Force ResponseFormat: "json" for extraction LM
+- **Impact**: Better reliability and cancellation support
+
+#### **Phase 4C: Advanced Streaming** (Priority: MEDIUM, 1-2 days) 🔵
+
+26. **Progressive Streaming Parsing**
+- [ ] Define `StreamListener` interface
+  - [ ] `OnTextDelta(delta string)`
+  - [ ] `OnFieldUpdate(fieldName string, value any)`
+  - [ ] `OnToolCallDelta(toolCall ToolCall)`
+  - [ ] `OnFinish(usage Usage, reason string)`
+  - [ ] `OnError(err error)`
+- [ ] Implement buffering worker
+  - [ ] Accumulate deltas into content buffer
+  - [ ] Every N tokens (10) or T ms (100ms), attempt partial parse
+  - [ ] For JSONAdapter: try RepairJSON, emit field updates
+  - [ ] For ChatAdapter: detect field markers, emit when complete
+- [ ] Add `ParsePartial(buffer string) (map[string]any, error)` to Adapter
+- [ ] Update `Module.Stream()` to accept listeners
+- [ ] Return both raw chunk channel AND field update channel
+- [ ] Maintain backwards compatibility
+- [ ] Tests: JSON/Chat streaming with field updates
+- **Impact**: Real-time field-specific UI updates
+
+27. **Stream Listener Integration**
+- [ ] Adapter-aware progressive parsing
+- [ ] Smart buffering for field delimiters (max 10 tokens)
+- [ ] Status message providers
+- [ ] Tool call streaming support
+- **Impact**: DSPy streaming parity
+
+#### **Phase 4D: Two-Level Caching** (Priority: MEDIUM, 1-2 days) 🔵
+
+28. **Disk Cache Implementation**
+- [ ] Create `disk_cache.go`
+- [ ] Location: `~/.dsgo_cache/` (env: DSGO_CACHE_DIR)
+- [ ] Sharded structure: first 2 hex chars of SHA-256 (256 shards)
+- [ ] Files: `{key}.json` per cached entry
+- [ ] Index: `index.json` with LRU metadata
+- [ ] Size limit: 30GB default (env: DSGO_CACHE_LIMIT)
+- [ ] LRU eviction when size exceeded
+- [ ] Safe writes: temp file + atomic rename
+- [ ] Checksum validation for corruption detection
+- **Impact**: Persistent cache across restarts
+
+29. **Two-Level Cache Integration**
+- [ ] Create `TwoLevelCache` wrapper
+- [ ] Get: Check memory → check disk → promote to memory
+- [ ] Set: Write to both memory and disk
+- [ ] Configurable enable/disable per tier
+- [ ] Tests: promotion, eviction, corruption handling
+- **Impact**: 30GB+ cache capacity with persistence
+
+#### **Phase 4E: Application-Level Retry** (Priority: MEDIUM, 0.5 day) 🔵
+
+30. **Refine Module Enhancement**
+- [x] Basic Refine module exists (Phase 2)
+- [ ] Add feedback-driven retry (DSPy OfferFeedback pattern)
+- [ ] Generate feedback using signature
+- [ ] Provide feedback to module for subsequent attempts
+- [ ] Tests: constraint violations, quality thresholds
+- **Impact**: Self-correction for semantic errors
+
+#### **Phase 4F: Logging & Observability** (Priority: MEDIUM, 1 day)
+
+31. **Logging & Tracing**
+- [x] Basic logging exists (logging package)
 - [ ] Callback interface for instrumentation
 - [ ] Request ID propagation
 - [ ] Token usage tracking
 - [ ] Structured error reporting
+- [ ] OpenTelemetry integration (optional)
 
-21. **Retries & Backoff**
-- [ ] Exponential backoff in providers
-- [ ] Configurable retry count
-- [ ] Rate limit handling
-- [ ] Timeout enforcement
+#### **Phase 4G: Future Enhancements** (Priority: LOW, Future Work) 🟢
+
+32. **Custom Field Types**
+- [ ] Image field type (URL, base64, mime type)
+- [ ] Audio field type
+- [ ] Code field type with syntax highlighting
+- **Effort**: 1 day per type
+- **Priority**: Only if multimodal use cases emerge
+
+33. **OpenAI Structured Outputs**
+- [ ] Generate JSON schema from Signature
+- [ ] Pass to LM via response_format
+- [ ] Strict schema adherence mode
+- **Effort**: 1 day
+- **Priority**: Medium - improves reliability
+
+34. **XML Adapter**
+- [ ] XML tag parsing
+- [ ] Integration with fallback chain
+- **Effort**: 0.5 day
+- **Priority**: Low - Chat/JSON cover most cases
+
+35. **Distributed Cache**
+- [ ] Redis backend implementation
+- [ ] Cache stampede protection
+- [ ] Multi-process support
+- **Effort**: 2 days
+- **Priority**: Low - only for distributed deployments
 
 ### **Phase 5: Validation Hardening** (Priority: MEDIUM)
 
@@ -386,34 +517,54 @@ graph TD
 
 ---
 
-## 🎯 Next Immediate Steps (Updated Oct 30, 2025)
+## 🎯 Next Immediate Steps (Updated Oct 31, 2025)
 
-1. ✅ ~~All previous phases (Phase 1, 2, 2.5, 2.6) complete~~
-2. ✅ ~~**Phase 2.6: Adapter Robustness COMPLETE**~~
-   - ✅ Implemented ChatAdapter with field markers
-   - ✅ Implemented TwoStepAdapter for reasoning models
-   - ✅ Added automatic fallback chain (Chat → JSON)
-   - ✅ Achieved 100% parse success rate in tests
-   - ✅ Added adapter metrics to Prediction
-3. **Phase 3: Advanced Modules** (HIGH, ~2 days)
+### **URGENT: Critical Cache & Retry Bugs** 🔴
+
+1. **Phase 4A: Critical Cache Fixes** (IMMEDIATE)
+   - [ ] Fix cache key fidelity - add Tools, ToolChoice, penalties
+   - [ ] Canonicalize maps for deterministic keys
+   - [ ] Implement deep copy for cache entries
+   - [ ] Return error on quota exhaustion
+   - **Impact**: Prevents cache collisions, silent failures, data races
+
+### **High Priority: Production Hardening** 🟡
+
+2. **Phase 4B: Retry & Configuration** (HIGH)
+   - [ ] Respect Retry-After header
+   - [ ] Configurable retry parameters
+   - [ ] Seed jitter randomness
+   - [ ] TwoStepAdapter context improvements (30 min)
+   - **Impact**: Production reliability, provider compliance
+
+### **Medium Priority: Feature Parity** 🔵 (3-4 days)
+
+3. **Phase 4C: Progressive Streaming** (MEDIUM, 1-2 days)
+   - [ ] Implement StreamListener interface
+   - [ ] Add progressive parsing to adapters
+   - [ ] Field-specific streaming events
+   - [ ] Tool call streaming support
+   - **Impact**: Real-time UI updates, DSPy parity
+
+4. **Phase 4D: Two-Level Caching** (MEDIUM, 1-2 days)
+   - [ ] Implement disk cache with sharding
+   - [ ] Create TwoLevelCache wrapper
+   - [ ] Cache promotion (disk → memory)
+   - [ ] Persistence across restarts
+   - **Impact**: 30GB+ capacity, persistent cache
+
+5. **Phase 4E: Application-Level Retry** (MEDIUM, 0.5 day)
+   - [ ] Enhance Refine module with feedback
+   - [ ] Implement OfferFeedback pattern
+   - **Impact**: Self-correction for semantic errors
+
+### **Previous Phases**
+
+6. ✅ ~~All previous phases (Phase 1, 2, 2.5, 2.6, 2.7) complete~~
+7. **Phase 3: Advanced Modules** (DEFERRED, ~2 days)
    - [ ] Implement Parallel module with worker pool
    - [ ] Implement MultiChainComparison
    - [ ] Stub CodeAct (safety-gated)
-4. **Phase 4: Essential Utilities** (HIGH, ~2 days) 🔥
-   - [ ] Streaming support with callbacks
-   - [ ] In-memory LRU caching
-   - [ ] Logging/tracing with callbacks
-   - [ ] Retries/backoff in providers
-5. **Phase 5: Validation Hardening** (MEDIUM, ~1 day)
-   - [ ] Tool parameter type checking
-   - [ ] Input coercion
-   - [ ] Demo formatting fix (role alternation)
-6. **Phase 6: Go-Native Patterns** (MEDIUM, ~2 days)
-   - [ ] Struct-based signatures with tags
-   - [ ] Typed errors
-   - [ ] Context/duration improvements
-
-**Target**: Reach ~70% DSPy feature parity with production-ready infrastructure
 
 ---
 
@@ -423,44 +574,6 @@ graph TD
 - **Testing**: Each phase should include comprehensive tests
 - **Examples**: Add new examples as features are implemented
 - **Documentation**: Update README and docs with each phase
-
-## ⚠️ Critical Gaps (2025-10-29)
-
-### Adapter Gaps (CRITICAL) 🔥
-1. **ChatAdapter Partial/Untested**: Code exists but not integrated or tested
-   - DSPy: Field markers `[[ ## field ## ]]`, role-alternated demos, auto-fallback to JSON
-   - DSGo: JSONAdapter only, no fallback chain
-   - **Impact**: ~10-15% parse failure rate, brittle in production
-2. **No TwoStepAdapter**: Critical for reasoning models (o1/o3/gpt-5)
-   - DSPy: Two-stage (free-form → extract) avoids structured output struggles
-   - DSGo: Missing entirely
-   - **Impact**: Can't effectively use reasoning models
-3. **No Automatic Fallback**: Hard failures on parse errors
-   - DSPy: ChatAdapter → JSONAdapter → Salvage chain
-   - DSGo: Single adapter, crash on failure
-   - **Impact**: Poor production reliability
-
-### Infrastructure Gaps (HIGH) 🔥
-1. **No Streaming**: GenerateOptions.Stream exists but no end-to-end implementation
-2. **No Caching**: Zero caching support (DSPy has 2-tier: memory + disk)
-3. **No Logging/Tracing**: No observability hooks or callbacks
-4. **No Retries**: No exponential backoff or rate limit handling
-
-### Validation Gaps (MEDIUM)
-1. **Tool Type Validation**: Tool.Validate doesn't check parameter types (only required/enum)
-2. **Input Coercion Missing**: Rejects "123" for int fields (but outputs are coerced)
-3. **Stricter Schema Validation**: Limited output type enforcement
-
-### Module Gaps (MEDIUM)
-Missing 5/11 modules: Parallel, MultiChainComparison, CodeAct, KNN, Avatar
-
-### Test Coverage
-- Core: 61.9% (target: 75%+) ⚠️
-- Module: 84.2% ✅
-- OpenAI Provider: 94.4% ✅
-- OpenRouter Provider: 94.7% ✅
-
----
 
 ## 🚀 Quick Implementation Roadmap
 
@@ -488,108 +601,3 @@ Missing 5/11 modules: Parallel, MultiChainComparison, CodeAct, KNN, Avatar
 - [ ] Parallel module with worker pool
 - [ ] MultiChainComparison with LM-based synthesis
 - **Goal**: Performance and quality improvements
-
-**Target**: ~70% DSPy alignment with production-ready infrastructure
-
----
-
-## 🔄 Updates
-
-- **2025-10-30 (Phase A Complete - Adapter Robustness) ⭐⭐**:
-  - ✅ **PHASE 2.6 (ADAPTER ROBUSTNESS) COMPLETE**
-  - ✅ Completed ChatAdapter with field markers `[[ ## field ## ]]` and role-alternated demos
-  - ✅ Implemented TwoStepAdapter for reasoning models (o1/o3/gpt-5)
-    - Two-stage: free-form generation → extraction model
-    - Avoids structured output constraints on reasoning models
-  - ✅ Implemented FallbackAdapter with automatic retry chain
-    - Default: ChatAdapter → JSONAdapter
-    - Customizable adapter chains
-    - Metadata tracking (adapter used, attempts, fallback status)
-  - ✅ Added adapter metrics to Prediction
-    - `AdapterUsed`, `ParseSuccess`, `ParseAttempts`, `FallbackUsed`
-    - Full observability of parsing behavior
-  - ✅ Comprehensive testing
-    - 17+ new tests for TwoStepAdapter and FallbackAdapter
-    - **100% parse success rate achieved** (exceeded 95% target)
-    - Type coercion consistency validated across all adapters
-  - ✅ Created adapter_fallback example demonstrating robustness
-  - **Alignment**: **~50%** DSPy parity (up from ~45%)
-  - **Status**: Phase A complete, ready for Phase B (Production Utilities)
-
-- **2025-10-29 (Late Night - Comprehensive DSPy Analysis) ⭐**:
-  - **Actual alignment**: ~45% ±3% (accurate, detailed breakdown)
-  - Analyzed DSPy 3.0.4 using Librarian (GitHub deep dive) + Oracle (expert review)
-  - **Detailed findings**:
-    - Modules: 6/11 (55%) ✅ solid foundation
-    - Adapters: 1.5/4 (38%) ⚠️ critical gap (JSON complete, Chat partial, TwoStep/XML missing)
-    - Primitives: 4.5/9 (50%) 🟡 (Tool/History/Prediction/Example complete)
-    - Utilities: 0/4 (0%) ❌ missing infrastructure (streaming, caching, retries, logging)
-    - Overall: ~45% ±3% feature parity (excluding optimizers/eval)
-  - **DSGo advantages identified**:
-    - Type-safe, explicit architecture (vs metaclasses)
-    - Thread-safe options, context-based timeouts
-    - Robust JSON extraction, output coercion
-    - Go-native concurrency patterns
-  - **Clear roadmap**: Phases A-D (5-7 days) to reach ~70% alignment
-  - **Next priority**: Phase A (Adapter Robustness) + Phase B (Production Utilities)
-  - **Status**: Production-ready path defined with detailed implementation guidance
-
-- **2025-10-29 (Night - Example Execution & Fixes)**:
-  - ✅ **ALL EXAMPLES EXECUTED AND FIXED - 100% WORKING**
-  - ✅ Fixed `interview` example - incorrect reasoning access (Rationale vs Outputs)
-  - ✅ Fixed `sentiment` example - printing `<nil>` for reasoning
-  - ✅ Improved `react_agent` calculator - now returns actual results
-  - ✅ Enhanced JSON extraction to handle multiple JSON objects
-  - ✅ Fixed `fewshot_conversation` - added "fantasy" to allowed genres
-  - ✅ All 13 examples execute successfully with correct output
-  - ✅ Added test case to prevent Rationale/Outputs confusion
-  - ✅ Added 2 new test cases for multi-JSON extraction
-  - **Status**: Production-ready, all examples validated, Phase 3 ready
-
-- **2025-10-29 (Late Evening - Final)**:
-  - ✅ **PHASE 2.5 COMPLETE & VALIDATED**
-  - ✅ ReAct adapter integration complete (~100 lines removed, unified with other modules)
-  - ✅ Added `AddOptionalInput()` to Signature for optional input fields
-  - ✅ Enhanced `ValidateInputs()` with type checking (mirrors `ValidateOutputs()`)
-  - ✅ Improved JSONAdapter type coercion (string→int/float/bool conversions)
-  - ✅ Final validation: All tests passing, all examples build successfully
-  - **Alignment**: **~85%+** DSPy parity achieved (up from 82%)
-  - **Status**: Production-ready, Phase 3 ready to begin
-
-- **2025-10-29 (Evening)**:
-  - Created detailed comparison with DSPy using Librarian + Oracle
-  - Actual alignment: **82%** (vs 85% claimed)
-  - Identified: ReAct adapter integration as key remaining gap
-  - **Status**: Phase 2 mostly complete, clear roadmap for Phase 2.5
-
-- **2025-10-29 (PM - Part 2)**:
-  - ✅ **ALL CRITICAL ISSUES RESOLVED**
-  - ✅ Fixed missing "ONLY JSON" instruction in JSONAdapter
-  - ✅ Fixed documentation/API mismatches in README
-  - ✅ All tests passing, all examples build successfully
-  - **Status**: Production-ready quality achieved
-
-- **2025-10-29 (PM - Part 1)**:
-  - ✅ **Critical Fixes**: Phase 1 Code Quality Improvements
-  - ✅ Fixed BestOfN parallel data race with comprehensive documentation
-  - ✅ Deduplicated JSON parsing logic - created `internal/jsonutil` package
-  - ✅ Eliminated ~150 lines of duplicated code
-  - ✅ Added 15+ comprehensive tests for JSON extraction
-  - ✅ All tests passing, no regressions
-
-- **2025-10-29 (AM)**:
-  - ✅ **Phase 2 Complete**: Adapters & Prediction Pipeline
-  - ✅ Created `Adapter` interface and `JSONAdapter` implementation
-  - ✅ All modules now return `*Prediction` with full metadata (Usage, Rationale, ModuleName, Inputs)
-  - ✅ Refactored all 7 modules (Predict, CoT, ReAct, Refine, BestOfN, PoT, Program)
-  - ✅ Eliminated ~400 lines of duplicated code
-  - ✅ All tests passing, all 13+ examples updated
-  - **Alignment**: 85% DSPy parity achieved
-
-- **2025-10-28**:
-  - Initial roadmap created
-  - ✅ OpenRouter support added
-  - ✅ All examples updated to support both OpenAI and OpenRouter
-  - ✅ **Phase 1 Complete**: History, Prediction, Example primitives implemented
-  - ✅ Comprehensive tests added for all new primitives
-  - ✅ New example: fewshot_conversation demonstrating all Phase 1 features

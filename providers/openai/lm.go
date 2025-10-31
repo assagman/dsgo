@@ -151,7 +151,7 @@ func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOpt
 		req["stop"] = options.Stop
 	}
 	if options.ResponseFormat == "json" {
-		req["response_format"] = map[string]string{"type": "json_object"}
+		req["response_format"] = map[string]string{"type": "json_schema"}
 	}
 	if options.FrequencyPenalty != 0 {
 		req["frequency_penalty"] = options.FrequencyPenalty

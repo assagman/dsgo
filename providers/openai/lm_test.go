@@ -294,8 +294,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 			},
 			check: func(t *testing.T, req map[string]any) {
 				rf, ok := req["response_format"].(map[string]string)
-				if !ok || rf["type"] != "json_object" {
-					t.Error("expected response_format to be json_object")
+				if !ok || rf["type"] != "json_schema" {
+					t.Error("expected response_format to be json")
 				}
 			},
 		},

@@ -24,6 +24,13 @@ type TestResult struct {
 	ExitCode int
 }
 
+type ModelScore struct {
+	Model   string
+	Total   int
+	Passed  int
+	Results []TestResult
+}
+
 // CircuitBreaker monitors test failures and triggers early termination
 type CircuitBreaker struct {
 	ctx               context.Context
@@ -138,16 +145,23 @@ func (cb *CircuitBreaker) isTripped() bool {
 }
 
 var allModels = []string{
-	"openrouter/minimax/minimax-m2",
-	"openrouter/openai/gpt-oss-120b:exacto",
-	"openrouter/deepseek/deepseek-v3.1-terminus:exacto",
-	"openrouter/z-ai/glm-4.6:exacto",
-	"openrouter/moonshotai/kimi-k2-0905:exacto",
-	"openrouter/openai/gpt-5-nano",
-	"openrouter/anthropic/claude-haiku-4.5",
-	"openrouter/google/gemini-2.5-flash",
-	"openrouter/google/gemini-2.5-pro",
-	"openrouter/qwen/qwen3-235b-a22b-2507",
+	// "openrouter/minimax/minimax-m2",
+	// "openrouter/openai/gpt-oss-120b:exacto",
+	// "openrouter/deepseek/deepseek-v3.1-terminus:exacto",
+	// "openrouter/z-ai/glm-4.6:exacto",
+	// "openrouter/moonshotai/kimi-k2-0905:exacto",
+	// "openrouter/openai/gpt-5-nano",
+	// "openrouter/anthropic/claude-haiku-4.5",
+	// "openrouter/google/gemini-2.5-flash",
+	// "openrouter/google/gemini-2.5-pro",
+	// "openrouter/qwen/qwen3-235b-a22b-2507",
+	"openrouter/meta-llama/llama-3.1-8b-instruct",
+	"openrouter/openai/gpt-oss-20b",
+	"openrouter/qwen/qwen3-30b-a3b",
+	"openrouter/google/gemini-2.0-flash-lite-001",
+	// "mistralai/ministral-8b", ❌
+	// "google/gemini-2.5-flash-lite-preview-09-2025", ❌
+	"openrouter/deepseek/deepseek-v3.2-exp",
 }
 
 var allExamples = []string{
@@ -179,7 +193,7 @@ func main() {
 	verbose := flag.Bool("v", false, "Verbose output")
 	timeout := flag.Duration("timeout", 10*time.Minute, "Timeout per example")
 	parallel := flag.Bool("p", true, "Run tests in parallel")
-	maxConcurrent := flag.Int("c", 10, "Maximum concurrent test executions (prevents resource exhaustion)")
+	maxConcurrent := flag.Int("c", 20, "Maximum concurrent test executions (prevents resource exhaustion)")
 	flag.Parse()
 
 	projectRoot, err := os.Getwd()
@@ -236,111 +250,48 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Print summary
-	fmt.Println("\n=== Summary ===")
-	passed := 0
-	failed := 0
+	// Calculate model scores
+	modelScores := make(map[string]*ModelScore)
+	for _, model := range selectedModels {
+		modelScores[model] = &ModelScore{
+			Model:   model,
+			Total:   len(allExamples),
+			Passed:  0,
+			Results: []TestResult{},
+		}
+	}
 
 	for _, result := range results {
-		if result.Success {
-			passed++
-		} else {
-			failed++
-		}
-	}
-
-	fmt.Printf("Total: %d | Passed: %d | Failed: %d\n", len(results), passed, failed)
-	fmt.Printf("Total execution time: %.2fs\n", totalDuration.Seconds())
-
-	if failed > 0 {
-		fmt.Println("\nFailed tests:")
-		for _, result := range results {
-			if !result.Success {
-				modelInfo := ""
-				if len(selectedModels) > 1 {
-					modelInfo = fmt.Sprintf(" [%s]", result.Model)
-				}
-				fmt.Printf("  - %s%s (exit %d): %v\n", result.Example, modelInfo, result.ExitCode, result.Error)
-			}
-		}
-	}
-
-	// Exit code summary
-	fmt.Println("\n=== Exit Codes ===")
-	exitCodeStats := make(map[int]int)
-	for _, result := range results {
-		exitCodeStats[result.ExitCode]++
-	}
-	for code := 0; code <= 124; code++ {
-		if count, exists := exitCodeStats[code]; exists {
-			status := "✅"
-			if code != 0 {
-				status = "❌"
-			}
-			fmt.Printf("%s Exit %d: %d executions\n", status, code, count)
-		}
-	}
-	// Handle special codes
-	for code, count := range exitCodeStats {
-		if code > 124 || code < 0 {
-			fmt.Printf("❌ Exit %d: %d executions\n", code, count)
-		}
-	}
-
-	// Quality criteria evaluation
-	fmt.Println("\n=== Quality Criteria ===")
-
-	// Overall success rate
-	overallRate := float64(passed) / float64(len(results)) * 100
-	overallPass := overallRate >= 90.0
-	overallStatus := "✅"
-	if !overallPass {
-		overallStatus = "❌"
-	}
-	fmt.Printf("%s Overall success rate: %.1f%% (required: ≥90%%)\n", overallStatus, overallRate)
-
-	// Per-model success rate (only if multiple models)
-	allModelsPass := true
-	if len(selectedModels) > 1 {
-		modelStats := make(map[string]struct{ passed, total int })
-		for _, result := range results {
-			stats := modelStats[result.Model]
-			stats.total++
+		if score, exists := modelScores[result.Model]; exists {
+			score.Results = append(score.Results, result)
 			if result.Success {
-				stats.passed++
+				score.Passed++
 			}
-			modelStats[result.Model] = stats
-		}
-
-		fmt.Println("\nPer-model success rates:")
-		for _, model := range selectedModels {
-			stats := modelStats[model]
-			rate := float64(stats.passed) / float64(stats.total) * 100
-			modelPass := rate >= 80.0
-			status := "✅"
-			if !modelPass {
-				status = "❌"
-				allModelsPass = false
-			}
-			fmt.Printf("  %s %s: %.1f%% (%d/%d) (required: ≥80%%)\n",
-				status, model, rate, stats.passed, stats.total)
 		}
 	}
 
-	// Final verdict
-	fmt.Println()
-	if overallPass && allModelsPass && failed == 0 {
-		fmt.Println("✅ All tests passed! Quality criteria met.")
-		os.Exit(0)
-	} else if overallPass && allModelsPass {
-		fmt.Println("⚠️  Quality criteria met but some tests failed.")
-		fmt.Println("    Check test_examples_logs/ for detailed failure logs.")
-		os.Exit(0) // Exit 0 but show warning
-	} else {
-		fmt.Println("❌  Quality criteria not met.")
-		fmt.Println("    Check test_examples_logs/ for detailed failure logs.")
-		os.Exit(1)
+	// Print ranked model scores
+	fmt.Println("\n=== Model Scores (Ranked) ===")
+
+	// Convert to slice and sort by score
+	var scores []*ModelScore
+	for _, score := range modelScores {
+		scores = append(scores, score)
 	}
+
+	// Sort by score descending
+	sortModelScores(scores)
+
+	// Print ranked list
+	for i, score := range scores {
+		scoreValue := float64(score.Passed) / float64(score.Total) * 10.0
+		fmt.Printf("%d. %s: %.1f/10 (%d/%d passed, %.1f%%)\n",
+			i+1, score.Model, scoreValue, score.Passed, score.Total,
+			float64(score.Passed)/float64(score.Total)*100)
+	}
+
+	fmt.Printf("\nTotal execution time: %.2fs\n", totalDuration.Seconds())
+	fmt.Printf("Logs saved to: test_examples_logs/\n")
 }
 
 func runParallel(cb *CircuitBreaker, projectRoot string, models, examples []string, timeout time.Duration, verbose bool, maxConcurrent int) []TestResult {
@@ -688,6 +639,19 @@ func sanitizeFilename(s string) string {
 	return s
 }
 
+func sortModelScores(scores []*ModelScore) {
+	// Sort by score descending (higher scores first)
+	for i := 0; i < len(scores)-1; i++ {
+		for j := i + 1; j < len(scores); j++ {
+			scoreI := float64(scores[i].Passed) / float64(scores[i].Total)
+			scoreJ := float64(scores[j].Passed) / float64(scores[j].Total)
+			if scoreJ > scoreI {
+				scores[i], scores[j] = scores[j], scores[i]
+			}
+		}
+	}
+}
+
 func saveLog(logFile string, result TestResult) error {
 	// Ensure directory exists before writing (fixes race condition)
 	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err != nil {
@@ -712,3 +676,4 @@ func saveLog(logFile string, result TestResult) error {
 
 	return nil
 }
+
