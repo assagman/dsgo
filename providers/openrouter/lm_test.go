@@ -251,6 +251,79 @@ func TestOpenRouter_Generate_WithTools(t *testing.T) {
 	}
 }
 
+func TestOpenRouter_Generate_ToolCallsWithMalformedJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Return tool call with malformed JSON arguments (single quotes, trailing comma)
+		resp := openRouterResponse{
+			Choices: []struct {
+				Index        int               `json:"index"`
+				Message      openRouterMessage `json:"message"`
+				FinishReason string            `json:"finish_reason"`
+			}{
+				{
+					Message: openRouterMessage{
+						Role: "assistant",
+						ToolCalls: []openRouterToolCall{
+							{
+								ID:   "call_456",
+								Type: "function",
+								Function: struct {
+									Name      string `json:"name"`
+									Arguments string `json:"arguments"`
+								}{
+									Name:      "search",
+									Arguments: `{'query': 'test query', 'limit': 10,}`, // Malformed: single quotes + trailing comma
+								},
+							},
+						},
+					},
+					FinishReason: "tool_calls",
+				},
+			},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	lm := &OpenRouter{
+		APIKey:  "test-key",
+		Model:   "test-model",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	messages := []dsgo.Message{{Role: "user", Content: "Search for test query"}}
+	options := dsgo.DefaultGenerateOptions()
+	searchFunc := func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		return "results", nil
+	}
+	options.Tools = []dsgo.Tool{
+		*dsgo.NewTool("search", "Search tool", searchFunc).AddParameter("query", "string", "Search query", true),
+	}
+
+	result, err := lm.Generate(context.Background(), messages, options)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(result.ToolCalls))
+	}
+
+	// Verify arguments were repaired and parsed correctly
+	if result.ToolCalls[0].Arguments["query"] != "test query" {
+		t.Errorf("expected query 'test query', got %v", result.ToolCalls[0].Arguments["query"])
+	}
+	if result.ToolCalls[0].Arguments["limit"] != float64(10) {
+		t.Errorf("expected limit 10, got %v", result.ToolCalls[0].Arguments["limit"])
+	}
+}
+
 func TestOpenRouter_Generate_ErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

@@ -156,18 +156,23 @@ func TestJSONAdapter_FormatHistory(t *testing.T) {
 }
 
 // TestJSONAdapter_ParseEmptyContent tests JSON adapter with empty content
+// With single-field fallback, empty content becomes empty string value
 func TestJSONAdapter_ParseEmptyContent(t *testing.T) {
 	sig := NewSignature("Test").
 		AddOutput("result", FieldTypeString, "")
 
 	adapter := NewJSONAdapter()
-	_, err := adapter.Parse(sig, "")
-	if err == nil {
-		t.Error("Expected error for empty content")
+	outputs, err := adapter.Parse(sig, "")
+	if err != nil {
+		t.Errorf("Expected fallback for empty content, got error: %v", err)
+	}
+	if outputs["result"] != "" {
+		t.Errorf("Expected empty result, got %q", outputs["result"])
 	}
 }
 
 // TestJSONAdapter_Parse_NoJSON tests JSON adapter with no JSON content
+// With single-field string signature, should fall back to using content as value
 func TestJSONAdapter_Parse_NoJSON(t *testing.T) {
 	sig := NewSignature("Test").
 		AddOutput("result", FieldTypeString, "")
@@ -175,9 +180,28 @@ func TestJSONAdapter_Parse_NoJSON(t *testing.T) {
 	adapter := NewJSONAdapter()
 	content := "This is plain text without any JSON"
 
+	// Should succeed with fallback for single string field
+	outputs, err := adapter.Parse(sig, content)
+	if err != nil {
+		t.Errorf("Expected fallback to succeed, got error: %v", err)
+	}
+	if outputs["result"] != content {
+		t.Errorf("Expected result=%q, got %q", content, outputs["result"])
+	}
+}
+
+// TestJSONAdapter_Parse_NoJSON_MultipleFields tests that JSON adapter fails with multiple fields
+func TestJSONAdapter_Parse_NoJSON_MultipleFields(t *testing.T) {
+	sig := NewSignature("Test").
+		AddOutput("result", FieldTypeString, "").
+		AddOutput("status", FieldTypeString, "")
+
+	adapter := NewJSONAdapter()
+	content := "This is plain text without any JSON"
+
 	_, err := adapter.Parse(sig, content)
 	if err == nil {
-		t.Error("Expected error for content without JSON")
+		t.Error("Expected error for content without JSON when multiple fields required")
 	}
 }
 

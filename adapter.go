@@ -290,6 +290,14 @@ func (a *JSONAdapter) Parse(sig *Signature, content string) (map[string]any, err
 	// Extract JSON using unified utility
 	jsonStr, err := jsonutil.ExtractJSON(content)
 	if err != nil {
+		// FALLBACK: If no JSON found and signature has single string field, use content as value
+		if len(sig.OutputFields) == 1 && sig.OutputFields[0].Type == FieldTypeString {
+			fieldName := sig.OutputFields[0].Name
+			outputs := map[string]any{
+				fieldName: strings.TrimSpace(content),
+			}
+			return outputs, nil
+		}
 		return nil, err
 	}
 

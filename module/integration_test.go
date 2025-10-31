@@ -276,15 +276,17 @@ func TestChainOfThought_WithDemos(t *testing.T) {
 
 // TestPredict_HistoryNotUpdatedOnError ensures history isn't corrupted on errors
 func TestPredict_HistoryNotUpdatedOnError(t *testing.T) {
+	// Use multiple fields to prevent JSONAdapter fallback
 	sig := dsgo.NewSignature("Test").
 		AddInput("input", dsgo.FieldTypeString, "Input").
-		AddOutput("output", dsgo.FieldTypeString, "Output")
+		AddOutput("output", dsgo.FieldTypeString, "Output").
+		AddOutput("status", dsgo.FieldTypeString, "Status")
 
 	history := dsgo.NewHistory()
 	lm := &MockLM{
 		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 			return &dsgo.GenerateResult{
-				Content: `invalid json`,
+				Content: `invalid json without structure`,
 			}, nil
 		},
 	}
@@ -296,7 +298,7 @@ func TestPredict_HistoryNotUpdatedOnError(t *testing.T) {
 	})
 
 	if err == nil {
-		t.Fatal("Expected error due to invalid JSON")
+		t.Fatal("Expected error due to invalid JSON when multiple fields required")
 	}
 
 	// History should not be updated on error

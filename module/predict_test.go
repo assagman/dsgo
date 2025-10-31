@@ -70,14 +70,16 @@ func TestPredict_Forward_LMError(t *testing.T) {
 }
 
 func TestPredict_Forward_ParseError(t *testing.T) {
+	// Use multiple fields so JSONAdapter can't fall back to plain text
 	sig := dsgo.NewSignature("Test").
 		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+		AddOutput("answer", dsgo.FieldTypeString, "Answer").
+		AddOutput("confidence", dsgo.FieldTypeString, "Confidence level")
 
 	lm := &MockLM{
 		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 			return &dsgo.GenerateResult{
-				Content: `invalid json`,
+				Content: `invalid json without structure`,
 			}, nil
 		},
 	}
@@ -88,7 +90,7 @@ func TestPredict_Forward_ParseError(t *testing.T) {
 	})
 
 	if err == nil {
-		t.Error("Forward() should error on parse failure")
+		t.Error("Forward() should error on parse failure when multiple fields required")
 	}
 }
 

@@ -90,10 +90,12 @@ func TestFallbackAdapter_ParseFallbackToJSON(t *testing.T) {
 // TestFallbackAdapter_ParseAllFail tests when all adapters fail
 func TestFallbackAdapter_ParseAllFail(t *testing.T) {
 	adapter := NewFallbackAdapter()
+	// Use multiple fields so JSONAdapter can't fall back
 	sig := NewSignature("test").
-		AddOutput("answer", FieldTypeString, "")
+		AddOutput("answer", FieldTypeString, "").
+		AddOutput("confidence", FieldTypeString, "")
 
-	// Response that neither adapter can parse
+	// Response that neither adapter can parse (no markers, no JSON, multiple fields)
 	content := "This is just plain text with no structure"
 
 	_, err := adapter.Parse(sig, content)

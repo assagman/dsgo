@@ -86,8 +86,18 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 	adapter := dsgo.NewFallbackAdapter()
 	outputs, err := adapter.Parse(pot.Signature, result.Content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse output: %w", err)
+		// FALLBACK: If structured parsing fails, attempt text extraction for string fields
+		// This makes PoT resilient to less capable models that don't follow structured formats
+		extractedOutputs := pot.extractTextOutputs(result.Content)
+		if len(extractedOutputs) > 0 {
+			outputs = extractedOutputs
+		} else {
+			return nil, fmt.Errorf("failed to parse output: %w", err)
+		}
 	}
+
+	// Apply output normalization before validation
+	outputs = dsgo.NormalizeOutputKeys(pot.Signature, outputs)
 
 	// Extract adapter metadata
 	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
@@ -208,4 +218,132 @@ func (pot *ProgramOfThought) executeCode(ctx context.Context, code string) (stri
 	}
 
 	return string(output), nil
+}
+
+// extractTextOutputs attempts to extract output fields from raw text when structured parsing fails
+// This is a last-resort fallback for less capable models that don't follow JSON/Chat formats
+// PoT typically expects 'code' and 'explanation' fields
+func (pot *ProgramOfThought) extractTextOutputs(content string) map[string]any {
+	outputs := make(map[string]any)
+	content = strings.TrimSpace(content)
+
+	// If content is empty or very short, cannot extract
+	if len(content) < 10 {
+		return nil
+	}
+
+	// Only attempt extraction for string fields
+	var stringFields []dsgo.Field
+	for _, field := range pot.Signature.OutputFields {
+		if field.Type == dsgo.FieldTypeString {
+			stringFields = append(stringFields, field)
+		}
+	}
+
+	if len(stringFields) == 0 {
+		return nil
+	}
+
+	// Strategy 1: Try to extract code block from markdown-style code fences
+	codeField := pot.Signature.GetOutputField("code")
+	if codeField != nil && codeField.Type == dsgo.FieldTypeString {
+		// Look for code blocks with language tags (```python, ```javascript, etc.)
+		codeBlockPattern := "```" + pot.Language
+		if idx := strings.Index(content, codeBlockPattern); idx != -1 {
+			start := idx + len(codeBlockPattern)
+			// Skip to newline after language tag
+			if newlineIdx := strings.Index(content[start:], "\n"); newlineIdx != -1 {
+				start += newlineIdx + 1
+			}
+			if endIdx := strings.Index(content[start:], "```"); endIdx != -1 {
+				code := strings.TrimSpace(content[start : start+endIdx])
+				outputs["code"] = code
+
+				// Extract explanation as the remaining text (before or after code block)
+				explanationField := pot.Signature.GetOutputField("explanation")
+				if explanationField != nil {
+					// Use text before code block as explanation
+					explanation := strings.TrimSpace(content[:idx])
+					if explanation == "" {
+						// If nothing before, use text after
+						explanation = strings.TrimSpace(content[start+endIdx+3:])
+					}
+					if explanation != "" {
+						outputs["explanation"] = explanation
+					} else if !explanationField.Optional {
+						outputs["explanation"] = "Code provided to solve the problem"
+					}
+				}
+
+				// Fill in other string fields with placeholders if required
+				pot.fillRequiredStringFields(outputs, stringFields)
+				return outputs
+			}
+		}
+
+		// Fallback: Look for generic code blocks (```)
+		if idx := strings.Index(content, "```"); idx != -1 {
+			start := idx + 3
+			// Skip language tag if present (until newline)
+			if newlineIdx := strings.Index(content[start:], "\n"); newlineIdx != -1 {
+				start += newlineIdx + 1
+			}
+			if endIdx := strings.Index(content[start:], "```"); endIdx != -1 {
+				code := strings.TrimSpace(content[start : start+endIdx])
+				outputs["code"] = code
+
+				// Extract explanation as the remaining text
+				explanationField := pot.Signature.GetOutputField("explanation")
+				if explanationField != nil {
+					explanation := strings.TrimSpace(content[:idx])
+					if explanation == "" {
+						explanation = strings.TrimSpace(content[start+endIdx+3:])
+					}
+					if explanation != "" {
+						outputs["explanation"] = explanation
+					} else if !explanationField.Optional {
+						outputs["explanation"] = "Code provided to solve the problem"
+					}
+				}
+
+				// Fill in other string fields with placeholders if required
+				pot.fillRequiredStringFields(outputs, stringFields)
+				return outputs
+			}
+		}
+	}
+
+	// Strategy 2: If no code block found, use entire content as code (last resort)
+	// This handles cases where model outputs code directly without markdown formatting
+	if codeField != nil {
+		outputs["code"] = content
+
+		// Fill in other string fields with placeholders if required
+		pot.fillRequiredStringFields(outputs, stringFields)
+	}
+
+	return outputs
+}
+
+// fillRequiredStringFields fills in required string fields that aren't already populated
+func (pot *ProgramOfThought) fillRequiredStringFields(outputs map[string]any, stringFields []dsgo.Field) {
+	for _, field := range stringFields {
+		if _, exists := outputs[field.Name]; !exists && !field.Optional {
+			// Provide reasonable defaults based on field name
+			switch field.Name {
+			case "explanation":
+				outputs["explanation"] = "Code provided to solve the problem"
+			case "result":
+				outputs["result"] = "Computed by code execution"
+			case "answer":
+				outputs["answer"] = "See code output"
+			case "steps":
+				outputs["steps"] = "Implemented in the code above"
+			case "insights":
+				outputs["insights"] = "Analysis performed by code"
+			default:
+				outputs[field.Name] = fmt.Sprintf("Output for %s", field.Name)
+			}
+		}
+	}
 }

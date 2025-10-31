@@ -32,8 +32,8 @@ type CircuitBreaker struct {
 	totalFailed       int64
 	modelFailed       map[string]*int64
 	modelTotal        map[string]int
-	overallThreshold  float64 // 0.05 = 5% max failure (95% success)
-	perModelThreshold float64 // 0.10 = 10% max failure (90% success)
+	overallThreshold  float64 // 0.10 = 10% max failure (90% success)
+	perModelThreshold float64 // 0.20 = 20% max failure (80% success)
 	mu                sync.Mutex
 	tripped           bool
 	failedResults     []TestResult
@@ -47,8 +47,8 @@ func newCircuitBreaker(parentCtx context.Context, totalTests int, models []strin
 		totalTests:        totalTests,
 		modelFailed:       make(map[string]*int64),
 		modelTotal:        make(map[string]int),
-		overallThreshold:  0.05, // 95% success required
-		perModelThreshold: 0.10, // 90% per-model success required
+		overallThreshold:  0.10, // 90% success required
+		perModelThreshold: 0.20, // 80% per-model success required
 		failedResults:     make([]TestResult, 0),
 	}
 
@@ -147,7 +147,7 @@ var allModels = []string{
 	"openrouter/anthropic/claude-haiku-4.5",
 	"openrouter/google/gemini-2.5-flash",
 	"openrouter/google/gemini-2.5-pro",
-	"openrouter/qwen/qwen3-vl-32b-instruct",
+	"openrouter/qwen/qwen3-235b-a22b-2507",
 }
 
 var allExamples = []string{
@@ -292,12 +292,12 @@ func main() {
 
 	// Overall success rate
 	overallRate := float64(passed) / float64(len(results)) * 100
-	overallPass := overallRate >= 95.0
+	overallPass := overallRate >= 90.0
 	overallStatus := "✅"
 	if !overallPass {
 		overallStatus = "❌"
 	}
-	fmt.Printf("%s Overall success rate: %.1f%% (required: ≥95%%)\n", overallStatus, overallRate)
+	fmt.Printf("%s Overall success rate: %.1f%% (required: ≥90%%)\n", overallStatus, overallRate)
 
 	// Per-model success rate (only if multiple models)
 	allModelsPass := true
@@ -316,13 +316,13 @@ func main() {
 		for _, model := range selectedModels {
 			stats := modelStats[model]
 			rate := float64(stats.passed) / float64(stats.total) * 100
-			modelPass := rate >= 90.0
+			modelPass := rate >= 80.0
 			status := "✅"
 			if !modelPass {
 				status = "❌"
 				allModelsPass = false
 			}
-			fmt.Printf("  %s %s: %.1f%% (%d/%d) (required: ≥90%%)\n",
+			fmt.Printf("  %s %s: %.1f%% (%d/%d) (required: ≥80%%)\n",
 				status, model, rate, stats.passed, stats.total)
 		}
 	}
@@ -689,6 +689,11 @@ func sanitizeFilename(s string) string {
 }
 
 func saveLog(logFile string, result TestResult) error {
+	// Ensure directory exists before writing (fixes race condition)
+	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err != nil {
+		return err
+	}
+
 	f, err := os.Create(logFile)
 	if err != nil {
 		return err

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/jsonutil"
 	"github.com/assagman/dsgo/internal/retry"
 	"github.com/assagman/dsgo/logging"
 )
@@ -289,8 +290,12 @@ func (o *OpenRouter) parseResponse(resp *openRouterResponse) (*dsgo.GenerateResu
 		result.ToolCalls = make([]dsgo.ToolCall, 0, len(choice.Message.ToolCalls))
 		for _, tc := range choice.Message.ToolCalls {
 			var args map[string]any
-			if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
-				return nil, fmt.Errorf("failed to parse tool arguments: %w", err)
+
+			// Apply JSON repair to handle malformed tool arguments from models
+			repairedArgs := jsonutil.RepairJSON(tc.Function.Arguments)
+
+			if err := json.Unmarshal([]byte(repairedArgs), &args); err != nil {
+				return nil, fmt.Errorf("failed to parse tool arguments (after repair): %w", err)
 			}
 			result.ToolCalls = append(result.ToolCalls, dsgo.ToolCall{
 				ID:        tc.ID,
