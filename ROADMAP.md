@@ -359,7 +359,7 @@ gantt
 - [ ] Pass to LM via response_format
 - [ ] Strict schema adherence mode
 - **Effort**: 1 day
-- **Priority**: Medium - improves reliability
+- **Priority**: HIGH - improves reliability
 
 34. **XML Adapter**
 - [ ] XML tag parsing

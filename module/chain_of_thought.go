@@ -85,6 +85,10 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 	if cot.LM.SupportsJSON() {
 		if _, isJSON := cot.Adapter.(*dsgo.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
+			// Auto-generate JSON schema from signature for structured outputs
+			if options.ResponseSchema == nil {
+				options.ResponseSchema = cot.Signature.SignatureToJSONSchema()
+			}
 		}
 	}
 

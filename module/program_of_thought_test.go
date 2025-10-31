@@ -272,3 +272,162 @@ func TestProgramOfThought_Forward_ForcesJSONMode(t *testing.T) {
 		t.Errorf("Expected ResponseFormat='json', got '%s'", capturedOptions.ResponseFormat)
 	}
 }
+
+func TestProgramOfThought_ExtractTextOutputs_ShortContent(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("code", dsgo.FieldTypeString, "Code")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	// Test with very short content
+	outputs := pot.extractTextOutputs("short")
+	if outputs != nil {
+		t.Error("extractTextOutputs should return nil for content < 10 chars")
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_NoStringFields(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("count", dsgo.FieldTypeInt, "Count")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := pot.extractTextOutputs("some long content that is more than 10 characters")
+	if outputs != nil {
+		t.Error("extractTextOutputs should return nil when no string output fields")
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_WithLanguageCodeBlock(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	content := "Here's the solution:\n```python\nprint('hello')\n```\nThis prints hello"
+	outputs := pot.extractTextOutputs(content)
+
+	if outputs == nil {
+		t.Fatal("extractTextOutputs should extract from language-tagged code block")
+	}
+
+	if code, ok := outputs["code"].(string); !ok || code != "print('hello')" {
+		t.Errorf("Expected code='print('hello')', got %v", outputs["code"])
+	}
+
+	if expl, ok := outputs["explanation"].(string); !ok || expl != "Here's the solution:" {
+		t.Errorf("Expected explanation before code block, got %v", outputs["explanation"])
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_GenericCodeBlock(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	content := "```\nx = 42\n```"
+	outputs := pot.extractTextOutputs(content)
+
+	if outputs == nil {
+		t.Fatal("extractTextOutputs should extract from generic code block")
+	}
+
+	if code, ok := outputs["code"].(string); !ok || code != "x = 42" {
+		t.Errorf("Expected code='x = 42', got %v", outputs["code"])
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_PlainCode(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	content := "result = 2 + 2\nprint(result)"
+	outputs := pot.extractTextOutputs(content)
+
+	if outputs == nil {
+		t.Fatal("extractTextOutputs should use entire content as code when no blocks found")
+	}
+
+	if code, ok := outputs["code"].(string); !ok || code != content {
+		t.Errorf("Expected code='%s', got %v", content, outputs["code"])
+	}
+
+	// Should fill required explanation field with placeholder
+	if expl, ok := outputs["explanation"].(string); !ok || expl == "" {
+		t.Errorf("Expected explanation placeholder, got %v", outputs["explanation"])
+	}
+}
+
+func TestProgramOfThought_FillRequiredStringFields_StandardFields(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation").
+		AddOutput("result", dsgo.FieldTypeString, "Result").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer").
+		AddOutput("steps", dsgo.FieldTypeString, "Steps").
+		AddOutput("insights", dsgo.FieldTypeString, "Insights")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := make(map[string]any)
+	pot.fillRequiredStringFields(outputs, sig.OutputFields)
+
+	// Check all standard field placeholders are set
+	expectedFields := []string{"explanation", "result", "answer", "steps", "insights"}
+	for _, field := range expectedFields {
+		if _, exists := outputs[field]; !exists {
+			t.Errorf("Expected field '%s' to be filled", field)
+		}
+	}
+}
+
+func TestProgramOfThought_FillRequiredStringFields_CustomField(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("custom_field", dsgo.FieldTypeString, "Custom")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := make(map[string]any)
+	pot.fillRequiredStringFields(outputs, sig.OutputFields)
+
+	if val, ok := outputs["custom_field"].(string); !ok || val != "Output for custom_field" {
+		t.Errorf("Expected custom field placeholder, got %v", outputs["custom_field"])
+	}
+}
+
+func TestProgramOfThought_FillRequiredStringFields_SkipsOptional(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOptionalOutput("optional_field", dsgo.FieldTypeString, "Optional")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := make(map[string]any)
+	pot.fillRequiredStringFields(outputs, sig.OutputFields)
+
+	// Should not fill optional fields
+	if _, exists := outputs["optional_field"]; exists {
+		t.Error("fillRequiredStringFields should not fill optional fields")
+	}
+}
+
+func TestProgramOfThought_FillRequiredStringFields_SkipsExisting(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := map[string]any{
+		"answer": "existing value",
+	}
+	pot.fillRequiredStringFields(outputs, sig.OutputFields)
+
+	// Should not overwrite existing values
+	if outputs["answer"] != "existing value" {
+		t.Error("fillRequiredStringFields should not overwrite existing values")
+	}
+}

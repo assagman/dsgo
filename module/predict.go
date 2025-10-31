@@ -102,6 +102,10 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 	if p.LM.SupportsJSON() {
 		if _, isJSON := p.Adapter.(*dsgo.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
+			// Auto-generate JSON schema from signature for structured outputs
+			if options.ResponseSchema == nil {
+				options.ResponseSchema = p.Signature.SignatureToJSONSchema()
+			}
 		}
 	}
 
@@ -204,6 +208,10 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 	if p.LM.SupportsJSON() {
 		if _, isJSON := p.Adapter.(*dsgo.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
+			// Auto-generate JSON schema from signature for structured outputs
+			if options.ResponseSchema == nil {
+				options.ResponseSchema = p.Signature.SignatureToJSONSchema()
+			}
 		}
 	}
 

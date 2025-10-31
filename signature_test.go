@@ -894,3 +894,174 @@ func TestSignature_validateFieldType_DirectCalls(t *testing.T) {
 		})
 	}
 }
+
+func TestSignatureToJSONSchema(t *testing.T) {
+	tests := []struct {
+		name     string
+		sig      *Signature
+		validate func(t *testing.T, schema map[string]any)
+	}{
+		{
+			name: "basic string and int fields",
+			sig: NewSignature("Test signature").
+				AddOutput("name", FieldTypeString, "Person's name").
+				AddOutput("age", FieldTypeInt, "Person's age"),
+			validate: func(t *testing.T, schema map[string]any) {
+				if schema["type"] != "object" {
+					t.Errorf("expected type object, got %v", schema["type"])
+				}
+				props, ok := schema["properties"].(map[string]any)
+				if !ok {
+					t.Fatal("expected properties map")
+				}
+				nameProp, ok := props["name"].(map[string]any)
+				if !ok {
+					t.Fatal("expected name property")
+				}
+				if nameProp["type"] != "string" {
+					t.Errorf("expected name type string, got %v", nameProp["type"])
+				}
+				if nameProp["description"] != "Person's name" {
+					t.Errorf("expected description, got %v", nameProp["description"])
+				}
+				ageProp, ok := props["age"].(map[string]any)
+				if !ok {
+					t.Fatal("expected age property")
+				}
+				if ageProp["type"] != "integer" {
+					t.Errorf("expected age type integer, got %v", ageProp["type"])
+				}
+				required, ok := schema["required"].([]string)
+				if !ok {
+					t.Fatal("expected required array")
+				}
+				if len(required) != 2 {
+					t.Errorf("expected 2 required fields, got %d", len(required))
+				}
+			},
+		},
+		{
+			name: "class field with enum",
+			sig: NewSignature("Classification").
+				AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "Sentiment classification"),
+			validate: func(t *testing.T, schema map[string]any) {
+				props := schema["properties"].(map[string]any)
+				sentimentProp := props["sentiment"].(map[string]any)
+				if sentimentProp["type"] != "string" {
+					t.Errorf("expected sentiment type string, got %v", sentimentProp["type"])
+				}
+				enum, ok := sentimentProp["enum"].([]string)
+				if !ok {
+					t.Fatal("expected enum array")
+				}
+				if len(enum) != 3 {
+					t.Errorf("expected 3 enum values, got %d", len(enum))
+				}
+				if enum[0] != "positive" || enum[1] != "negative" || enum[2] != "neutral" {
+					t.Errorf("unexpected enum values: %v", enum)
+				}
+			},
+		},
+		{
+			name: "optional fields",
+			sig: NewSignature("Test").
+				AddOutput("required_field", FieldTypeString, "Required").
+				AddOptionalOutput("optional_field", FieldTypeString, "Optional"),
+			validate: func(t *testing.T, schema map[string]any) {
+				required, ok := schema["required"].([]string)
+				if !ok {
+					t.Fatal("expected required array")
+				}
+				if len(required) != 1 {
+					t.Errorf("expected 1 required field, got %d", len(required))
+				}
+				if required[0] != "required_field" {
+					t.Errorf("expected required_field, got %v", required[0])
+				}
+			},
+		},
+		{
+			name: "all field types",
+			sig: NewSignature("All types test").
+				AddOutput("str_field", FieldTypeString, "String field").
+				AddOutput("int_field", FieldTypeInt, "Int field").
+				AddOutput("float_field", FieldTypeFloat, "Float field").
+				AddOutput("bool_field", FieldTypeBool, "Bool field").
+				AddOutput("json_field", FieldTypeJSON, "JSON field").
+				AddOutput("image_field", FieldTypeImage, "Image field").
+				AddOutput("datetime_field", FieldTypeDatetime, "Datetime field"),
+			validate: func(t *testing.T, schema map[string]any) {
+				props := schema["properties"].(map[string]any)
+
+				expectedTypes := map[string]string{
+					"str_field":      "string",
+					"int_field":      "integer",
+					"float_field":    "number",
+					"bool_field":     "boolean",
+					"json_field":     "object",
+					"image_field":    "string",
+					"datetime_field": "string",
+				}
+
+				for fieldName, expectedType := range expectedTypes {
+					prop, ok := props[fieldName].(map[string]any)
+					if !ok {
+						t.Errorf("expected %s property", fieldName)
+						continue
+					}
+					if prop["type"] != expectedType {
+						t.Errorf("%s: expected type %s, got %v", fieldName, expectedType, prop["type"])
+					}
+				}
+			},
+		},
+		{
+			name: "signature description",
+			sig:  NewSignature("This is a test signature"),
+			validate: func(t *testing.T, schema map[string]any) {
+				if schema["description"] != "This is a test signature" {
+					t.Errorf("expected description in schema, got %v", schema["description"])
+				}
+			},
+		},
+		{
+			name: "no required fields when all optional",
+			sig: NewSignature("All optional").
+				AddOptionalOutput("opt1", FieldTypeString, "").
+				AddOptionalOutput("opt2", FieldTypeInt, ""),
+			validate: func(t *testing.T, schema map[string]any) {
+				_, hasRequired := schema["required"]
+				if hasRequired {
+					t.Error("expected no required field in schema when all fields are optional")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := tt.sig.SignatureToJSONSchema()
+			if schema == nil {
+				t.Fatal("expected schema, got nil")
+			}
+			tt.validate(t, schema)
+		})
+	}
+}
+
+func TestSignatureToJSONSchema_EmptySignature(t *testing.T) {
+	sig := NewSignature("Empty")
+	schema := sig.SignatureToJSONSchema()
+
+	if schema["type"] != "object" {
+		t.Errorf("expected type object, got %v", schema["type"])
+	}
+
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("expected properties map")
+	}
+	if len(props) != 0 {
+		t.Errorf("expected empty properties, got %d", len(props))
+	}
+}

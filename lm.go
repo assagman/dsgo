@@ -27,7 +27,8 @@ type GenerateOptions struct {
 	MaxTokens        int
 	TopP             float64
 	Stop             []string
-	ResponseFormat   string // "text" or "json"
+	ResponseFormat   string         // "text" or "json"
+	ResponseSchema   map[string]any // Optional JSON schema for structured outputs
 	Tools            []Tool
 	ToolChoice       string // "auto", "none", or specific tool name
 	Stream           bool
@@ -114,8 +115,10 @@ func (o *GenerateOptions) Copy() *GenerateOptions {
 		MaxTokens:        o.MaxTokens,
 		TopP:             o.TopP,
 		ResponseFormat:   o.ResponseFormat,
+		ResponseSchema:   o.ResponseSchema, // Copy reference (schema is read-only)
 		ToolChoice:       o.ToolChoice,
 		Stream:           o.Stream,
+		StreamCallback:   o.StreamCallback, // Copy reference (function pointer)
 		FrequencyPenalty: o.FrequencyPenalty,
 		PresencePenalty:  o.PresencePenalty,
 	}

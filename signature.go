@@ -310,3 +310,63 @@ func normalizeClassValue(value string, field Field) string {
 	// Return original if no match found
 	return value
 }
+
+// SignatureToJSONSchema generates a JSON schema from the signature's output fields
+// This enables structured output mode for OpenAI/OpenRouter compatible LMs
+func (s *Signature) SignatureToJSONSchema() map[string]any {
+	properties := make(map[string]any)
+	required := []string{}
+
+	for _, field := range s.OutputFields {
+		prop := make(map[string]any)
+
+		// Map DSGo field types to JSON schema types
+		switch field.Type {
+		case FieldTypeString, FieldTypeImage, FieldTypeDatetime:
+			prop["type"] = "string"
+		case FieldTypeInt:
+			prop["type"] = "integer"
+		case FieldTypeFloat:
+			prop["type"] = "number"
+		case FieldTypeBool:
+			prop["type"] = "boolean"
+		case FieldTypeJSON:
+			prop["type"] = "object"
+		case FieldTypeClass:
+			prop["type"] = "string"
+			if len(field.Classes) > 0 {
+				prop["enum"] = field.Classes
+			}
+		default:
+			prop["type"] = "string" // Fallback to string
+		}
+
+		// Add description if present
+		if field.Description != "" {
+			prop["description"] = field.Description
+		}
+
+		properties[field.Name] = prop
+
+		// Track required fields
+		if !field.Optional {
+			required = append(required, field.Name)
+		}
+	}
+
+	schema := map[string]any{
+		"type":       "object",
+		"properties": properties,
+	}
+
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+
+	// Add description if present
+	if s.Description != "" {
+		schema["description"] = s.Description
+	}
+
+	return schema
+}

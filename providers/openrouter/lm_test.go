@@ -438,6 +438,44 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 			},
 		},
 		{
+			name:     "with json schema",
+			messages: []dsgo.Message{{Role: "user", Content: "test"}},
+			options: &dsgo.GenerateOptions{
+				ResponseFormat: "json",
+				ResponseSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": map[string]any{"type": "string"},
+						"age":  map[string]any{"type": "number"},
+					},
+					"required": []string{"name"},
+				},
+			},
+			check: func(t *testing.T, req map[string]interface{}) {
+				rf, ok := req["response_format"].(map[string]any)
+				if !ok {
+					t.Fatal("expected response_format to be map[string]any")
+				}
+				if rf["type"] != "json_schema" {
+					t.Errorf("expected type json_schema, got %v", rf["type"])
+				}
+				schema, ok := rf["schema"].(map[string]any)
+				if !ok {
+					t.Fatal("expected schema in response_format")
+				}
+				if schema["type"] != "object" {
+					t.Errorf("expected schema type object, got %v", schema["type"])
+				}
+				props, ok := schema["properties"].(map[string]any)
+				if !ok {
+					t.Fatal("expected properties in schema")
+				}
+				if len(props) != 2 {
+					t.Errorf("expected 2 properties, got %d", len(props))
+				}
+			},
+		},
+		{
 			name:     "with penalties",
 			messages: []dsgo.Message{{Role: "user", Content: "test"}},
 			options: &dsgo.GenerateOptions{
@@ -701,5 +739,96 @@ func TestOpenRouter_Generate_ToolChoiceNone(t *testing.T) {
 	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, options)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenRouter_Stream_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+
+		// Write SSE stream response
+		w.Header().Set("Content-Type", "text/event-stream")
+
+		chunks := []string{
+			`data: {"id":"test","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":""}]}`,
+			`data: {"id":"test","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"content":" world"},"finish_reason":""}]}`,
+			`data: {"id":"test","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}`,
+			`data: [DONE]`,
+		}
+
+		for _, chunk := range chunks {
+			_, _ = w.Write([]byte(chunk + "\n\n"))
+		}
+	}))
+	defer server.Close()
+
+	lm := &OpenRouter{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	messages := []dsgo.Message{{Role: "user", Content: "Hello"}}
+	options := dsgo.DefaultGenerateOptions()
+
+	chunkChan, errChan := lm.Stream(context.Background(), messages, options)
+
+	var content string
+	var finalUsage dsgo.Usage
+	chunkCount := 0
+
+	for chunk := range chunkChan {
+		content += chunk.Content
+		chunkCount++
+		if chunk.Usage.TotalTokens > 0 {
+			finalUsage = chunk.Usage
+		}
+	}
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	default:
+	}
+
+	if content != "Hello world!" {
+		t.Errorf("expected content 'Hello world!', got '%s'", content)
+	}
+	if chunkCount != 3 {
+		t.Errorf("expected 3 chunks, got %d", chunkCount)
+	}
+	if finalUsage.TotalTokens != 13 {
+		t.Errorf("expected 13 total tokens, got %d", finalUsage.TotalTokens)
+	}
+}
+
+func TestOpenRouter_Stream_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error": "bad request"}`))
+	}))
+	defer server.Close()
+
+	lm := &OpenRouter{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+
+	// Should get error
+	for range chunkChan {
+		t.Error("should not receive chunks on error")
+	}
+
+	err := <-errChan
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }

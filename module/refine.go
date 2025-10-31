@@ -158,6 +158,10 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, 
 	if r.LM.SupportsJSON() {
 		if _, isJSON := r.Adapter.(*dsgo.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
+			// Auto-generate JSON schema from signature for structured outputs
+			if options.ResponseSchema == nil {
+				options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+			}
 		}
 	}
 
@@ -248,6 +252,10 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, 
 	if r.LM.SupportsJSON() {
 		if _, isJSON := r.Adapter.(*dsgo.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
+			// Auto-generate JSON schema from signature for structured outputs
+			if options.ResponseSchema == nil {
+				options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+			}
 		}
 	}
 

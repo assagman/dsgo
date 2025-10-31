@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/assagman/dsgo"
@@ -767,5 +768,201 @@ func TestReAct_Forward_OutputValidationError(t *testing.T) {
 
 	if !contains(err.Error(), "validation failed") {
 		t.Errorf("Expected validation error, got %v", err)
+	}
+}
+
+func TestReAct_ExtractTextOutputs_ShortContent(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	react := NewReAct(sig, &MockLM{}, []dsgo.Tool{})
+
+	// Test with short content (< 10 chars)
+	messages := []dsgo.Message{}
+	outputs := react.extractTextOutputs("short", messages)
+
+	// Should synthesize from history even though there's no history
+	if outputs == nil {
+		t.Error("extractTextOutputs should return outputs for short content")
+	}
+}
+
+func TestReAct_ExtractTextOutputs_NoStringFields(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("count", dsgo.FieldTypeInt, "Count")
+
+	react := NewReAct(sig, &MockLM{}, []dsgo.Tool{})
+
+	messages := []dsgo.Message{}
+	outputs := react.extractTextOutputs("long enough content here", messages)
+
+	if outputs != nil {
+		t.Error("extractTextOutputs should return nil when no string output fields")
+	}
+}
+
+func TestReAct_ExtractTextOutputs_SingleField(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	react := NewReAct(sig, &MockLM{}, []dsgo.Tool{})
+
+	content := "This is the final answer to the question"
+	messages := []dsgo.Message{}
+	outputs := react.extractTextOutputs(content, messages)
+
+	if outputs == nil {
+		t.Fatal("extractTextOutputs should extract single field")
+	}
+
+	if answer, ok := outputs["answer"].(string); !ok || answer != content {
+		t.Errorf("Expected answer='%s', got %v", content, outputs["answer"])
+	}
+}
+
+func TestReAct_ExtractTextOutputs_MultipleFields(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer").
+		AddOutput("reasoning", dsgo.FieldTypeString, "Reasoning")
+
+	react := NewReAct(sig, &MockLM{}, []dsgo.Tool{})
+
+	content := "Based on my analysis, the final answer is 42"
+	messages := []dsgo.Message{}
+	outputs := react.extractTextOutputs(content, messages)
+
+	if outputs == nil {
+		t.Fatal("extractTextOutputs should extract multiple fields")
+	}
+
+	// First field should get the content
+	if answer, ok := outputs["answer"].(string); !ok || answer != content {
+		t.Errorf("Expected answer to be content, got %v", outputs["answer"])
+	}
+
+	// Second required field should get a placeholder
+	if reasoning, ok := outputs["reasoning"].(string); !ok || reasoning == "" {
+		t.Errorf("Expected reasoning placeholder, got %v", outputs["reasoning"])
+	}
+}
+
+func TestReAct_SynthesizeAnswerFromHistory_NoObservations(t *testing.T) {
+	react := NewReAct(dsgo.NewSignature("Test"), &MockLM{}, []dsgo.Tool{})
+
+	messages := []dsgo.Message{
+		{Role: "user", Content: "test question"},
+		{Role: "assistant", Content: "thinking"},
+	}
+
+	result := react.synthesizeAnswerFromHistory(messages)
+	if result != "No information available from tools" {
+		t.Errorf("Expected 'No information available' message, got '%s'", result)
+	}
+}
+
+func TestReAct_SynthesizeAnswerFromHistory_WithObservations(t *testing.T) {
+	react := NewReAct(dsgo.NewSignature("Test"), &MockLM{}, []dsgo.Tool{})
+
+	messages := []dsgo.Message{
+		{Role: "user", Content: "test question"},
+		{Role: "tool", Content: "The weather is sunny"},
+		{Role: "assistant", Content: "thinking"},
+		{Role: "tool", Content: "Temperature is 25 degrees"},
+	}
+
+	result := react.synthesizeAnswerFromHistory(messages)
+
+	// Should use recent observations
+	if result == "No information available from tools" {
+		t.Error("Should synthesize from tool observations")
+	}
+
+	// Should contain one of the tool observations
+	if !contains(result, "sunny") && !contains(result, "25 degrees") {
+		t.Errorf("Result should contain tool observations, got '%s'", result)
+	}
+}
+
+func TestReAct_SynthesizeAnswerFromHistory_SkipsErrors(t *testing.T) {
+	react := NewReAct(dsgo.NewSignature("Test"), &MockLM{}, []dsgo.Tool{})
+
+	messages := []dsgo.Message{
+		{Role: "tool", Content: "Error: tool failed"},
+		{Role: "tool", Content: "Valid observation here and it is definitely longer than 20 characters"},
+	}
+
+	result := react.synthesizeAnswerFromHistory(messages)
+
+	// Should not include error messages
+	if contains(result, "Error:") {
+		t.Error("Should skip error messages in synthesis")
+	}
+
+	if !contains(result, "Valid observation") {
+		t.Errorf("Should include valid observation, got '%s'", result)
+	}
+}
+
+func TestReAct_SynthesizeAnswerFromHistory_DeduplicatesObservations(t *testing.T) {
+	react := NewReAct(dsgo.NewSignature("Test"), &MockLM{}, []dsgo.Tool{})
+
+	duplicateObs := "This is a long observation that will be duplicated to test deduplication"
+	messages := []dsgo.Message{
+		{Role: "tool", Content: duplicateObs},
+		{Role: "tool", Content: duplicateObs}, // Duplicate
+		{Role: "tool", Content: "Different observation that is also long enough to be considered"},
+	}
+
+	result := react.synthesizeAnswerFromHistory(messages)
+
+	// Should only have unique observations (up to 3)
+	// Count occurrences of duplicate string
+	count := 0
+	content := result
+	for i := 0; i < len(content); {
+		idx := strings.Index(content[i:], "duplicated")
+		if idx == -1 {
+			break
+		}
+		count++
+		i += idx + 1
+	}
+
+	if count > 1 {
+		t.Errorf("Should deduplicate observations, found %d occurrences", count)
+	}
+}
+
+func TestReAct_SynthesizeAnswerFromHistory_LimitsToThreeObservations(t *testing.T) {
+	react := NewReAct(dsgo.NewSignature("Test"), &MockLM{}, []dsgo.Tool{})
+
+	messages := []dsgo.Message{
+		{Role: "tool", Content: "First observation is definitely longer than twenty characters"},
+		{Role: "tool", Content: "Second observation is definitely longer than twenty characters"},
+		{Role: "tool", Content: "Third observation is definitely longer than twenty characters"},
+		{Role: "tool", Content: "Fourth observation is definitely longer than twenty characters"},
+		{Role: "tool", Content: "Fifth observation is definitely longer than twenty characters"},
+	}
+
+	result := react.synthesizeAnswerFromHistory(messages)
+
+	// Should use most recent 3 unique observations
+	if contains(result, "First") && contains(result, "Second") {
+		t.Error("Should limit to 3 most recent observations")
+	}
+}
+
+func TestReAct_SynthesizeAnswerFromHistory_SkipsShortObservations(t *testing.T) {
+	react := NewReAct(dsgo.NewSignature("Test"), &MockLM{}, []dsgo.Tool{})
+
+	messages := []dsgo.Message{
+		{Role: "tool", Content: "short"},
+		{Role: "tool", Content: "This is a longer observation that should be included"},
+	}
+
+	result := react.synthesizeAnswerFromHistory(messages)
+
+	if contains(result, "short") && !contains(result, "longer observation") {
+		t.Errorf("Should skip observations <= 20 chars, got '%s'", result)
 	}
 }

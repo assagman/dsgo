@@ -152,6 +152,10 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 
 			if r.LM.SupportsJSON() {
 				options.ResponseFormat = "json"
+				// Auto-generate JSON schema from signature for structured outputs
+				if options.ResponseSchema == nil {
+					options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+				}
 			}
 		} else {
 			// Normal mode: enable tools if available
@@ -165,6 +169,10 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 		if r.LM.SupportsJSON() && len(options.Tools) == 0 {
 			if _, isJSON := r.Adapter.(*dsgo.JSONAdapter); isJSON {
 				options.ResponseFormat = "json"
+				// Auto-generate JSON schema from signature for structured outputs
+				if options.ResponseSchema == nil {
+					options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+				}
 			}
 		}
 

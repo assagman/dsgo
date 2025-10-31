@@ -161,7 +161,16 @@ func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.Generat
 		req["stop"] = options.Stop
 	}
 	if options.ResponseFormat == "json" {
-		req["response_format"] = map[string]string{"type": "json_schema"}
+		if options.ResponseSchema != nil {
+			// Full structured output with JSON schema
+			req["response_format"] = map[string]any{
+				"type":   "json_schema",
+				"schema": options.ResponseSchema,
+			}
+		} else {
+			// Basic JSON mode without schema
+			req["response_format"] = map[string]string{"type": "json_schema"}
+		}
 	}
 	if options.FrequencyPenalty != 0 {
 		req["frequency_penalty"] = options.FrequencyPenalty

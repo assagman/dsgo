@@ -294,3 +294,136 @@ func (m *mockStreamingLM) Stream(ctx context.Context, messages []dsgo.Message, o
 func (m *mockStreamingLM) Name() string        { return "mock-streaming" }
 func (m *mockStreamingLM) SupportsJSON() bool  { return false }
 func (m *mockStreamingLM) SupportsTools() bool { return false }
+
+// TestPredict_Stream_WithJSONSchemaAutoGen tests streaming with auto-generated JSON schema
+func TestPredict_Stream_WithJSONSchemaAutoGen(t *testing.T) {
+	sig := dsgo.NewSignature("Classification").
+		AddInput("text", dsgo.FieldTypeString, "Text to classify").
+		AddOutput("category", dsgo.FieldTypeString, "Category").
+		AddOutput("score", dsgo.FieldTypeFloat, "Confidence score")
+
+	schemaVerified := false
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			// Verify schema was auto-generated for streaming too
+			if options.ResponseSchema != nil {
+				schemaVerified = true
+				if props, ok := options.ResponseSchema["properties"].(map[string]any); ok {
+					if _, ok := props["category"]; !ok {
+						t.Error("Expected category in auto-generated schema")
+					}
+					if _, ok := props["score"]; !ok {
+						t.Error("Expected score in auto-generated schema")
+					}
+				}
+			}
+			return &dsgo.GenerateResult{
+				Content: `{"category": "tech", "score": 0.95}`,
+			}, nil
+		},
+	}
+
+	predict := NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter())
+	result, err := predict.Stream(context.Background(), map[string]any{
+		"text": "AI article",
+	})
+	if err != nil {
+		t.Fatalf("Stream failed: %v", err)
+	}
+
+	// Drain chunks
+	for range result.Chunks {
+	}
+
+	// Wait for prediction
+	prediction := <-result.Prediction
+	if prediction == nil {
+		t.Fatal("Expected prediction, got nil")
+	}
+
+	if !schemaVerified {
+		t.Error("Schema auto-generation was not verified in stream mode")
+	}
+}
+
+// TestPredict_Stream_ParseError tests streaming with parse error
+func TestPredict_Stream_ParseError(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddInput("question", dsgo.FieldTypeString, "").
+		AddOutput("field1", dsgo.FieldTypeString, "").
+		AddOutput("field2", dsgo.FieldTypeString, "")
+
+	mockLM := &mockStreamingLM{
+		chunks: []dsgo.Chunk{
+			{Content: "invalid unparseable content", FinishReason: ""},
+			{Content: "", FinishReason: "stop"},
+		},
+	}
+
+	predict := NewPredict(sig, mockLM)
+	result, err := predict.Stream(context.Background(), map[string]any{
+		"question": "Test",
+	})
+	if err != nil {
+		t.Fatalf("Stream failed: %v", err)
+	}
+
+	// Drain chunks
+	for range result.Chunks {
+	}
+
+	// Should get parse error
+	select {
+	case err := <-result.Errors:
+		if err == nil {
+			t.Error("Expected parse error, got nil")
+		}
+		if !strings.Contains(err.Error(), "parse") {
+			t.Errorf("Expected parse error, got: %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("Timeout waiting for error")
+	}
+}
+
+// TestPredict_Stream_WithHistory tests streaming with conversation history
+func TestPredict_Stream_WithHistory(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddInput("question", dsgo.FieldTypeString, "").
+		AddOutput("answer", dsgo.FieldTypeString, "")
+
+	history := dsgo.NewHistory()
+	history.Add(dsgo.Message{Role: "user", Content: "Previous question"})
+	history.Add(dsgo.Message{Role: "assistant", Content: "Previous answer"})
+
+	mockLM := &mockStreamingLM{
+		chunks: []dsgo.Chunk{
+			{Content: "answer: Current answer", FinishReason: ""},
+			{Content: "", FinishReason: "stop"},
+		},
+	}
+
+	predict := NewPredict(sig, mockLM).WithHistory(history)
+	result, err := predict.Stream(context.Background(), map[string]any{
+		"question": "Current question",
+	})
+	if err != nil {
+		t.Fatalf("Stream failed: %v", err)
+	}
+
+	// Drain chunks
+	for range result.Chunks {
+	}
+
+	// Wait for prediction
+	prediction := <-result.Prediction
+	if prediction == nil {
+		t.Fatal("Expected prediction, got nil")
+	}
+
+	// History should now have 4 messages (2 old + 2 new)
+	if len(history.Get()) != 4 {
+		t.Errorf("Expected 4 messages in history, got %d", len(history.Get()))
+	}
+}

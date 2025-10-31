@@ -23,12 +23,16 @@ func main() {
 	// Create signature for story generation
 	sig := dsgo.NewSignature("Generate a creative short story based on the given prompt").
 		AddInput("prompt", dsgo.FieldTypeString, "Story prompt or theme").
-		AddOutput("story", dsgo.FieldTypeString, "The generated story").
+		AddOutput("story", dsgo.FieldTypeString, "The generated story (max 500 words)").
 		AddOutput("title", dsgo.FieldTypeString, "A catchy title for the story").
 		AddOutput("genre", dsgo.FieldTypeString, "The story genre")
 
-	// Create Predict module
-	predict := module.NewPredict(sig, lm)
+	// Create Predict module with max tokens to prevent truncation
+	predict := module.NewPredict(sig, lm).
+		WithOptions(&dsgo.GenerateOptions{
+			MaxTokens:   2000, // Ensure enough tokens for complete response
+			Temperature: 0.7,
+		})
 
 	ctx := context.Background()
 

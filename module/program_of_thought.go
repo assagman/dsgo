@@ -76,6 +76,10 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 	// ProgramOfThought uses FallbackAdapter but prefers JSON for reliable parsing
 	// Force JSON mode to ensure models follow the format specification
 	options.ResponseFormat = "json"
+	// Auto-generate JSON schema from signature for structured outputs
+	if options.ResponseSchema == nil {
+		options.ResponseSchema = pot.Signature.SignatureToJSONSchema()
+	}
 
 	result, err := pot.LM.Generate(ctx, messages, options)
 	if err != nil {
@@ -313,9 +317,43 @@ func (pot *ProgramOfThought) extractTextOutputs(content string) map[string]any {
 		}
 	}
 
-	// Strategy 2: If no code block found, use entire content as code (last resort)
+	// Strategy 2: Look for "Explanation:" sections to extract both code and explanation
+	if codeField != nil && len(outputs) == 0 {
+		// Split by common section markers
+		lowerContent := strings.ToLower(content)
+		explanationIdx := -1
+		for _, marker := range []string{"explanation:", "**explanation**", "## explanation", "### explanation"} {
+			if idx := strings.Index(lowerContent, marker); idx != -1 {
+				explanationIdx = idx
+				break
+			}
+		}
+
+		if explanationIdx != -1 {
+			// Treat everything before "Explanation:" as code
+			code := strings.TrimSpace(content[:explanationIdx])
+			explanation := strings.TrimSpace(content[explanationIdx:])
+
+			// Clean up code (remove common prefixes)
+			code = strings.TrimPrefix(code, "Generated Code:")
+			code = strings.TrimPrefix(code, "Code:")
+			code = strings.TrimPrefix(code, "**Code:**")
+			code = strings.TrimSpace(code)
+
+			if code != "" {
+				outputs["code"] = code
+			}
+
+			explanationField := pot.Signature.GetOutputField("explanation")
+			if explanationField != nil && explanation != "" {
+				outputs["explanation"] = explanation
+			}
+		}
+	}
+
+	// Strategy 3: If still no code found, use entire content as code (last resort)
 	// This handles cases where model outputs code directly without markdown formatting
-	if codeField != nil {
+	if codeField != nil && len(outputs) == 0 {
 		outputs["code"] = content
 
 		// Fill in other string fields with placeholders if required
