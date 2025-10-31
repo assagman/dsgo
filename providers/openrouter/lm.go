@@ -321,22 +321,23 @@ func (o *OpenRouter) Stream(ctx context.Context, messages []dsgo.Message, option
 			return
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
-		if err != nil {
-			errChan <- fmt.Errorf("failed to create request: %w", err)
-			return
-		}
+		resp, err := retry.WithExponentialBackoff(ctx, func() (*http.Response, error) {
+			req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+			if err != nil {
+				return nil, err
+			}
 
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+o.APIKey)
-		if o.SiteName != "" {
-			req.Header.Set("X-Title", o.SiteName)
-		}
-		if o.SiteURL != "" {
-			req.Header.Set("HTTP-Referer", o.SiteURL)
-		}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+o.APIKey)
+			if o.SiteName != "" {
+				req.Header.Set("X-Title", o.SiteName)
+			}
+			if o.SiteURL != "" {
+				req.Header.Set("HTTP-Referer", o.SiteURL)
+			}
 
-		resp, err := o.Client.Do(req)
+			return o.Client.Do(req)
+		})
 		if err != nil {
 			errChan <- fmt.Errorf("request failed: %w", err)
 			return

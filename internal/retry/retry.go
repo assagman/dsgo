@@ -1,8 +1,11 @@
 package retry
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
@@ -56,7 +59,12 @@ func WithExponentialBackoff(ctx context.Context, fn HTTPFunc) (*http.Response, e
 			// Network error - retry
 			shouldRetry = true
 		} else if resp != nil && IsRetryable(resp.StatusCode) {
-			// Retryable status code
+			// Check if this is a permanent failure (quota exhaustion)
+			// Don't retry on quota/billing issues
+			if isQuotaExhausted(resp) {
+				return resp, nil
+			}
+			// Retryable status code (transient rate limit)
 			shouldRetry = true
 			// Close the body to reuse connection
 			_ = resp.Body.Close()
@@ -106,4 +114,36 @@ func calculateBackoff(attempt int) time.Duration {
 	backoff += jitter
 
 	return time.Duration(backoff)
+}
+
+// isQuotaExhausted checks if a 429 response is due to quota exhaustion (not retryable)
+// vs rate limiting (retryable)
+func isQuotaExhausted(resp *http.Response) bool {
+	if resp.StatusCode != http.StatusTooManyRequests {
+		return false
+	}
+
+	// Read and restore body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	// Try to parse error response
+	var errorResp struct {
+		Error struct {
+			Code string `json:"code"`
+			Type string `json:"type"`
+		} `json:"error"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &errorResp); err != nil {
+		return false
+	}
+
+	// Check for quota/billing-related error codes
+	return errorResp.Error.Code == "insufficient_quota" ||
+		errorResp.Error.Type == "insufficient_quota" ||
+		errorResp.Error.Code == "billing_hard_limit_reached"
 }

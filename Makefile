@@ -61,7 +61,7 @@ check-eof:
 clean:
 	rm -f coverage.txt coverage.out
 	rm -rf test_matrix_logs test_examples_logs
-	go clean -cache -testcache
+	go clean -testcache
 
 install-hooks:
 	./scripts/install-hooks.sh

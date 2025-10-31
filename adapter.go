@@ -116,6 +116,62 @@ func coerceOutputs(sig *Signature, outputs map[string]any, allowArrayToString bo
 	return result
 }
 
+// normalizeKey normalizes a field name for case-insensitive matching
+// Converts to lowercase and removes spaces, underscores, and hyphens
+func normalizeKey(s string) string {
+	k := strings.ToLower(strings.TrimSpace(s))
+	k = strings.ReplaceAll(k, " ", "")
+	k = strings.ReplaceAll(k, "_", "")
+	k = strings.ReplaceAll(k, "-", "")
+	return k
+}
+
+// NormalizeOutputKeys normalizes output field names to match signature fields
+// This makes parsing resilient to casing variations (Answer vs answer) and formatting
+func NormalizeOutputKeys(sig *Signature, outputs map[string]any) map[string]any {
+	out := make(map[string]any, len(outputs))
+
+	// Build normalized-to-canonical mapping
+	normToCanon := map[string]string{}
+	for _, f := range sig.OutputFields {
+		normToCanon[normalizeKey(f.Name)] = f.Name
+	}
+
+	// Add conservative synonyms for common field names
+	// Only add if the canonical field exists in signature
+	if _, ok := normToCanon["answer"]; ok {
+		for _, syn := range []string{"final", "finalanswer", "finalresult", "result", "response"} {
+			// Only map synonym if it doesn't conflict with existing field
+			if _, exists := normToCanon[syn]; !exists {
+				normToCanon[syn] = "answer"
+			}
+		}
+	}
+
+	// Map output keys to canonical names
+	for k, v := range outputs {
+		normKey := normalizeKey(k)
+		if canon, ok := normToCanon[normKey]; ok {
+			// Use canonical name, but don't overwrite if already set
+			if _, exists := out[canon]; !exists || out[canon] == nil {
+				out[canon] = v
+			}
+		} else {
+			// Keep original key if no canonical mapping found
+			out[k] = v
+		}
+	}
+
+	// Trim string values
+	for _, f := range sig.OutputFields {
+		if s, ok := out[f.Name].(string); ok {
+			out[f.Name] = strings.TrimSpace(s)
+		}
+	}
+
+	return out
+}
+
 // Adapter handles formatting prompts and parsing LM responses
 type Adapter interface {
 	// Format builds prompt messages from signature, inputs, and optional context
@@ -247,6 +303,9 @@ func (a *JSONAdapter) Parse(sig *Signature, content string) (map[string]any, err
 		// Track that repair was used
 		outputs["__json_repair"] = true
 	}
+
+	// Normalize field names for resilient parsing
+	outputs = NormalizeOutputKeys(sig, outputs)
 
 	// Coerce types to match signature expectations
 	outputs = a.coerceTypes(sig, outputs)
@@ -505,6 +564,9 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 
 		outputs[fieldName] = value
 	}
+
+	// Normalize field names for resilient parsing
+	outputs = NormalizeOutputKeys(sig, outputs)
 
 	// Coerce types to match signature expectations
 	outputs = a.coerceTypes(sig, outputs)

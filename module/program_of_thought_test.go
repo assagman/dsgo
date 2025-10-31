@@ -238,3 +238,37 @@ func TestProgramOfThought_Forward_WithCodeExecutionError(t *testing.T) {
 		t.Error("Should include execution_error when code execution fails")
 	}
 }
+
+func TestProgramOfThought_Forward_ForcesJSONMode(t *testing.T) {
+	sig := dsgo.NewSignature("Solve math").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	var capturedOptions *dsgo.GenerateOptions
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			capturedOptions = options
+			return &dsgo.GenerateResult{
+				Content: `{"code": "print(2+2)", "explanation": "Add 2+2", "answer": "4"}`,
+			}, nil
+		},
+	}
+
+	pot := NewProgramOfThought(sig, lm, "python")
+	_, err := pot.Forward(context.Background(), map[string]interface{}{
+		"problem": "What is 2+2?",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if capturedOptions == nil {
+		t.Fatal("GenerateOptions not captured")
+	}
+
+	if capturedOptions.ResponseFormat != "json" {
+		t.Errorf("Expected ResponseFormat='json', got '%s'", capturedOptions.ResponseFormat)
+	}
+}

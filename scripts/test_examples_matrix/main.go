@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,119 @@ type TestResult struct {
 	Output   string
 	Duration time.Duration
 	ExitCode int
+}
+
+// CircuitBreaker monitors test failures and triggers early termination
+type CircuitBreaker struct {
+	ctx               context.Context
+	cancel            context.CancelFunc
+	totalTests        int
+	totalFailed       int64
+	modelFailed       map[string]*int64
+	modelTotal        map[string]int
+	overallThreshold  float64 // 0.05 = 5% max failure (95% success)
+	perModelThreshold float64 // 0.10 = 10% max failure (90% success)
+	mu                sync.Mutex
+	tripped           bool
+	failedResults     []TestResult
+}
+
+func newCircuitBreaker(parentCtx context.Context, totalTests int, models []string, examplesPerModel int) *CircuitBreaker {
+	ctx, cancel := context.WithCancel(parentCtx)
+	cb := &CircuitBreaker{
+		ctx:               ctx,
+		cancel:            cancel,
+		totalTests:        totalTests,
+		modelFailed:       make(map[string]*int64),
+		modelTotal:        make(map[string]int),
+		overallThreshold:  0.05, // 95% success required
+		perModelThreshold: 0.10, // 90% per-model success required
+		failedResults:     make([]TestResult, 0),
+	}
+
+	for _, model := range models {
+		var zero int64
+		cb.modelFailed[model] = &zero
+		cb.modelTotal[model] = examplesPerModel
+	}
+
+	return cb
+}
+
+func (cb *CircuitBreaker) recordResult(result TestResult) {
+	if result.Success {
+		return
+	}
+
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	if cb.tripped {
+		return
+	}
+
+	// Record failure
+	atomic.AddInt64(&cb.totalFailed, 1)
+	if modelCounter, exists := cb.modelFailed[result.Model]; exists {
+		atomic.AddInt64(modelCounter, 1)
+	}
+	cb.failedResults = append(cb.failedResults, result)
+
+	// Check thresholds
+	totalFailed := atomic.LoadInt64(&cb.totalFailed)
+	maxTotalFailures := int64(float64(cb.totalTests) * cb.overallThreshold)
+
+	if totalFailed > maxTotalFailures {
+		cb.trip(fmt.Sprintf("Overall failure threshold exceeded: %d failures out of %d tests (%.1f%% failed, max allowed: %.1f%%)",
+			totalFailed, cb.totalTests, float64(totalFailed)/float64(cb.totalTests)*100, cb.overallThreshold*100))
+		return
+	}
+
+	// Check per-model thresholds
+	for model, failed := range cb.modelFailed {
+		modelFailures := atomic.LoadInt64(failed)
+		modelTotal := cb.modelTotal[model]
+		maxModelFailures := int64(float64(modelTotal) * cb.perModelThreshold)
+
+		if modelFailures > maxModelFailures {
+			cb.trip(fmt.Sprintf("Model failure threshold exceeded for %s: %d failures out of %d tests (%.1f%% failed, max allowed: %.1f%%)",
+				model, modelFailures, modelTotal, float64(modelFailures)/float64(modelTotal)*100, cb.perModelThreshold*100))
+			return
+		}
+	}
+}
+
+func (cb *CircuitBreaker) trip(reason string) {
+	if cb.tripped {
+		return
+	}
+
+	cb.tripped = true
+	fmt.Fprintf(os.Stderr, "\n\n🚨 CIRCUIT BREAKER TRIPPED 🚨\n")
+	fmt.Fprintf(os.Stderr, "Reason: %s\n\n", reason)
+	fmt.Fprintf(os.Stderr, "Cancelling remaining tests...\n\n")
+
+	// Dump failed test outputs
+	if len(cb.failedResults) > 0 {
+		fmt.Fprintf(os.Stderr, "=== Failed Test Outputs ===\n\n")
+		for i, result := range cb.failedResults {
+			fmt.Fprintf(os.Stderr, "[%d] %s [%s]\n", i+1, result.Example, result.Model)
+			fmt.Fprintf(os.Stderr, "Exit Code: %d\n", result.ExitCode)
+			if result.Error != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", result.Error)
+			}
+			fmt.Fprintf(os.Stderr, "Output:\n%s\n", result.Output)
+			fmt.Fprintf(os.Stderr, "---\n\n")
+		}
+	}
+
+	cb.cancel()
+}
+
+func (cb *CircuitBreaker) isTripped() bool {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	return cb.tripped
 }
 
 var allModels = []string{
@@ -65,6 +179,7 @@ func main() {
 	verbose := flag.Bool("v", false, "Verbose output")
 	timeout := flag.Duration("timeout", 10*time.Minute, "Timeout per example")
 	parallel := flag.Bool("p", true, "Run tests in parallel")
+	maxConcurrent := flag.Int("c", 10, "Maximum concurrent test executions (prevents resource exhaustion)")
 	flag.Parse()
 
 	projectRoot, err := os.Getwd()
@@ -94,19 +209,32 @@ func main() {
 	fmt.Printf("Examples: %d\n", len(allExamples))
 	fmt.Printf("Total executions: %d\n", len(selectedModels)*len(allExamples))
 	fmt.Printf("Parallel: %v\n", *parallel)
+	if *parallel {
+		fmt.Printf("Max concurrent: %d\n", *maxConcurrent)
+	}
 	fmt.Printf("Timeout: %v\n\n", *timeout)
 
 	startTime := time.Now()
 
+	// Create circuit breaker
+	totalTests := len(selectedModels) * len(allExamples)
+	cb := newCircuitBreaker(context.Background(), totalTests, selectedModels, len(allExamples))
+
 	// Run tests
 	var results []TestResult
 	if *parallel {
-		results = runParallel(projectRoot, selectedModels, allExamples, *timeout, *verbose)
+		results = runParallel(cb, projectRoot, selectedModels, allExamples, *timeout, *verbose, *maxConcurrent)
 	} else {
-		results = runSequential(projectRoot, selectedModels, allExamples, *timeout, *verbose)
+		results = runSequential(cb, projectRoot, selectedModels, allExamples, *timeout, *verbose)
 	}
 
 	totalDuration := time.Since(startTime)
+
+	// Check if circuit breaker tripped
+	if cb.isTripped() {
+		fmt.Println("\n❌ Test execution halted by circuit breaker")
+		os.Exit(1)
+	}
 
 	// Print summary
 	fmt.Println("\n=== Summary ===")
@@ -195,7 +323,7 @@ func main() {
 				allModelsPass = false
 			}
 			fmt.Printf("  %s %s: %.1f%% (%d/%d) (required: ≥90%%)\n",
-				status, truncate(model, 40), rate, stats.passed, stats.total)
+				status, model, rate, stats.passed, stats.total)
 		}
 	}
 
@@ -215,9 +343,10 @@ func main() {
 	}
 }
 
-func runParallel(projectRoot string, models, examples []string, timeout time.Duration, verbose bool) []TestResult {
+func runParallel(cb *CircuitBreaker, projectRoot string, models, examples []string, timeout time.Duration, verbose bool, maxConcurrent int) []TestResult {
 	totalTests := len(models) * len(examples)
 	results := make(chan TestResult, totalTests)
+	semaphore := make(chan struct{}, maxConcurrent) // Limit concurrent executions
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	completed := 0
@@ -250,7 +379,31 @@ func runParallel(projectRoot string, models, examples []string, timeout time.Dur
 			wg.Add(1)
 			go func(m, ex string) {
 				defer wg.Done()
-				result := runTest(projectRoot, ex, m, timeout)
+
+				// Check context before acquiring semaphore
+				select {
+				case <-cb.ctx.Done():
+					return
+				default:
+				}
+
+				// Acquire semaphore slot with context awareness
+				select {
+				case semaphore <- struct{}{}:
+					defer func() { <-semaphore }()
+				case <-cb.ctx.Done():
+					return
+				}
+
+				// Final check after acquiring semaphore
+				select {
+				case <-cb.ctx.Done():
+					return
+				default:
+				}
+
+				result := runTest(cb.ctx, projectRoot, ex, m, timeout)
+				cb.recordResult(result)
 				results <- result
 
 				// Save individual log
@@ -266,14 +419,16 @@ func runParallel(projectRoot string, models, examples []string, timeout time.Dur
 				mu.Unlock()
 
 				status := "✅"
+				errMsg := ""
 				if !result.Success {
 					status = "❌"
+					errMsg = fmt.Sprintf(" | %s", extractErrorFromResult(result))
 				}
 				modelInfo := ""
 				if len(models) > 1 {
-					modelInfo = fmt.Sprintf(" [%s]", truncate(m, 30))
+					modelInfo = fmt.Sprintf(" [%s]", m)
 				}
-				fmt.Printf("[%d/%d] %s %s%s (%.2fs, exit: %d)\n", currentCompleted, totalTests, status, filepath.Base(ex), modelInfo, result.Duration.Seconds(), result.ExitCode)
+				fmt.Printf("[%d/%d] %s %s%s (%.2fs, exit: %d)%s\n", currentCompleted, totalTests, status, filepath.Base(ex), modelInfo, result.Duration.Seconds(), result.ExitCode, errMsg)
 
 				if verbose && !result.Success {
 					fmt.Printf("   Error: %v\n", result.Error)
@@ -295,7 +450,7 @@ func runParallel(projectRoot string, models, examples []string, timeout time.Dur
 	return allResults
 }
 
-func runSequential(projectRoot string, models, examples []string, timeout time.Duration, verbose bool) []TestResult {
+func runSequential(cb *CircuitBreaker, projectRoot string, models, examples []string, timeout time.Duration, verbose bool) []TestResult {
 	var results []TestResult
 	completed := 0
 	total := len(models) * len(examples)
@@ -324,8 +479,14 @@ func runSequential(projectRoot string, models, examples []string, timeout time.D
 
 	for _, model := range models {
 		for _, example := range examples {
+			// Check if circuit breaker already tripped
+			if cb.isTripped() {
+				break
+			}
+
 			completed++
-			result := runTest(projectRoot, example, model, timeout)
+			result := runTest(cb.ctx, projectRoot, example, model, timeout)
+			cb.recordResult(result)
 			results = append(results, result)
 
 			// Save individual log
@@ -336,15 +497,17 @@ func runSequential(projectRoot string, models, examples []string, timeout time.D
 			}
 
 			status := "✅"
+			errMsg := ""
 			if !result.Success {
 				status = "❌"
+				errMsg = fmt.Sprintf(" | %s", extractErrorFromResult(result))
 			}
 			modelInfo := ""
 			if len(models) > 1 {
 				modelInfo = fmt.Sprintf(" [%s]", model)
 			}
-			fmt.Printf("[%d/%d] %s %s%s (%.2fs, exit: %d)\n",
-				completed, total, status, filepath.Base(example), modelInfo, result.Duration.Seconds(), result.ExitCode)
+			fmt.Printf("[%d/%d] %s %s%s (%.2fs, exit: %d)%s\n",
+				completed, total, status, filepath.Base(example), modelInfo, result.Duration.Seconds(), result.ExitCode, errMsg)
 
 			if verbose && !result.Success {
 				fmt.Printf("   Error: %v\n", result.Error)
@@ -355,18 +518,18 @@ func runSequential(projectRoot string, models, examples []string, timeout time.D
 	return results
 }
 
-func runTest(projectRoot, examplePath, model string, timeout time.Duration) TestResult {
+func runTest(ctx context.Context, projectRoot, examplePath, model string, timeout time.Duration) TestResult {
 	startTime := time.Now()
 	result := TestResult{
 		Example: filepath.Base(examplePath),
 		Model:   model,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	testCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	mainPath := filepath.Join(examplePath, "main.go")
-	cmd := exec.CommandContext(ctx, "go", "run", mainPath)
+	cmd := exec.CommandContext(testCtx, "go", "run", mainPath)
 	cmd.Dir = projectRoot
 
 	// Set model via environment variable
@@ -388,10 +551,17 @@ func runTest(projectRoot, examplePath, model string, timeout time.Duration) Test
 		result.ExitCode = 0
 	}
 
-	if ctx.Err() == context.DeadlineExceeded {
+	if testCtx.Err() == context.DeadlineExceeded {
 		result.Success = false
 		result.Error = fmt.Errorf("timeout exceeded")
 		result.ExitCode = 124
+		return result
+	}
+
+	if ctx.Err() == context.Canceled {
+		result.Success = false
+		result.Error = fmt.Errorf("cancelled by circuit breaker")
+		result.ExitCode = 125
 		return result
 	}
 
@@ -432,11 +602,83 @@ func getDefaultModel() string {
 	return "openai/gpt-4o-mini"
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
+func extractErrorFromResult(result TestResult) string {
+	// Special cases first
+	if result.Error != nil {
+		errStr := result.Error.Error()
+		if errStr == "timeout exceeded" || errStr == "cancelled by circuit breaker" {
+			return errStr
+		}
 	}
-	return s[:maxLen-1] + "…"
+
+	// Parse output for actual error
+	output := result.Output
+	if output == "" {
+		if result.Error != nil {
+			return result.Error.Error()
+		}
+		return "unknown error"
+	}
+
+	// Look for common error patterns in output
+	lines := strings.Split(output, "\n")
+
+	// Search for error indicators (from bottom to top, as errors usually at end)
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+
+		// Look for panic messages
+		if strings.HasPrefix(line, "panic:") {
+			msg := strings.TrimPrefix(line, "panic:")
+			return truncateMessage(strings.TrimSpace(msg))
+		}
+
+		// Look for "Error:" or "error:" lines
+		if strings.Contains(strings.ToLower(line), "error:") {
+			return truncateMessage(line)
+		}
+
+		// Look for "failed" messages
+		if strings.Contains(strings.ToLower(line), "failed") {
+			return truncateMessage(line)
+		}
+
+		// Look for API error responses
+		if strings.Contains(line, "status") && (strings.Contains(line, "429") || strings.Contains(line, "500") || strings.Contains(line, "503")) {
+			return truncateMessage(line)
+		}
+
+		// Stop searching after 20 lines from bottom
+		if len(lines)-i > 20 {
+			break
+		}
+	}
+
+	// Fallback: return last non-empty line
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !strings.HasPrefix(line, "exit status") {
+			return truncateMessage(line)
+		}
+	}
+
+	if result.Error != nil {
+		return result.Error.Error()
+	}
+
+	return "unknown error"
+}
+
+func truncateMessage(msg string) string {
+	msg = strings.TrimSpace(msg)
+	maxLen := 100
+	if len(msg) > maxLen {
+		return msg[:maxLen-3] + "..."
+	}
+	return msg
 }
 
 func sanitizeFilename(s string) string {

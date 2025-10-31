@@ -73,8 +73,9 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 
 	// Copy options to avoid mutation
 	options := pot.Options.Copy()
-	// ProgramOfThought always uses FallbackAdapter internally (line 86)
-	// So we don't force JSON mode since FallbackAdapter can handle various formats
+	// ProgramOfThought uses FallbackAdapter but prefers JSON for reliable parsing
+	// Force JSON mode to ensure models follow the format specification
+	options.ResponseFormat = "json"
 
 	result, err := pot.LM.Generate(ctx, messages, options)
 	if err != nil {

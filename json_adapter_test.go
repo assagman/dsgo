@@ -454,3 +454,202 @@ func TestJSONAdapter_Parse_MalformedJSONVariations(t *testing.T) {
 		})
 	}
 }
+
+// TestNormalizeKey tests the normalizeKey utility function
+func TestNormalizeKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"lowercase", "answer", "answer"},
+		{"uppercase", "Answer", "answer"},
+		{"mixed case", "AnSwEr", "answer"},
+		{"with spaces", "  answer  ", "answer"},
+		{"with underscores", "final_answer", "finalanswer"},
+		{"with hyphens", "final-answer", "finalanswer"},
+		{"complex", "  Final_Answer-123  ", "finalanswer123"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeKey(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeKey(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestNormalizeOutputKeys tests the NormalizeOutputKeys utility function
+func TestNormalizeOutputKeys(t *testing.T) {
+	tests := []struct {
+		name     string
+		sig      *Signature
+		inputs   map[string]any
+		expected map[string]any
+	}{
+		{
+			name: "exact match",
+			sig: NewSignature("test").
+				AddOutput("answer", FieldTypeString, "answer"),
+			inputs: map[string]any{
+				"answer": "test answer",
+			},
+			expected: map[string]any{
+				"answer": "test answer",
+			},
+		},
+		{
+			name: "case variation",
+			sig: NewSignature("test").
+				AddOutput("answer", FieldTypeString, "answer"),
+			inputs: map[string]any{
+				"Answer": "test answer",
+			},
+			expected: map[string]any{
+				"answer": "test answer",
+			},
+		},
+		{
+			name: "underscore variation",
+			sig: NewSignature("test").
+				AddOutput("answer", FieldTypeString, "answer"),
+			inputs: map[string]any{
+				"final_answer": "test answer",
+			},
+			expected: map[string]any{
+				"answer": "test answer",
+			},
+		},
+		{
+			name: "result synonym",
+			sig: NewSignature("test").
+				AddOutput("answer", FieldTypeString, "answer"),
+			inputs: map[string]any{
+				"result": "test answer",
+			},
+			expected: map[string]any{
+				"answer": "test answer",
+			},
+		},
+		{
+			name: "response synonym",
+			sig: NewSignature("test").
+				AddOutput("answer", FieldTypeString, "answer"),
+			inputs: map[string]any{
+				"response": "test answer",
+			},
+			expected: map[string]any{
+				"answer": "test answer",
+			},
+		},
+		{
+			name: "whitespace trimming",
+			sig: NewSignature("test").
+				AddOutput("answer", FieldTypeString, "answer"),
+			inputs: map[string]any{
+				"answer": "  test answer  ",
+			},
+			expected: map[string]any{
+				"answer": "test answer",
+			},
+		},
+		{
+			name: "multiple fields",
+			sig: NewSignature("test").
+				AddOutput("answer", FieldTypeString, "answer").
+				AddOutput("sources", FieldTypeString, "sources"),
+			inputs: map[string]any{
+				"Answer":  "test answer",
+				"Sources": "test sources",
+			},
+			expected: map[string]any{
+				"answer":  "test answer",
+				"sources": "test sources",
+			},
+		},
+		{
+			name: "no synonym conflict",
+			sig: NewSignature("test").
+				AddOutput("result", FieldTypeString, "result").
+				AddOutput("answer", FieldTypeString, "answer"),
+			inputs: map[string]any{
+				"result": "actual result",
+				"answer": "actual answer",
+			},
+			expected: map[string]any{
+				"result": "actual result",
+				"answer": "actual answer",
+			},
+		},
+		{
+			name: "preserve unknown keys",
+			sig: NewSignature("test").
+				AddOutput("answer", FieldTypeString, "answer"),
+			inputs: map[string]any{
+				"answer":        "test answer",
+				"__metadata":    "some metadata",
+				"__json_repair": true,
+			},
+			expected: map[string]any{
+				"answer":        "test answer",
+				"__metadata":    "some metadata",
+				"__json_repair": true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NormalizeOutputKeys(tt.sig, tt.inputs)
+
+			// Check all expected keys are present with correct values
+			for k, expectedVal := range tt.expected {
+				actualVal, ok := result[k]
+				if !ok {
+					t.Errorf("expected key %q not found in result", k)
+					continue
+				}
+				if actualVal != expectedVal {
+					t.Errorf("key %q: got %v, want %v", k, actualVal, expectedVal)
+				}
+			}
+
+			// Check no unexpected keys (except metadata keys starting with __)
+			for k := range result {
+				if _, ok := tt.expected[k]; !ok {
+					t.Errorf("unexpected key %q in result", k)
+				}
+			}
+		})
+	}
+}
+
+// TestNormalizeOutputKeys_Integration tests realistic scenario with model output
+func TestNormalizeOutputKeys_Integration(t *testing.T) {
+	sig := NewSignature("Answer the question").
+		AddOutput("answer", FieldTypeString, "The answer").
+		AddOutput("sources", FieldTypeString, "Sources used")
+
+	// Simulate model returning capitalized field names
+	modelOutput := map[string]any{
+		"Answer":  "DSPy is a framework for programming language models.",
+		"Sources": "Search results",
+	}
+
+	normalized := NormalizeOutputKeys(sig, modelOutput)
+
+	// Should validate successfully after normalization
+	if err := sig.ValidateOutputs(normalized); err != nil {
+		t.Errorf("validation failed after normalization: %v", err)
+	}
+
+	// Check values
+	if normalized["answer"] != "DSPy is a framework for programming language models." {
+		t.Errorf("answer field incorrect: %v", normalized["answer"])
+	}
+	if normalized["sources"] != "Search results" {
+		t.Errorf("sources field incorrect: %v", normalized["sources"])
+	}
+}
