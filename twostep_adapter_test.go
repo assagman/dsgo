@@ -334,3 +334,196 @@ func TestTwoStepAdapter_FormatHistory_Coverage(t *testing.T) {
 		}
 	}
 }
+
+// TestTwoStepAdapter_Parse_ErrorCases tests various error scenarios in TwoStepAdapter.Parse
+func TestTwoStepAdapter_Parse_ErrorCases(t *testing.T) {
+	// Use multiple fields to prevent JSONAdapter fallback for single string fields
+	sig := NewSignature("test").
+		AddOutput("result", FieldTypeString, "").
+		AddOutput("confidence", FieldTypeFloat, "")
+
+	tests := []struct {
+		name             string
+		freeFormResponse string
+		extractionResult string
+		extractionError  error
+		wantErr          bool
+		errContains      string
+	}{
+		{
+			name:             "Extraction LM network error",
+			freeFormResponse: "Some response",
+			extractionError:  fmt.Errorf("connection refused"),
+			wantErr:          true,
+			errContains:      "extraction LM failed",
+		},
+		{
+			name:             "Extraction LM returns malformed JSON",
+			freeFormResponse: "Some response",
+			extractionResult: "{invalid json",
+			wantErr:          true,
+			errContains:      "failed to parse extraction result",
+		},
+		{
+			name:             "Extraction LM returns empty response",
+			freeFormResponse: "Some response",
+			extractionResult: "",
+			wantErr:          true,
+			errContains:      "failed to parse extraction result",
+		},
+		{
+			name:             "Extraction LM returns non-JSON object",
+			freeFormResponse: "Some response",
+			extractionResult: `"just a string"`,
+			wantErr:          true,
+			errContains:      "failed to parse extraction result",
+		},
+		{
+			name:             "Extraction LM returns array instead of object",
+			freeFormResponse: "Some response",
+			extractionResult: `["item1", "item2"]`,
+			wantErr:          true,
+			errContains:      "failed to parse extraction result",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLM := &mockExtractionLM{
+				response: tt.extractionResult,
+				err:      tt.extractionError,
+			}
+			adapter := NewTwoStepAdapter(mockLM)
+
+			_, err := adapter.Parse(sig, tt.freeFormResponse)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr && !strings.Contains(err.Error(), tt.errContains) {
+				t.Errorf("Expected error to contain '%s', got: %v", tt.errContains, err)
+			}
+		})
+	}
+}
+
+// TestTwoStepAdapter_Parse_TypeCoercion_EdgeCases tests type coercion edge cases
+func TestTwoStepAdapter_Parse_TypeCoercion_EdgeCases(t *testing.T) {
+	sig := NewSignature("test").
+		AddOutput("count", FieldTypeInt, "").
+		AddOutput("score", FieldTypeFloat, "").
+		AddOutput("flag", FieldTypeBool, "").
+		AddOutput("text", FieldTypeString, "")
+
+	tests := []struct {
+		name             string
+		freeFormResponse string
+		extractionJSON   string
+		expected         map[string]any
+	}{
+		{
+			name:             "Numeric strings to numbers",
+			freeFormResponse: "Count is 42, score is 3.14, flag is true",
+			extractionJSON:   `{"count": "42", "score": "3.14", "flag": "true", "text": "hello"}`,
+			expected:         map[string]any{"count": 42, "score": 3.14, "flag": true, "text": "hello"},
+		},
+		{
+			name:             "Mixed quotes and whitespace",
+			freeFormResponse: "Data with quotes",
+			extractionJSON:   `{"count": " 42 ", "score": " 3.14\t", "flag": " false ", "text": " test "}`,
+			expected:         map[string]any{"count": 42, "score": 3.14, "flag": false, "text": "test"}, // Note: some processing may trim whitespace
+		},
+		{
+			name:             "Percentage strings",
+			freeFormResponse: "95% confidence",
+			extractionJSON:   `{"score": "95%"}`,
+			expected:         map[string]any{"score": 95.0},
+		},
+		{
+			name:             "Qualitative scores",
+			freeFormResponse: "High confidence",
+			extractionJSON:   `{"score": "high"}`,
+			expected:         map[string]any{"score": 0.9}, // "high" maps to 0.9
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLM := &mockExtractionLM{response: tt.extractionJSON}
+			adapter := NewTwoStepAdapter(mockLM)
+
+			outputs, err := adapter.Parse(sig, tt.freeFormResponse)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			for key, expectedVal := range tt.expected {
+				actualVal, ok := outputs[key]
+				if !ok {
+					t.Errorf("Missing expected output key: %s", key)
+					continue
+				}
+
+				// Check type and value
+				switch expected := expectedVal.(type) {
+				case int:
+					if actual, ok := actualVal.(int); !ok || actual != expected {
+						t.Errorf("For key %s: expected int %d, got %v (%T)", key, expected, actualVal, actualVal)
+					}
+				case float64:
+					if actual, ok := actualVal.(float64); !ok || actual != expected {
+						t.Errorf("For key %s: expected float64 %f, got %v (%T)", key, expected, actualVal, actualVal)
+					}
+				case bool:
+					if actual, ok := actualVal.(bool); !ok || actual != expected {
+						t.Errorf("For key %s: expected bool %t, got %v (%T)", key, expected, actualVal, actualVal)
+					}
+				case string:
+					if actual, ok := actualVal.(string); !ok || actual != expected {
+						t.Errorf("For key %s: expected string %q, got %v (%T)", key, expected, actualVal, actualVal)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestTwoStepAdapter_Parse_WithFallbackChains tests integration with fallback chains
+func TestTwoStepAdapter_Parse_WithFallbackChains(t *testing.T) {
+	sig := NewSignature("test").
+		AddOutput("result", FieldTypeString, "")
+
+	// Mock LM that fails on extraction
+	failingLM := &mockExtractionLM{
+		err: fmt.Errorf("extraction failed"),
+	}
+
+	// Test with TwoStepAdapter as part of a fallback chain
+	fallbackAdapter := NewFallbackAdapterWithChain(
+		NewTwoStepAdapter(failingLM), // This will fail
+		NewJSONAdapter(),             // This should succeed
+	)
+
+	// Content that JSONAdapter can parse
+	content := `{"result": "success"}`
+
+	outputs, err := fallbackAdapter.Parse(sig, content)
+	if err != nil {
+		t.Fatalf("Fallback should have succeeded: %v", err)
+	}
+
+	if outputs["result"] != "success" {
+		t.Errorf("Expected result='success', got %v", outputs["result"])
+	}
+
+	// Should have used the second adapter (JSONAdapter)
+	if fallbackAdapter.GetLastUsedAdapter() != 1 {
+		t.Errorf("Expected fallback to adapter 1, got %d", fallbackAdapter.GetLastUsedAdapter())
+	}
+
+	// Check metadata
+	if outputs["__fallback_used"] != true {
+		t.Errorf("Expected fallback_used=true, got %v", outputs["__fallback_used"])
+	}
+}

@@ -1,0 +1,320 @@
+# DSGo - DSPy for Go
+
+> AI-friendly project documentation for LLM agents
+
+## Project Overview
+
+DSGo is a production-ready Go implementation of the DSPy framework for programming language models. Build type-safe LM applications with composable modules and robust parsing.
+
+- **Repository**: https://github.com/assagman/dsgo
+- **Language**: Go 1.21+
+- **License**: MIT
+- **Status**: Core modules complete (75% DSPy parity)
+
+## Quick Start
+
+```bash
+go get github.com/assagman/dsgo
+export OPENAI_API_KEY=sk-...
+make test-matrix-quick
+```
+
+## Core Concepts
+
+### 1. Signatures - Define I/O Structure
+```go
+sig := dsgo.NewSignature("Task description").
+    AddInput("input_name", FieldType, "description").
+    AddOutput("output_name", FieldType, "description")
+```
+
+**Field Types**: String, Int, Float, Bool, JSON, Class, Image (partial), Datetime
+
+### 2. Modules - Execution Strategy
+- `Predict` - Direct answer
+- `ChainOfThought` - Step-by-step reasoning
+- `ReAct` - Reasoning + tool usage
+- `Refine` - Iterative improvement
+- `BestOfN` - Generate N, select best
+- `ProgramOfThought` - Code generation/execution
+- `Program` - Module composition/pipelines
+
+### 3. Providers - LM Integration
+- **OpenAI** - GPT-3.5, GPT-4, GPT-4 Turbo
+- **OpenRouter** - 100+ models
+
+## Project Structure
+
+```
+dsgo/
+├── Core System
+│   ├── signature.go      # Field definitions & validation
+│   ├── lm.go            # Language model interface
+│   ├── module.go        # Module interface
+│   ├── prediction.go    # Prediction wrapper with metadata
+│   ├── adapter.go       # JSON/Chat/TwoStep/Fallback adapters
+│   └── cache.go         # LRU caching layer
+│
+├── Primitives
+│   ├── history.go       # Conversation management
+│   ├── example.go       # Few-shot learning
+│   └── tool.go          # Tool/function calling
+│
+├── Internal Utilities
+│   └── internal/jsonutil/  # JSON extraction & repair
+│
+├── Infrastructure
+│   └── logging/         # Structured logging & tracing
+│
+├── Modules (module/)
+│   ├── predict.go
+│   ├── chain_of_thought.go
+│   ├── react.go
+│   ├── refine.go
+│   ├── best_of_n.go
+│   ├── program_of_thought.go
+│   └── program.go
+│
+├── Providers (providers/)
+│   ├── openai/
+│   └── openrouter/
+│
+├── Examples (examples/)  # 20+ working examples
+│   ├── sentiment/       # Basic prediction
+│   ├── react_agent/     # Tools & reasoning
+│   ├── logging_tracing/ # Observability
+│   ├── caching/         # Performance
+│   └── ...
+│
+└── Documentation
+    ├── README.md        # Complete overview
+    ├── QUICKSTART.md    # Get started in 30s
+    ├── AGENTS.md        # Development guide
+    ├── ROADMAP.md       # Implementation status
+    └── llms.txt         # This file
+```
+
+## Key Features
+
+### Production-Grade Robustness
+- **JSON Repair**: Auto-fix malformed JSON from models
+- **Partial Validation**: Diagnostic-driven outputs for optimization
+- **Class Normalization**: Case-insensitive, alias-aware matching
+- **Smart Extraction**: Numeric values from text descriptions
+
+### Adapter System
+1. **JSONAdapter** - Structured JSON with schema validation
+2. **ChatAdapter** - Field marker format with heuristics
+3. **TwoStepAdapter** - Two-stage for reasoning models
+4. **FallbackAdapter** - Automatic retry chain (>95% success)
+
+### Infrastructure
+- **Caching**: In-memory LRU cache with hit/miss metrics
+- **Logging**: Request ID propagation, structured logging
+- **Streaming**: Real-time token streaming (partial)
+- **Retries**: Exponential backoff with quota handling
+
+## Development Commands
+
+```bash
+# Run tests
+make test                    # Everything (race + coverage)
+make test-matrix-quick       # Single model
+make test-matrix-sample N=3  # 3 random models
+make test-matrix             # All models
+
+# Code quality
+make check                   # fmt, vet, build
+make lint                    # golangci-lint (requires v2.6.0)
+make all                     # clean, check, test, eof-check
+
+# Examples
+go run examples/<name>/main.go  # Run from project root
+```
+
+## API Patterns
+
+### Basic Prediction
+```go
+sig := dsgo.NewSignature("Classify sentiment").
+    AddInput("text", dsgo.FieldTypeString, "Input text").
+    AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "Sentiment")
+
+lm := openai.NewOpenAI("gpt-4")
+predict := module.NewPredict(sig, lm)
+result, err := predict.Forward(ctx, map[string]any{"text": "I love this!"})
+
+sentiment := result.GetString("sentiment")
+```
+
+### ReAct with Tools
+```go
+tool := dsgo.NewTool("search", "Search the web",
+    func(ctx context.Context, args map[string]any) (any, error) {
+        return search(args["query"].(string)), nil
+    },
+).AddParameter("query", "string", "Search query", true)
+
+react := module.NewReAct(sig, lm, []dsgo.Tool{tool}).
+    WithMaxIterations(5).
+    WithVerbose(true)
+```
+
+### Few-Shot Learning
+```go
+examples := dsgo.NewExampleSet("examples").
+    AddPair(
+        map[string]any{"text": "Love it!"},
+        map[string]any{"sentiment": "positive"},
+    )
+
+predict := module.NewPredict(sig, lm).
+    WithDemos(examples.Get())
+```
+
+## Testing
+
+- **Total Coverage**: 79.4%
+- **Core**: 61.9%
+- **Module**: 84.2%
+- **jsonutil**: 100%
+- **Providers**: 94.4% (OpenAI), 94.7% (OpenRouter)
+
+All code must:
+- Pass `go test ./...`
+- Pass `go test -race` (concurrency)
+- Pass `golangci-lint run`
+- Have corresponding unit tests
+
+## Code Style
+
+- Standard Go formatting (`gofmt`)
+- Exported types/functions have doc comments
+- PascalCase exports, camelCase internals
+- Error handling: return `error` as last value, wrap with context
+- Table-driven tests with subtests
+- No external deps except godotenv (examples only)
+
+## Important Notes
+
+### Concurrency
+- `History` is NOT thread-safe - use separate instances
+- `BestOfN` with `WithParallel(true)` requires stateless modules
+- All modules auto-copy `GenerateOptions` to prevent mutations
+
+### Output Access
+```go
+result, _ := module.Forward(ctx, inputs)
+
+// Type-safe getters
+s := result.GetString("field")
+i := result.GetInt("field")
+f := result.GetFloat("field")
+b := result.GetBool("field")
+m := result.GetMap("field")
+
+// Metadata
+result.Usage           // Token usage
+result.ModuleName      // Module that generated
+result.ParseDiagnostics // Validation diagnostics
+```
+
+### Validation
+- Inputs validated automatically before generation
+- Outputs validated with optional partial mode
+- Class values normalized (case-insensitive, whitespace-trimmed)
+- Numeric extraction from text ("High (95%)" → 95)
+
+## Navigation Guide for AI Agents
+
+### To understand the architecture:
+1. Read `README.md` (overview + features)
+2. Check `signature.go` and `module.go` (core interfaces)
+3. Review `adapter.go` (parsing strategies)
+
+### To learn the API:
+1. Start with `QUICKSTART.md`
+2. Run `examples/sentiment/main.go`
+3. Explore `examples/react_agent/` for tools
+
+### To contribute:
+1. Read `AGENTS.md` (dev guide)
+2. Check `ROADMAP.md` (implementation status)
+3. Follow test-driven development pattern
+
+### To debug issues:
+1. Enable verbose mode: `.WithVerbose(true)`
+2. Check logging: `logging/README.md`
+3. Inspect `ParseDiagnostics` on results
+4. Review `internal/jsonutil/` for JSON repair
+
+### To find examples:
+Navigate to `examples/` and choose by category:
+- **Basic**: sentiment, chat_predict, chat_cot
+- **Tools**: react_agent, research_assistant
+- **Features**: logging_tracing, caching, streaming
+- **Production**: retry_resilience, adapter_fallback
+
+## Common Tasks
+
+| Want to... | Look at |
+|------------|---------|
+| Create a classifier | `examples/sentiment/` |
+| Use external tools | `examples/react_agent/` |
+| Add reasoning | `module/chain_of_thought.go` |
+| Handle errors robustly | `internal/jsonutil/` + `adapter.go` |
+| Add logging | `logging/README.md` |
+| Improve performance | `cache.go` + `examples/caching/` |
+| Compose modules | `module/program.go` + `examples/composition/` |
+| Test code | `*_test.go` files + `AGENTS.md` |
+
+## Implementation Status
+
+See `ROADMAP.md` for detailed progress tracking.
+
+**Phase 1**: ✅ Core primitives (History, Prediction, Example)
+**Phase 2**: ✅ Adapters & prediction pipeline
+**Phase 2.6**: ✅ Adapter robustness (Chat, TwoStep, Fallback)
+**Phase 2.7**: ✅ Production robustness (JSON repair, partial validation)
+**Phase 3**: Planned - Advanced modules (Parallel, MultiChainComparison)
+**Phase 4**: In Progress - Infrastructure utilities
+
+## Dependencies
+
+### Production
+- Go 1.21+
+- Standard library only (no external deps)
+
+### Development
+- golangci-lint v2.6.0 (required for linting)
+
+### Examples Only
+- github.com/joho/godotenv (for .env file loading)
+
+## Environment Variables
+
+```bash
+# Required (choose one)
+OPENAI_API_KEY=sk-...
+OPENROUTER_API_KEY=sk-or-...
+
+# Optional
+MODEL=gpt-4                    # Override default model
+OPENROUTER_MODEL=<model-id>    # For OpenRouter examples
+```
+
+## References
+
+- **DSPy Python**: https://github.com/stanfordnlp/dspy
+- **DSPy Docs**: https://dspy.ai/
+- **Go Docs**: https://pkg.go.dev/github.com/assagman/dsgo
+
+---
+
+**For AI Agents**: This project follows standard Go conventions. When navigating code:
+1. Start with interfaces (signature.go, lm.go, module.go)
+2. Check implementations (module/*, providers/*)
+3. Review tests (*_test.go) for usage patterns
+4. Reference examples/ for real-world usage
+
+All documentation is kept synchronized. If you find inconsistencies, they are bugs - please report.

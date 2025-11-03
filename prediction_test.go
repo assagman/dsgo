@@ -480,3 +480,211 @@ func TestExtractAdapterMetadata(t *testing.T) {
 		})
 	}
 }
+
+// TestPrediction_MetadataHandling_EdgeCases tests metadata handling edge cases
+func TestPrediction_MetadataHandling_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Prediction
+		validate func(t *testing.T, p *Prediction)
+	}{
+		{
+			name: "chaining with nil values",
+			setup: func() *Prediction {
+				return NewPrediction(map[string]any{"answer": "test"}).
+					WithRationale("").
+					WithScore(0).
+					WithModuleName("").
+					WithUsage(Usage{}).
+					WithInputs(nil).
+					WithCompletions(nil)
+			},
+			validate: func(t *testing.T, p *Prediction) {
+				if p.Rationale != "" {
+					t.Errorf("Expected empty rationale, got %q", p.Rationale)
+				}
+				if p.Score != 0 {
+					t.Errorf("Expected zero score, got %f", p.Score)
+				}
+				if p.ModuleName != "" {
+					t.Errorf("Expected empty module name, got %q", p.ModuleName)
+				}
+				if p.Inputs != nil {
+					t.Error("Expected nil inputs")
+				}
+				if p.Completions != nil {
+					t.Error("Expected nil completions")
+				}
+			},
+		},
+		{
+			name: "large metadata values",
+			setup: func() *Prediction {
+				largeString := string(make([]byte, 10000))
+				return NewPrediction(map[string]any{"answer": "test"}).
+					WithRationale(largeString).
+					WithModuleName(largeString)
+			},
+			validate: func(t *testing.T, p *Prediction) {
+				if len(p.Rationale) != 10000 {
+					t.Errorf("Expected rationale length 10000, got %d", len(p.Rationale))
+				}
+				if len(p.ModuleName) != 10000 {
+					t.Errorf("Expected module name length 10000, got %d", len(p.ModuleName))
+				}
+			},
+		},
+		{
+			name: "overwriting metadata",
+			setup: func() *Prediction {
+				return NewPrediction(map[string]any{"answer": "test"}).
+					WithRationale("first").
+					WithRationale("second").
+					WithScore(0.5).
+					WithScore(0.9)
+			},
+			validate: func(t *testing.T, p *Prediction) {
+				if p.Rationale != "second" {
+					t.Errorf("Expected rationale 'second', got %q", p.Rationale)
+				}
+				if p.Score != 0.9 {
+					t.Errorf("Expected score 0.9, got %f", p.Score)
+				}
+			},
+		},
+		{
+			name: "completions with complex data",
+			setup: func() *Prediction {
+				completions := []map[string]any{
+					{"answer": "option1", "score": 0.8, "nested": map[string]any{"key": "value"}},
+					{"answer": "option2", "score": 0.6, "list": []string{"a", "b", "c"}},
+				}
+				return NewPrediction(map[string]any{"answer": "best"}).
+					WithCompletions(completions)
+			},
+			validate: func(t *testing.T, p *Prediction) {
+				if len(p.Completions) != 2 {
+					t.Errorf("Expected 2 completions, got %d", len(p.Completions))
+				}
+				if p.Completions[0]["nested"].(map[string]any)["key"] != "value" {
+					t.Error("Nested data not preserved")
+				}
+				if len(p.Completions[1]["list"].([]string)) != 3 {
+					t.Error("List data not preserved")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := tt.setup()
+			tt.validate(t, p)
+		})
+	}
+}
+
+// TestPrediction_ErrorScenarios tests error handling and edge cases
+func TestPrediction_ErrorScenarios(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Prediction
+		validate func(t *testing.T, p *Prediction)
+	}{
+		{
+			name: "get methods with nil outputs",
+			setup: func() *Prediction {
+				p := &Prediction{}
+				return p
+			},
+			validate: func(t *testing.T, p *Prediction) {
+				if _, ok := p.GetString("any"); ok {
+					t.Error("GetString should return false for nil outputs")
+				}
+				if _, ok := p.GetInt("any"); ok {
+					t.Error("GetInt should return false for nil outputs")
+				}
+				if _, ok := p.GetFloat("any"); ok {
+					t.Error("GetFloat should return false for nil outputs")
+				}
+				if _, ok := p.GetBool("any"); ok {
+					t.Error("GetBool should return false for nil outputs")
+				}
+			},
+		},
+		{
+			name: "get methods with wrong types",
+			setup: func() *Prediction {
+				return NewPrediction(map[string]any{
+					"string_field": 123,
+					"int_field":    "not_int",
+					"float_field":  "not_float",
+					"bool_field":   "not_bool",
+				})
+			},
+			validate: func(t *testing.T, p *Prediction) {
+				if _, ok := p.GetString("string_field"); ok {
+					t.Error("GetString should reject int value")
+				}
+				if _, ok := p.GetInt("int_field"); ok {
+					t.Error("GetInt should reject string value")
+				}
+				if _, ok := p.GetFloat("float_field"); ok {
+					t.Error("GetFloat should reject string value")
+				}
+				if _, ok := p.GetBool("bool_field"); ok {
+					t.Error("GetBool should reject string value")
+				}
+			},
+		},
+		{
+			name: "empty prediction methods",
+			setup: func() *Prediction {
+				return NewPrediction(map[string]any{})
+			},
+			validate: func(t *testing.T, p *Prediction) {
+				if p.HasRationale() {
+					t.Error("Empty prediction should not have rationale")
+				}
+				if p.HasCompletions() {
+					t.Error("Empty prediction should not have completions")
+				}
+				if p.Score != 0 {
+					t.Errorf("Empty prediction should have zero score, got %f", p.Score)
+				}
+				if p.ModuleName != "" {
+					t.Errorf("Empty prediction should have empty module name, got %q", p.ModuleName)
+				}
+			},
+		},
+		{
+			name: "usage with invalid values",
+			setup: func() *Prediction {
+				return NewPrediction(map[string]any{}).
+					WithUsage(Usage{
+						PromptTokens:     -1,
+						CompletionTokens: -1,
+						TotalTokens:      -1,
+					})
+			},
+			validate: func(t *testing.T, p *Prediction) {
+				if p.Usage.PromptTokens != -1 {
+					t.Errorf("Should preserve negative prompt tokens: %d", p.Usage.PromptTokens)
+				}
+				if p.Usage.CompletionTokens != -1 {
+					t.Errorf("Should preserve negative completion tokens: %d", p.Usage.CompletionTokens)
+				}
+				if p.Usage.TotalTokens != -1 {
+					t.Errorf("Should preserve negative total tokens: %d", p.Usage.TotalTokens)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := tt.setup()
+			tt.validate(t, p)
+		})
+	}
+}

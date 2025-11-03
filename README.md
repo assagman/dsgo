@@ -1,48 +1,29 @@
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║                                                                      ║
-║   ██████╗ ███████╗ ██████╗  ██████╗                                  ║
-║   ██╔══██╗██╔════╝██╔════╝ ██╔═══██╗                                 ║
-║   ██║  ██║███████╗██║  ███╗██║   ██║      🚧 UNDER
-║   ██║  ██║╚════██║██║   ██║██║   ██║         CONSTRUCTION
-║   ██████╔╝███████║╚██████╔╝╚██████╔╝                                 ║
-║   ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝                                  ║
-║                                                                      ║
-║   DSPy Framework for Go                                              ║
-║   Programming Language Models with Signatures, Modules & Tools       ║
-║                                                                      ║
-╚══════════════════════════════════════════════════════════════════════╝
-```
+# DSGo - DSPy for Go
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/assagman/dsgo.svg)](https://pkg.go.dev/github.com/assagman/dsgo)
-[![Go Report Card](https://goreportcard.com/badge/github.com/assagman/dsgo?t=<timestamp>)](https://goreportcard.com/report/github.com/assagman/dsgo)
+[![Go Report Card](https://goreportcard.com/badge/github.com/assagman/dsgo)](https://goreportcard.com/report/github.com/assagman/dsgo)
 [![CI](https://github.com/assagman/dsgo/actions/workflows/ci.yml/badge.svg)](https://github.com/assagman/dsgo/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/assagman/dsgo/branch/main/graph/badge.svg)](https://codecov.io/gh/assagman/dsgo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/assagman/dsgo)](https://github.com/assagman/dsgo)
 [![GitHub release](https://img.shields.io/github/v/release/assagman/dsgo)](https://github.com/assagman/dsgo/releases)
 
-✨ Features:
-  • Type-Safe Signatures (8 field types)
-  • Composable Modules (Predict, ChainOfThought, ReAct)
-  • Production-Grade Robustness (JSON repair, partial outputs)
-  • Tool/Function Calling
-  • OpenAI and Openrouter support
+> **Status**: Core modules complete ✅ | Experimentation-ready ✅ | Infrastructure utilities in progress 🚧
+>
+> See [ROADMAP.md](ROADMAP.md) for detailed progress
 
-📚 Documentation:
-  • QUICKSTART.md  - Get started in 30 seconds
-  • AGENTS.md      - Development guide
-  • README.md      - Complete overview
+DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordnlp/dspy) for programming language models. Build production-ready LM applications with type-safe signatures, composable modules, and robust parsing.
 
-# DSGo - DSPy for Go
-
-DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordnlp/dspy) for programming language models. It provides a structured approach to building LM-based applications through signatures, modules, and composable patterns.
+**Quick Links:**
+- [Get Started in 30 Seconds](QUICKSTART.md)
+- [Development Guide](AGENTS.md)
+- [Implementation Roadmap](ROADMAP.md)
 
 ## Features
 
 - ✅ **Signatures**: Define structured inputs and outputs for LM calls
 - ✅ **Type Safety**: Strong typing with validation for inputs and outputs
-- ✅ **Production-Grade Robustness** ([details](ROBUSTNESS_ENHANCEMENTS.md)):
+- ✅ **Production-Grade Robustness**:
   - **JSON Repair**: Automatic fixing of malformed JSON (`{key: 'value'}` → `{"key": "value"}`)
   - **Partial Outputs**: Validation diagnostics for training/optimization loops
   - **Class Normalization**: Case-insensitive + alias matching (`"POSITIVE"` → `"positive"`)
@@ -73,28 +54,6 @@ DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordn
 go get github.com/assagman/dsgo
 ```
 
-### Three Progressive Examples
-
-Learn by building progressively complex applications:
-
-```mermaid
-graph LR
-    A[1. Sentiment<br/>Beginner<br/>Predict + CoT] --> B[2. ReAct Agent<br/>Intermediate<br/>Tools + Reasoning]
-    B --> C[3. Research Assistant<br/>Advanced<br/>All Features]
-
-    classDef beginner fill:#06d6a0,stroke:#073b4c,color:#000
-    classDef intermediate fill:#ffd166,stroke:#073b4c,color:#000
-    classDef advanced fill:#ef476f,stroke:#073b4c,color:#fff
-
-    class A beginner
-    class B intermediate
-    class C advanced
-```
-
-1. **Sentiment Analysis** (Beginner) - Basic prediction and chain-of-thought
-2. **ReAct Agent** (Intermediate) - Tools and iterative reasoning
-3. **Research Assistant** (Advanced) - All features: complex signatures, multiple types, tools, reasoning
-
 ### Basic Example: Sentiment Analysis
 
 ```go
@@ -107,7 +66,7 @@ import (
 
     "github.com/assagman/dsgo"
     "github.com/assagman/dsgo/module"
-    "github.com/assagman/dsgo/providers/openai"
+    "github.com/assagman/dsgo/providers/openai"  // or providers/openrouter
 )
 
 func main() {
@@ -175,7 +134,7 @@ sig := dsgo.NewSignature("Answer questions using available tools").
     AddOutput("answer", dsgo.FieldTypeString, "The answer")
 
 lm := openai.NewOpenAI("gpt-4")
-react := module.NewReAct(sig, lm, []dsgo.Tool{*searchTool}).
+react := module.NewReAct(sig, lm, []dsgo.Tool{searchTool}).
     WithMaxIterations(5).
     WithVerbose(true)
 
@@ -262,13 +221,14 @@ graph TD
     class SIG sig
 ```
 
+**Field Types:**
 - `FieldTypeString` - Text data
 - `FieldTypeInt` - Integer values
 - `FieldTypeFloat` - Decimal numbers
 - `FieldTypeBool` - Boolean (true/false)
 - `FieldTypeJSON` - Complex structured data
 - `FieldTypeClass` - Enum/classification (constrained choices)
-- `FieldTypeImage` - Image data (URLs or base64)
+- `FieldTypeImage` - Image data (URLs or base64) *[partial support]*
 - `FieldTypeDatetime` - Timestamps and dates
 
 ### Modules
@@ -353,9 +313,9 @@ predict2 := module.NewPredict(sig2, lm).WithOptions(opts)
 // Each module gets its own copy internally
 ```
 
-Currently included:
-- OpenAI (GPT-3.5, GPT-4)
-- OpenRouter
+**Included Providers:**
+- **OpenAI** - GPT-3.5, GPT-4, GPT-4 Turbo
+- **OpenRouter** - Access to 100+ models
 
 ### Tools
 
@@ -474,14 +434,20 @@ sequenceDiagram
 
 ```
 dsgo/
-├── signature.go             # Signature system (InputField, OutputField)
+├── signature.go             # Signature system (Field, Signature types)
 ├── lm.go                    # Language Model interface
 ├── module.go                # Module interface
 ├── prediction.go            # Prediction wrapper with metadata
 ├── history.go               # Conversation history management
 ├── example.go               # Few-shot learning support
 ├── tool.go                  # Tool/function definitions
+├── adapter.go               # Adapter interface + implementations
+├── cache.go                 # LRU caching layer
 ├── *_test.go                # Unit tests
+├── internal/
+│   └── jsonutil/            # JSON extraction/repair utilities
+├── logging/                 # Structured logging and tracing
+│   └── README.md            # Logging documentation
 ├── module/
 │   ├── predict.go           # Basic Predict module
 │   ├── chain_of_thought.go  # ChainOfThought module
@@ -493,39 +459,46 @@ dsgo/
 ├── providers/
 │   ├── openai/              # OpenAI LM provider
 │   └── openrouter/          # OpenRouter LM provider
-├── examples/
+├── scripts/
+│   └── test_examples_matrix/ # Unified example testing
+├── examples/                 # 20+ working examples
 │   ├── shared/              # Shared provider utilities
 │   ├── sentiment/           # Basic prediction & chain-of-thought
-│   ├── chat_predict/        # Multi-turn conversation with Predict
-│   ├── chat_cot/            # Multi-turn with ChainOfThought
+│   ├── chat_predict/        # Multi-turn conversation
 │   ├── react_agent/         # ReAct agent with tools
-│   ├── research_assistant/  # Advanced: complex signatures + tools
-│   ├── fewshot_conversation/ # Few-shot learning example
-│   ├── composition/         # Module composition and pipelines
-│   ├── content_generator/   # Content generation example
-│   ├── customer_support/    # Customer support agent
-│   ├── math_solver/         # Math problem solver
-│   ├── code_reviewer/       # Code review agent
-│   ├── data_analyst/        # Data analysis example
-│   └── interview/           # Interview assistant
+│   ├── research_assistant/  # Complex signatures + multiple tools
+│   ├── logging_tracing/     # Request ID propagation & observability
+│   ├── fewshot_conversation/ # Few-shot learning
+│   ├── composition/         # Module pipelines
+│   ├── caching/             # LRU cache usage
+│   ├── streaming/           # Real-time streaming
+│   └── ...                  # 10+ more examples
+├── QUICKSTART.md            # Get started in 30 seconds
 ├── AGENTS.md                # Development guide
+├── ROADMAP.md               # Implementation roadmap
 └── README.md                # This file
 ```
 
 ## Roadmap
 
-### Core Modules (Complete ✅)
-- [x] Predict, ChainOfThought, ReAct
-- [x] Refine, BestOfN, ProgramOfThought
-- [x] Program composition
+**Current Status**: ~75% feature parity with DSPy core (see [ROADMAP.md](ROADMAP.md) for details)
 
-### Future Enhancements
-- [ ] Additional LM providers (Anthropic, Google, Ollama)
-- [ ] Optimizers (MIPROv2, COPRO, BootstrapFewShot)
-- [ ] Evaluation framework
-- [ ] Caching layer
-- [ ] Observability/tracing
-- [ ] Multi-modal support
+**Completed** ✅:
+- Core modules (Predict, ChainOfThought, ReAct, Refine, BestOfN, ProgramOfThought, Program)
+- Robust adapters (JSON, Chat, TwoStep, Fallback)
+- Production robustness (JSON repair, partial validation, class normalization)
+- Logging and caching infrastructure
+- 20+ working examples
+
+**In Progress** 🚧:
+- Streaming enhancements
+- Advanced retry mechanisms
+- Disk-backed cache persistence
+
+**Planned**:
+- Additional LM providers (Anthropic, Google, Ollama)
+- Evaluation framework
+- Optimizer framework (future)
 
 ## Advanced Features
 
@@ -619,11 +592,12 @@ predict := module.NewPredict(sig, lm).WithOptions(opts)
 optsCopy := opts.Copy()  // Deep copy including slices
 ```
 
-## Documentation Index
+## Documentation
 
 - **[QUICKSTART.md](QUICKSTART.md)** - Get started in 30 seconds
 - **[AGENTS.md](AGENTS.md)** - Development and testing guide
 - **[ROADMAP.md](ROADMAP.md)** - Implementation progress and roadmap
+- **[logging/README.md](logging/README.md)** - Logging and request tracing
 
 ## Contributing
 

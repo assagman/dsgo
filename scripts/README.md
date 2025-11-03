@@ -8,40 +8,30 @@
 
 ```bash
 # Run all examples with single model (default: gpt-4o-mini)
-go run scripts/test_examples_matrix/main.go
+make test-matrix-quick
 
 # Run with 3 random models
-go run scripts/test_examples_matrix/main.go -n 3
+make test-matrix-sample N=3
 
 # Run with all 10 models (full matrix)
-go run scripts/test_examples_matrix/main.go -n 0
+make test-matrix
 
-# Run sequentially (not parallel)
-go run scripts/test_examples_matrix/main.go -p=false
-
-# Verbose output
-go run scripts/test_examples_matrix/main.go -v
-
-# Custom timeout
-go run scripts/test_examples_matrix/main.go -timeout=5m
+# Advanced: Direct script access with custom flags
+go run scripts/test_examples_matrix/main.go -p=false -v
 ```
 
-**Flags:**
-- `-n <number>` - Number of random models to test
-  - `1` (default): Single model, like old `test_examples`
-  - `0`: All models, like old `test_matrix`
-  - `3`: Random 3 models
-- `-p` - Parallel execution (default: true)
-- `-v` - Verbose output
-- `-timeout` - Timeout per example (default: 3m)
+**Make Targets:**
+- `make test-matrix-quick` - Single model, fast (default: gpt-4o-mini)
+- `make test-matrix-sample N=<number>` - Test with N random models (e.g., `N=3`)
+- `make test-matrix` - All models, comprehensive
 
 **Environment Variables:**
-- `OPENROUTER_MODEL` or `MODEL` - Override default model for `-n 1`
+- `OPENROUTER_MODEL` or `MODEL` - Override default model for single-model testing
 
 ### Legacy Scripts (Deprecated)
 
-- **test_examples/** - Use `test_examples_matrix -n 1` instead
-- **test_matrix/** - Use `test_examples_matrix -n 0` instead
+- **test_examples/** - Use `make test-matrix-quick` instead
+- **test_matrix/** - Use `make test-matrix` instead
 
 ## Utility Scripts
 
@@ -60,14 +50,14 @@ go run scripts/test_examples_matrix/main.go -timeout=5m
 
 ```bash
 # Quick test with 1 model (fast)
-go run scripts/test_examples_matrix/main.go
+make test-matrix-quick
 
 # Test with 3 random models (moderate coverage)
-go run scripts/test_examples_matrix/main.go -n 3
+make test-matrix-sample N=3
 
 # Full matrix test (comprehensive)
-go run scripts/test_examples_matrix/main.go -n 0
+make test-matrix
 
-# Debug a failing example
+# Debug a failing example (advanced)
 go run scripts/test_examples_matrix/main.go -n 1 -v -p=false
 ```

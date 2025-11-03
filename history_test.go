@@ -1,6 +1,9 @@
 package dsgo
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestHistory_AddAndGet(t *testing.T) {
 	h := NewHistory()
@@ -186,5 +189,123 @@ func TestHistory_GetLast_EdgeCases(t *testing.T) {
 	all := h.GetLast(10)
 	if len(all) != 2 {
 		t.Error("GetLast(n > length) should return all messages")
+	}
+}
+
+// TestHistory_ThreadSafety tests concurrent access to history (expecting data races since History is not thread-safe)
+// This test is skipped when running with race detector since History is intentionally not thread-safe
+func TestHistory_ThreadSafety(t *testing.T) {
+	// Skip this test when running with race detector, as History is not thread-safe
+	// and we expect data races to be detected
+	t.Skip("Skipping thread safety test - History is intentionally not thread-safe and will trigger race detector")
+}
+
+// TestHistory_EdgeCaseOperations tests unusual operations and edge cases
+func TestHistory_EdgeCaseOperations(t *testing.T) {
+	tests := []struct {
+		name        string
+		operation   func(h *History)
+		expectedLen int
+	}{
+		{
+			name: "add empty message",
+			operation: func(h *History) {
+				h.Add(Message{Role: "user", Content: ""})
+			},
+			expectedLen: 1,
+		},
+		{
+			name: "add message with only whitespace",
+			operation: func(h *History) {
+				h.Add(Message{Role: "user", Content: "   \n\t   "})
+			},
+			expectedLen: 1,
+		},
+		{
+			name: "add message with special characters",
+			operation: func(h *History) {
+				h.Add(Message{Role: "user", Content: "hello\nworld\twith\ttabs"})
+			},
+			expectedLen: 1,
+		},
+		{
+			name: "truncate empty history",
+			operation: func(h *History) {
+				h.Truncate(5)
+			},
+			expectedLen: 0,
+		},
+		{
+			name: "remove first from empty history",
+			operation: func(h *History) {
+				h.RemoveFirst(1)
+			},
+			expectedLen: 0,
+		},
+		{
+			name: "clear already empty history",
+			operation: func(h *History) {
+				h.Clear()
+			},
+			expectedLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHistory()
+			tt.operation(h)
+
+			if h.Len() != tt.expectedLen {
+				t.Errorf("Expected length %d, got %d", tt.expectedLen, h.Len())
+			}
+		})
+	}
+}
+
+// TestHistory_WithLimit_EdgeCases tests history with limits at boundaries
+func TestHistory_WithLimit_EdgeCases(t *testing.T) {
+	// Test limit of 0 (should behave like unlimited)
+	h := NewHistoryWithLimit(0)
+	for i := 0; i < 10; i++ {
+		h.AddUserMessage(fmt.Sprintf("msg%d", i))
+	}
+	if h.Len() != 10 {
+		t.Errorf("Limit 0 should allow unlimited messages, got %d", h.Len())
+	}
+
+	// Test limit of 1
+	h1 := NewHistoryWithLimit(1)
+	h1.AddUserMessage("first")
+	h1.AddUserMessage("second")
+	if h1.Len() != 1 {
+		t.Errorf("Limit 1 should keep only 1 message, got %d", h1.Len())
+	}
+	if h1.Get()[0].Content != "second" {
+		t.Error("Should keep most recent message")
+	}
+}
+
+// TestHistory_Clone_DeepCopy tests that clone creates independent copies
+func TestHistory_Clone_DeepCopy(t *testing.T) {
+	original := NewHistory()
+	original.AddUserMessage("original")
+
+	cloned := original.Clone()
+
+	// Modify cloned
+	cloned.AddUserMessage("cloned addition")
+
+	// Original should be unchanged
+	if original.Len() != 1 {
+		t.Errorf("Original should have 1 message, got %d", original.Len())
+	}
+	if original.Get()[0].Content != "original" {
+		t.Error("Original message should be unchanged")
+	}
+
+	// Clone should have the addition
+	if cloned.Len() != 2 {
+		t.Errorf("Cloned should have 2 messages, got %d", cloned.Len())
 	}
 }

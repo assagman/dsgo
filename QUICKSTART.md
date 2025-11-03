@@ -8,11 +8,13 @@ Get started with DSGo in under 1 minute. Build LM-powered apps with structured s
 # 1. Get the package
 go get github.com/assagman/dsgo
 
-# 2. Set your API key
-export OPENROUTER_API_KEY=sk-or-your-key-here # or OPENAI_API_KEY
+# 2. Set your API key (choose one)
+export OPENAI_API_KEY=sk-...          # For OpenAI
+# or
+export OPENROUTER_API_KEY=sk-or-...   # For OpenRouter
 
-# 3. Run an example
-go run examples/sentiment/main.go
+# 3. Run the quick test suite
+make test-matrix-quick
 ```
 
 ## Your First Program (2 minutes)
@@ -221,20 +223,20 @@ react := module.NewReAct(sig, lm, tools).
 ### Check errors
 
 ```go
-result, err := module.Forward(ctx, inputs)
+result, err := predict.Forward(ctx, inputs)
 if err != nil {
     log.Printf("Error: %v", err)  // Always check errors!
 }
 ```
 
-### Validate before running
+### Check parse diagnostics
 
 ```go
-// Signature validates inputs automatically
-err := sig.ValidateInputs(inputs)
-
-// And outputs
-err := sig.ValidateOutputs(outputs)
+// Inspect parsing diagnostics if available
+if diags := result.ParseDiagnostics; diags != nil {
+    log.Printf("Missing fields: %v", diags.MissingFields)
+    log.Printf("Type errors: %v", diags.TypeErrors)
+}
 ```
 
 ## Next Steps
@@ -266,13 +268,13 @@ err := sig.ValidateOutputs(outputs)
 → Check you provided all inputs defined in signature
 
 ### "failed to parse JSON output"
-→ LM didn't return valid JSON (enable verbose to see output)
+→ LM didn't return valid JSON (enable verbose to see output; automatic JSON repair may help)
 
 ### "invalid class value"
-→ LM returned value not in your class list (adjust options or list)
+→ LM returned value not in your class list (class normalization handles case/whitespace automatically)
 
 ### "API request failed with status 401"
-→ Check your `OPENAI_API_KEY` environment variable
+→ Ensure your env var (`OPENAI_API_KEY` or `OPENROUTER_API_KEY`) matches the provider you're using
 
 ## Full Documentation
 

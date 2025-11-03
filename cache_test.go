@@ -354,3 +354,119 @@ func TestGenerateCacheKey_TopP(t *testing.T) {
 		t.Error("Expected different keys for different TopP values")
 	}
 }
+
+// TestLMCache_Concurrency_EdgeCases tests concurrent access patterns that could cause race conditions
+func TestLMCache_Concurrency_EdgeCases(t *testing.T) {
+	cache := NewLMCache(10)
+	var wg sync.WaitGroup
+
+	// Test concurrent eviction
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			// Fill cache and trigger eviction
+			for j := 0; j < 20; j++ {
+				key := string(rune('a' + (j % 26)))
+				cache.Set(key, &GenerateResult{Content: key})
+			}
+		}(i)
+	}
+
+	// Test concurrent stats access
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				cache.Stats()
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Cache should remain in valid state
+	if cache.Size() > 10 {
+		t.Errorf("Cache exceeded capacity after concurrent operations: %d", cache.Size())
+	}
+
+	stats := cache.Stats()
+	if stats.Hits < 0 || stats.Misses < 0 || stats.Size < 0 {
+		t.Errorf("Invalid stats after concurrent operations: %+v", stats)
+	}
+}
+
+// TestLMCache_CacheKeyVariations tests edge cases in cache key generation
+func TestLMCache_CacheKeyVariations(t *testing.T) {
+
+	// Test with empty messages
+	key1 := GenerateCacheKey("model", []Message{}, DefaultGenerateOptions())
+	key2 := GenerateCacheKey("model", []Message{}, DefaultGenerateOptions())
+	if key1 != key2 {
+		t.Error("Empty message lists should generate same key")
+	}
+
+	// Test with default options
+	opts := DefaultGenerateOptions()
+	key3 := GenerateCacheKey("model", []Message{{Role: "user", Content: "test"}}, opts)
+	key4 := GenerateCacheKey("model", []Message{{Role: "user", Content: "test"}}, opts)
+	if key3 != key4 {
+		t.Error("Default options should generate same key")
+	}
+
+	// Test with options that have default values
+	opts1 := DefaultGenerateOptions()
+	opts2 := DefaultGenerateOptions()
+	opts2.TopP = 1.0 // Default value
+	key5 := GenerateCacheKey("model", []Message{{Role: "user", Content: "test"}}, opts1)
+	key6 := GenerateCacheKey("model", []Message{{Role: "user", Content: "test"}}, opts2)
+	if key5 != key6 {
+		t.Error("Options with default values should generate same key")
+	}
+}
+
+// TestLMCache_Eviction_UnderLoad tests cache behavior under high load with eviction
+func TestLMCache_Eviction_UnderLoad(t *testing.T) {
+	cache := NewLMCache(3) // Small capacity to force eviction
+
+	// Fill cache to capacity
+	cache.Set("a", &GenerateResult{Content: "a"})
+	cache.Set("b", &GenerateResult{Content: "b"})
+	cache.Set("c", &GenerateResult{Content: "c"})
+
+	if cache.Size() != 3 {
+		t.Errorf("Expected size 3, got %d", cache.Size())
+	}
+
+	// Add one more, should evict oldest (a)
+	cache.Set("d", &GenerateResult{Content: "d"})
+
+	if cache.Size() != 3 {
+		t.Errorf("Expected size 3 after eviction, got %d", cache.Size())
+	}
+
+	// a should be evicted
+	if _, ok := cache.Get("a"); ok {
+		t.Error("Item 'a' should have been evicted")
+	}
+
+	// Access b to make it recently used
+	cache.Get("b")
+
+	// Add another, should evict oldest (c, since b was accessed)
+	cache.Set("e", &GenerateResult{Content: "e"})
+
+	if cache.Size() != 3 {
+		t.Errorf("Expected size 3 after second eviction, got %d", cache.Size())
+	}
+
+	// c should be evicted, b should still be there
+	if _, ok := cache.Get("c"); ok {
+		t.Error("Item 'c' should have been evicted")
+	}
+
+	if _, ok := cache.Get("b"); !ok {
+		t.Error("Recently accessed item 'b' should still be in cache")
+	}
+}

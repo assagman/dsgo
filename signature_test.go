@@ -1,6 +1,7 @@
 package dsgo
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -1063,5 +1064,119 @@ func TestSignatureToJSONSchema_EmptySignature(t *testing.T) {
 	}
 	if len(props) != 0 {
 		t.Errorf("expected empty properties, got %d", len(props))
+	}
+}
+
+// TestSignature_FieldValidation_EdgeCases tests field validation with exotic types and edge cases
+func TestSignature_FieldValidation_EdgeCases(t *testing.T) {
+	sig := NewSignature("Edge cases").
+		AddOutput("exotic", FieldTypeString, "")
+
+	tests := []struct {
+		name    string
+		value   any
+		wantErr bool
+	}{
+		{"nil value", nil, true}, // nil is not allowed for required fields
+		{"empty string", "", false},
+		{"very long string", string(make([]byte, 1000000)), false}, // Large string
+		{"string with special chars", "hello\n\t\"world\"", false},
+		{"unicode string", "héllo wörld 🚀", false},
+	}
+
+	// Test with required field
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputs := map[string]any{"exotic": tt.value}
+			err := sig.ValidateOutputs(outputs)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateOutputs() error = %v, wantErr %v for value %v", err, tt.wantErr, tt.value)
+			}
+		})
+	}
+}
+
+// TestSignature_JSONSchema_EdgeCases tests JSON schema generation edge cases
+func TestSignature_JSONSchema_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		sig      *Signature
+		validate func(t *testing.T, schema map[string]any)
+	}{
+		{
+			name: "signature with very long description",
+			sig:  NewSignature(string(make([]byte, 10000))), // 10k char description
+			validate: func(t *testing.T, schema map[string]any) {
+				if len(schema["description"].(string)) != 10000 {
+					t.Errorf("expected 10000 char description, got %d", len(schema["description"].(string)))
+				}
+			},
+		},
+		{
+			name: "fields with special characters in names",
+			sig: NewSignature("Special names").
+				AddOutput("field-with-dashes", FieldTypeString, "").
+				AddOutput("field_with_underscores", FieldTypeString, "").
+				AddOutput("field.with.dots", FieldTypeString, ""),
+			validate: func(t *testing.T, schema map[string]any) {
+				props := schema["properties"].(map[string]any)
+				expectedFields := []string{"field-with-dashes", "field_with_underscores", "field.with.dots"}
+				for _, field := range expectedFields {
+					if _, exists := props[field]; !exists {
+						t.Errorf("expected field %s in schema properties", field)
+					}
+				}
+			},
+		},
+		{
+			name: "class field with many enum values",
+			sig: func() *Signature {
+				sig := NewSignature("Many enums").AddOutput("category", FieldTypeClass, "")
+				manyEnums := make([]string, 100)
+				for i := range manyEnums {
+					manyEnums[i] = fmt.Sprintf("value%d", i)
+				}
+				sig.OutputFields[0].Classes = manyEnums
+				return sig
+			}(),
+			validate: func(t *testing.T, schema map[string]any) {
+				props := schema["properties"].(map[string]any)
+				catProp := props["category"].(map[string]any)
+				enum := catProp["enum"].([]string)
+				if len(enum) != 100 {
+					t.Errorf("expected 100 enum values, got %d", len(enum))
+				}
+			},
+		},
+		{
+			name: "mixed required and optional fields",
+			sig: NewSignature("Mixed").
+				AddOutput("required1", FieldTypeString, "").
+				AddOptionalOutput("optional1", FieldTypeString, "").
+				AddOutput("required2", FieldTypeInt, "").
+				AddOptionalOutput("optional2", FieldTypeInt, ""),
+			validate: func(t *testing.T, schema map[string]any) {
+				required := schema["required"].([]string)
+				if len(required) != 2 {
+					t.Errorf("expected 2 required fields, got %d", len(required))
+				}
+				// Should only include required fields
+				for _, req := range required {
+					if req != "required1" && req != "required2" {
+						t.Errorf("unexpected required field: %s", req)
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := tt.sig.SignatureToJSONSchema()
+			if schema == nil {
+				t.Fatal("expected schema, got nil")
+			}
+			tt.validate(t, schema)
+		})
 	}
 }

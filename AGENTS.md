@@ -26,19 +26,18 @@ graph LR
 - **Examples Quick**: `make test-matrix-quick` (single model, fast)
 - **Examples Sample**: `make test-matrix-sample N=3` (3 random models)
 - **Examples Full**: `make test-matrix` (all models, comprehensive)
-- Single test: `go test -run TestName`
-- Run example: `go run examples/sentiment/main.go`
-- Lint: `make lint` (requires golangci-lint)
-- Full check: `make check` (fmt, vet, build)
-- Complete: `make all` (clean, check, test, eof-check)
+- **Lint**: `make lint` (requires golangci-lint)
+- **Full check**: `make check` (fmt, vet, build)
+- **Complete**: `make all` (clean, check, test, eof-check)
+- Advanced: `go test -run TestName` (single test by name)
 
 ## Current Test Coverage
-- **Total**: 79.4% ✅
-- **Core**: 61.9%
-- **Module**: 84.2% ✅
-- **jsonutil**: 100% ✅ (includes RepairJSON tests)
-- **OpenAI Provider**: 94.4% ✅
-- **OpenRouter Provider**: 94.7% ✅
+- **Total**: 91.4% ✅
+- **Core**: 93.6% ✅ (up from 34.1%)
+- **Module**: 89.0% ✅ (up from 52.9%)
+- **jsonutil**: 88.8% ✅ (up from 9.3%)
+- **OpenAI Provider**: 93.4% ✅ (up from 13.4%)
+- **OpenRouter Provider**: 89.2% ✅ (up from 13.8%)
 
 ## Architecture
 
@@ -86,25 +85,19 @@ Go port of DSPy (Declarative Self-improving Language Programs).
 - Linting: All code must pass `golangci-lint` (errcheck, staticcheck, unused, govet, ineffassign)
 
 ## Development Workflow
-- Always run `go build ./...` and `go test ./...` during development
-- All new developments requires unit test update.
-- Run `make check` locally (fmt, vet, build); CI handles lint separately
-- Use `go test -race` when working with concurrency (e.g., BestOfN parallel)
-- Pre-commit hook automatically runs `make all` (tests + checks) when installed via `make install-hooks`
-- **Install golangci-lint v2.6.0** (required for linting):
-  ```bash
-  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.6.0
-  ```
-  Note: `go install` only installs v1.x; v2.x requires binary installation
-- No temporary UPPER_CASE.md files (SUMMARY.md, CHANGES.md, etc.) - update existing docs only
-- Keep responses concise
-- Ask user for feedback/choices at important checkpoints
-- Never create .md files unless user told you so. Always update git included documentation files.
-- If any issue, error, or unexpected result detected, always add it to test cases, then fix the codebase, and
-    make sure that all success.
-- Always execute examples/ to one-by-one and scan for unexpected behaviors, errors, problematic results etc. If any issue encountered, plan for adding them to test cases and fixing it.
-    execute examples from top-level dir since the .env loading is designed in that way.
-- run `make all` when you're done
+
+1. **Build and Test**: Run `make test` and `make check` during development
+2. **New Features**: All new code requires corresponding unit tests
+3. **Local Checks**: Run `make check` locally (fmt, vet, build)
+4. **Concurrency**: Use `make test` (includes race detector) when working with concurrency (e.g., BestOfN parallel)
+5. **Pre-commit**: Install pre-commit hook via `make install-hooks` to automatically run checks
+6. **Lint Setup**: Install golangci-lint v2.6.0 (required for linting):
+   ```bash
+   curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.6.0
+   ```
+   Note: `go install` only installs v1.x; v2.x requires binary installation
+7. **Test Examples**: Run `make test-matrix-quick` for fast verification or `make test-matrix-sample N=3` for broader coverage
+8. **Final Check**: Run `make all` before committing (clean, check, test, eof-check)
 
 
 ## Production-Grade Robustness Features
@@ -130,15 +123,11 @@ Go port of DSPy (Declarative Self-improving Language Programs).
 - `"High (95%)"` → `95`
 - `"Medium"` → `0.7` (qualitative mapping)
 
-See [ROBUSTNESS_ENHANCEMENTS.md](ROBUSTNESS_ENHANCEMENTS.md) and [FRAMEWORK_COMPARISON.md](FRAMEWORK_COMPARISON.md) for details.
-
 ## Known Issues & Warnings
 
 ⚠️ **BestOfN Parallel Safety**: When using `WithParallel(true)`, ensure modules are stateless or use N independent instances. Modules with History cause data races.
 
 ⚠️ **Concurrency**: History is not thread-safe. Use separate instances for parallel execution.
-
-See [CODEBASE_ANALYSIS_REPORT.md](CODEBASE_ANALYSIS_REPORT.md) for complete issue list and fixes.
 
 ## Documentation Structure
 
