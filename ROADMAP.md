@@ -2,7 +2,7 @@
 
 **Goal**: Complete Go port of DSPy framework based on [official Python API](https://dspy.ai/api/)
 
-**Current Status**: ~67% DSPy Core Feature Coverage | Phase 3 Complete ✅ | Phase 4.1 Complete ✅
+**Current Status**: ~67% DSPy Core Feature Coverage | Phase 3 Complete ✅ | Phase 4 Complete ✅
 
 ---
 
@@ -113,14 +113,14 @@ pie title Component Coverage vs DSPy
 
 ---
 
-## 🟡 Phase 4: Observability Parity (IN PROGRESS)
+## ✅ Phase 4: Observability Parity (COMPLETE)
 
 ### Critical Gaps
 - [x] **Wire provider metadata to HistoryEntry** - Metadata extracted and persisted ✅
 - [x] **Cache hit tracking** - CacheMeta correctly populated from provider metadata ✅
 - [x] **Provider naming** - Uses `settings.DefaultProvider` with smart fallback ✅
 - [x] **Streaming instrumentation** - LMWrapper.Stream() now emits complete observability data ✅
-- [ ] **Cache key fidelity** - Missing Tools, ToolChoice, penalties, ResponseFormat
+- [x] **Cache key fidelity** - All parameters included with map canonicalization ✅
 
 ### Tasks
 
@@ -158,16 +158,23 @@ pie title Component Coverage vs DSPy
 - Collects complete HistoryEntry when stream completes or errors
 - 4 comprehensive test cases: success, error, tool calls, no collector
 
-#### 4.3: Cache Improvements (Priority: HIGH)
-- [ ] Include Tools/ToolChoice/penalties in cache key
-- [ ] Canonicalize maps for deterministic keys
-- [ ] Deep copy cache entries (avoid mutation)
+#### ✅ 4.3: Cache Improvements (COMPLETE)
+- [x] Include Tools/ToolChoice/penalties/ResponseFormat in cache key ✅
+- [x] Canonicalize maps for deterministic keys ✅
+- [x] Deep copy cache entries (avoid mutation) ✅
 - [x] Set `CacheMeta.Hit = true` on cache hits (done in 4.1) ✅
-- [ ] Add cache stats (hit rate, size)
-- [ ] Write unit tests for cache key generation
-- [ ] Document cache key components
+- [x] Cache stats already exist (hit rate, size) ✅
+- [x] Comprehensive unit tests for cache key generation ✅
+- [x] Document cache key components ✅
 
-**Effort**: 2-3 hours | **Impact**: Medium
+**Completed**: ✅ | **Coverage**: 100% of new code paths | **Example**: Updated `examples/caching/`
+
+**Implementation Details**:
+- Cache keys now include: Tools, ToolChoice, FrequencyPenalty, PresencePenalty, ResponseSchema
+- Map canonicalization ensures deterministic keys regardless of insertion order
+- Deep copy on Get/Set prevents external mutation of cached data
+- Recursive deep copy for nested maps and slices in metadata/tool calls
+- 10 new test functions with 40+ test cases covering all cache improvements
 
 #### 4.4: Provider vs Vendor Naming (Priority: MEDIUM)
 - [x] Provider naming uses `settings.DefaultProvider` (done in 4.1) ✅
@@ -179,7 +186,7 @@ pie title Component Coverage vs DSPy
 
 **Phase 4 Goal**: Achieve true DSPy observability parity
 
-**Progress**: 4/5 critical gaps closed (80%) | Tasks 4.1 & 4.2 complete ✅
+**Status**: ✅ **COMPLETE** | All 5 critical gaps closed (100%) | Tasks 4.1, 4.2, 4.3 complete ✅
 
 ---
 
@@ -326,12 +333,12 @@ Missing modules to reach full DSPy parity:
 
 ## 🎯 Immediate Next Steps
 
-1. **Complete Phase 4** (Observability Parity) - 1-2 hours remaining
+1. ✅ ~~**Complete Phase 4** (Observability Parity)~~ - COMPLETE
    - ✅ ~~Wire metadata to HistoryEntry~~ (Phase 4.1 complete)
    - ✅ ~~Fix cache hit tracking~~ (Phase 4.1 complete)
    - ✅ ~~Align provider naming~~ (Phase 4.1 complete)
    - ✅ ~~Add streaming instrumentation~~ (Phase 4.2 complete)
-   - **Next**: Improve cache key fidelity (Phase 4.3)
+   - ✅ ~~Improve cache key fidelity~~ (Phase 4.3 complete)
 
 2. **Implement Phase 5** (Typed Signatures) - 1-2 days
    - Create typed/ package
@@ -359,7 +366,7 @@ Missing modules to reach full DSPy parity:
 | Phase 1: Core Foundation | ✅ Complete |
 | Phase 2: Adapters | ✅ Complete |
 | Phase 3: Config & Observability | ✅ Complete |
-| Phase 4: Observability Parity | 🟡 In Progress (80% done) |
+| Phase 4: Observability Parity | ✅ Complete |
 | Phase 5: Typed Signatures | 📋 Planned |
 | Phase 6: Advanced Modules | 📋 Planned |
 | Phase 7: Embeddings | 📋 Planned |

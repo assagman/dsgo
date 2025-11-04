@@ -145,10 +145,54 @@ func main() {
 	costSaved := float64(savedTokens) / 1_000_000 * costPer1MTokens
 	fmt.Printf("Estimated cost saved: $%.4f (at $%.0f/1M tokens)\n", costSaved, costPer1MTokens)
 
+	// Example 5: Demonstrate that different parameters cause cache miss
+	fmt.Println("\n--- Request 5: Same Text, Different Temperature (Cache Miss) ---")
+	predictHighTemp := module.NewPredict(sig, lm).
+		WithOptions(&dsgo.GenerateOptions{
+			Temperature: 0.9, // Different temperature
+			MaxTokens:   2048,
+			TopP:        1.0,
+		})
+	
+	start = time.Now()
+	result5, err := predictHighTemp.Forward(ctx, map[string]any{
+		"text":            "Hello, how are you?",
+		"target_language": "Spanish",
+	})
+	elapsed5 := time.Since(start)
+	if err != nil {
+		log.Fatalf("Request 5 failed: %v", err)
+	}
+	translation5, _ := result5.GetString("translation")
+	fmt.Printf("Translation: %s\n", translation5)
+	fmt.Printf("Time: %v\n", elapsed5)
+	fmt.Printf("Different temperature → new API call → cache miss\n\n")
+
+	// Example 6: Demonstrate mutation safety
+	fmt.Println("\n--- Example 6: Mutation Safety ---")
+	fmt.Println("Cache uses deep copying to prevent mutation bugs")
+	fmt.Println("✓ Retrieved results are independent copies")
+	fmt.Println("✓ Modifying a result won't affect cached data")
+	fmt.Println("✓ Protects against accidental cache corruption")
+	
+	fmt.Println("\n=== Cache Key Components ===")
+	fmt.Println("Cache keys are generated from:")
+	fmt.Println("  • Model name")
+	fmt.Println("  • Messages (conversation history)")
+	fmt.Println("  • Temperature, MaxTokens, TopP")
+	fmt.Println("  • ResponseFormat, ResponseSchema (canonicalized)")
+	fmt.Println("  • Tools and ToolChoice")
+	fmt.Println("  • FrequencyPenalty, PresencePenalty")
+	fmt.Println("  • Stop sequences (sorted)")
+	fmt.Println("\n✓ Maps are canonicalized for deterministic keys")
+	fmt.Println("✓ Deep copies prevent cache mutation")
+	
 	fmt.Println("\n=== Key Takeaways ===")
 	fmt.Println("✓ Cache automatically speeds up identical requests")
-	fmt.Println("✓ Cache key includes model, messages, temperature, and all parameters")
+	fmt.Println("✓ Cache key includes ALL parameters for correctness")
 	fmt.Println("✓ LRU eviction ensures memory efficiency")
 	fmt.Println("✓ Thread-safe for concurrent use")
+	fmt.Println("✓ Deep copying prevents mutation bugs")
+	fmt.Println("✓ Map canonicalization ensures deterministic keys")
 	fmt.Println("✓ Significant cost savings for repeated queries")
 }

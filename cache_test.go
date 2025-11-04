@@ -470,3 +470,579 @@ func TestLMCache_Eviction_UnderLoad(t *testing.T) {
 		t.Error("Recently accessed item 'b' should still be in cache")
 	}
 }
+
+// TestGenerateCacheKey_Tools tests cache key generation with tools
+func TestGenerateCacheKey_Tools(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	tool1 := Tool{
+		Name:        "get_weather",
+		Description: "Get weather info",
+		Parameters: []ToolParameter{
+			{Name: "location", Type: "string", Description: "Location", Required: true},
+		},
+	}
+
+	tool2 := Tool{
+		Name:        "calculator",
+		Description: "Perform calculations",
+		Parameters: []ToolParameter{
+			{Name: "expression", Type: "string", Description: "Math expression", Required: true},
+		},
+	}
+
+	options1 := DefaultGenerateOptions()
+	options1.Tools = []Tool{tool1}
+
+	options2 := DefaultGenerateOptions()
+	options2.Tools = []Tool{tool2}
+
+	key1 := GenerateCacheKey("gpt-4", messages, options1)
+	key2 := GenerateCacheKey("gpt-4", messages, options2)
+
+	if key1 == key2 {
+		t.Error("Expected different keys for different tools")
+	}
+
+	// Same tools should produce same key
+	options3 := DefaultGenerateOptions()
+	options3.Tools = []Tool{tool1}
+	key3 := GenerateCacheKey("gpt-4", messages, options3)
+
+	if key1 != key3 {
+		t.Error("Expected same key for identical tools")
+	}
+}
+
+// TestGenerateCacheKey_ToolChoice tests cache key generation with tool choice
+func TestGenerateCacheKey_ToolChoice(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+	tool := Tool{Name: "test_tool", Description: "Test"}
+
+	options1 := DefaultGenerateOptions()
+	options1.Tools = []Tool{tool}
+	options1.ToolChoice = "auto"
+
+	options2 := DefaultGenerateOptions()
+	options2.Tools = []Tool{tool}
+	options2.ToolChoice = "none"
+
+	key1 := GenerateCacheKey("gpt-4", messages, options1)
+	key2 := GenerateCacheKey("gpt-4", messages, options2)
+
+	if key1 == key2 {
+		t.Error("Expected different keys for different tool choices")
+	}
+}
+
+// TestGenerateCacheKey_Penalties tests cache key generation with penalties
+func TestGenerateCacheKey_Penalties(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	options1 := DefaultGenerateOptions()
+	options1.FrequencyPenalty = 0.5
+
+	options2 := DefaultGenerateOptions()
+	options2.FrequencyPenalty = 0.0
+
+	key1 := GenerateCacheKey("gpt-4", messages, options1)
+	key2 := GenerateCacheKey("gpt-4", messages, options2)
+
+	if key1 == key2 {
+		t.Error("Expected different keys for different frequency penalties")
+	}
+
+	options3 := DefaultGenerateOptions()
+	options3.PresencePenalty = 0.5
+
+	key3 := GenerateCacheKey("gpt-4", messages, options3)
+
+	if key2 == key3 {
+		t.Error("Expected different keys for different presence penalties")
+	}
+}
+
+// TestGenerateCacheKey_ResponseSchema tests cache key generation with response schema
+func TestGenerateCacheKey_ResponseSchema(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	schema1 := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+			"age":  map[string]any{"type": "number"},
+		},
+	}
+
+	schema2 := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"title": map[string]any{"type": "string"},
+		},
+	}
+
+	options1 := DefaultGenerateOptions()
+	options1.ResponseSchema = schema1
+
+	options2 := DefaultGenerateOptions()
+	options2.ResponseSchema = schema2
+
+	key1 := GenerateCacheKey("gpt-4", messages, options1)
+	key2 := GenerateCacheKey("gpt-4", messages, options2)
+
+	if key1 == key2 {
+		t.Error("Expected different keys for different response schemas")
+	}
+
+	// Test that map order doesn't matter (canonicalization)
+	schema3 := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"age":  map[string]any{"type": "number"},
+			"name": map[string]any{"type": "string"},
+		},
+	}
+
+	options3 := DefaultGenerateOptions()
+	options3.ResponseSchema = schema3
+
+	key3 := GenerateCacheKey("gpt-4", messages, options3)
+
+	if key1 != key3 {
+		t.Error("Expected same key regardless of map insertion order (canonicalization)")
+	}
+}
+
+// TestGenerateCacheKey_MapCanonicalization tests map canonicalization
+func TestGenerateCacheKey_MapCanonicalization(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	// Create schemas with same data but different insertion order
+	schema1 := map[string]any{
+		"z_field": "value",
+		"a_field": "value",
+		"m_field": "value",
+	}
+
+	schema2 := map[string]any{
+		"a_field": "value",
+		"m_field": "value",
+		"z_field": "value",
+	}
+
+	options1 := DefaultGenerateOptions()
+	options1.ResponseSchema = schema1
+
+	options2 := DefaultGenerateOptions()
+	options2.ResponseSchema = schema2
+
+	key1 := GenerateCacheKey("gpt-4", messages, options1)
+	key2 := GenerateCacheKey("gpt-4", messages, options2)
+
+	if key1 != key2 {
+		t.Error("Map canonicalization should produce identical keys regardless of insertion order")
+	}
+}
+
+// TestLMCache_DeepCopy tests that cached results are deep copied
+func TestLMCache_DeepCopy(t *testing.T) {
+	cache := NewLMCache(10)
+
+	original := &GenerateResult{
+		Content: "original content",
+		ToolCalls: []ToolCall{
+			{
+				ID:   "call1",
+				Name: "tool1",
+				Arguments: map[string]interface{}{
+					"arg1": "value1",
+				},
+			},
+		},
+		Metadata: map[string]any{
+			"key1": "value1",
+		},
+	}
+
+	cache.Set("key1", original)
+
+	// Modify original
+	original.Content = "modified"
+	original.ToolCalls[0].Name = "modified_tool"
+	original.ToolCalls[0].Arguments["arg1"] = "modified_value"
+	original.Metadata["key1"] = "modified_value"
+
+	// Get from cache
+	retrieved, ok := cache.Get("key1")
+	if !ok {
+		t.Fatal("Expected cache hit")
+	}
+
+	// Verify cached value was not modified
+	if retrieved.Content != "original content" {
+		t.Errorf("Expected content 'original content', got '%s'", retrieved.Content)
+	}
+
+	if retrieved.ToolCalls[0].Name != "tool1" {
+		t.Errorf("Expected tool name 'tool1', got '%s'", retrieved.ToolCalls[0].Name)
+	}
+
+	if retrieved.ToolCalls[0].Arguments["arg1"] != "value1" {
+		t.Errorf("Expected arg1 'value1', got '%v'", retrieved.ToolCalls[0].Arguments["arg1"])
+	}
+
+	if retrieved.Metadata["key1"] != "value1" {
+		t.Errorf("Expected metadata 'value1', got '%v'", retrieved.Metadata["key1"])
+	}
+}
+
+// TestLMCache_DeepCopy_Mutation tests that modifying retrieved results doesn't affect cache
+func TestLMCache_DeepCopy_Mutation(t *testing.T) {
+	cache := NewLMCache(10)
+
+	original := &GenerateResult{
+		Content: "test",
+		Metadata: map[string]any{
+			"nested": map[string]any{
+				"level2": map[string]any{
+					"level3": "deep value",
+				},
+			},
+		},
+	}
+
+	cache.Set("key1", original)
+
+	// Get and modify
+	retrieved1, _ := cache.Get("key1")
+	if nested, ok := retrieved1.Metadata["nested"].(map[string]any); ok {
+		if level2, ok := nested["level2"].(map[string]any); ok {
+			level2["level3"] = "modified"
+		}
+	}
+
+	// Get again and verify not modified
+	retrieved2, _ := cache.Get("key1")
+	nested := retrieved2.Metadata["nested"].(map[string]any)
+	level2 := nested["level2"].(map[string]any)
+
+	if level2["level3"] != "deep value" {
+		t.Errorf("Expected 'deep value', got '%v' - cache was mutated!", level2["level3"])
+	}
+}
+
+// TestDeepCopyResult tests the deepCopyResult function
+func TestDeepCopyResult(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *GenerateResult
+	}{
+		{
+			name:   "nil result",
+			result: nil,
+		},
+		{
+			name: "simple result",
+			result: &GenerateResult{
+				Content:      "test",
+				FinishReason: "stop",
+			},
+		},
+		{
+			name: "result with tool calls",
+			result: &GenerateResult{
+				Content: "test",
+				ToolCalls: []ToolCall{
+					{ID: "1", Name: "tool1", Arguments: map[string]interface{}{"a": 1}},
+					{ID: "2", Name: "tool2", Arguments: map[string]interface{}{"b": 2}},
+				},
+			},
+		},
+		{
+			name: "result with nested metadata",
+			result: &GenerateResult{
+				Content: "test",
+				Metadata: map[string]any{
+					"simple": "value",
+					"nested": map[string]any{
+						"deep": map[string]any{
+							"deeper": "value",
+						},
+					},
+					"array": []any{1, "two", map[string]any{"three": 3}},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			copy := deepCopyResult(tt.result)
+
+			if tt.result == nil {
+				if copy != nil {
+					t.Error("Expected nil copy for nil input")
+				}
+				return
+			}
+
+			// Verify copy is not the same pointer
+			if copy == tt.result {
+				t.Error("Deep copy should create a new pointer")
+			}
+
+			// Verify content is equal
+			if copy.Content != tt.result.Content {
+				t.Errorf("Content mismatch: expected %s, got %s", tt.result.Content, copy.Content)
+			}
+
+			// Verify modifying copy doesn't affect original
+			copy.Content = "modified"
+			if tt.result.Content == "modified" {
+				t.Error("Modifying copy affected original")
+			}
+		})
+	}
+}
+
+// TestCanonicalizeMap_NilInput tests nil handling in canonicalizeMap
+func TestCanonicalizeMap_NilInput(t *testing.T) {
+	result, err := canonicalizeMap(nil)
+	if err != nil {
+		t.Errorf("Expected no error for nil input, got %v", err)
+	}
+	if result != "" {
+		t.Errorf("Expected empty string for nil input, got %s", result)
+	}
+}
+
+// TestCanonicalizeMap_NestedMaps tests nested map canonicalization
+func TestCanonicalizeMap_NestedMaps(t *testing.T) {
+	nestedMap := map[string]any{
+		"outer": map[string]any{
+			"inner": map[string]any{
+				"deep": "value",
+			},
+		},
+	}
+
+	result, err := canonicalizeMap(nestedMap)
+	if err != nil {
+		t.Errorf("Expected no error for nested maps, got %v", err)
+	}
+	if result == "" {
+		t.Error("Expected non-empty result for nested maps")
+	}
+}
+
+// TestDeepCopyMap_NilInput tests nil handling in deepCopyMap
+func TestDeepCopyMap_NilInput(t *testing.T) {
+	result := deepCopyMap(nil)
+	if result != nil {
+		t.Error("Expected nil result for nil input")
+	}
+}
+
+// TestDeepCopySlice_NilInput tests nil handling in deepCopySlice
+func TestDeepCopySlice_NilInput(t *testing.T) {
+	result := deepCopySlice(nil)
+	if result != nil {
+		t.Error("Expected nil result for nil input")
+	}
+}
+
+// TestDeepCopySlice_ComplexTypes tests slice copying with various types
+func TestDeepCopySlice_ComplexTypes(t *testing.T) {
+	slice := []any{
+		"string",
+		123,
+		true,
+		map[string]any{"key": "value"},
+		[]any{"nested", "slice"},
+	}
+
+	copied := deepCopySlice(slice)
+	if copied == nil {
+		t.Fatal("Expected non-nil result")
+	}
+
+	if len(copied) != len(slice) {
+		t.Errorf("Expected length %d, got %d", len(slice), len(copied))
+	}
+
+	// Modify original and verify copy is independent
+	slice[0] = "modified"
+	if copied[0] == "modified" {
+		t.Error("Modifying original affected copy")
+	}
+}
+
+// TestGenerateCacheKey_NilStop tests cache key with nil stop sequences
+func TestGenerateCacheKey_NilStop(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	options1 := DefaultGenerateOptions()
+	options1.Stop = nil
+
+	options2 := DefaultGenerateOptions()
+	options2.Stop = []string{}
+
+	key1 := GenerateCacheKey("gpt-4", messages, options1)
+	key2 := GenerateCacheKey("gpt-4", messages, options2)
+
+	// Both should generate valid keys
+	if key1 == "" || key2 == "" {
+		t.Error("Expected non-empty keys")
+	}
+}
+
+// TestGenerateCacheKey_NilResponseSchema tests with nil response schema
+func TestGenerateCacheKey_NilResponseSchema(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	options := DefaultGenerateOptions()
+	options.ResponseSchema = nil
+
+	key := GenerateCacheKey("gpt-4", messages, options)
+	if key == "" {
+		t.Error("Expected non-empty key for nil response schema")
+	}
+}
+
+// TestDeepCopyResult_NilToolCalls tests deep copy with nil tool calls
+func TestDeepCopyResult_NilToolCalls(t *testing.T) {
+	original := &GenerateResult{
+		Content:   "test",
+		ToolCalls: nil,
+		Metadata:  nil,
+	}
+
+	copied := deepCopyResult(original)
+	if copied == nil {
+		t.Fatal("Expected non-nil copy")
+	}
+
+	if copied.ToolCalls != nil {
+		t.Error("Expected nil tool calls in copy")
+	}
+
+	if copied.Metadata != nil {
+		t.Error("Expected nil metadata in copy")
+	}
+}
+
+// TestDeepCopyResult_EmptyToolCalls tests deep copy with empty tool calls
+func TestDeepCopyResult_EmptyToolCalls(t *testing.T) {
+	original := &GenerateResult{
+		Content:   "test",
+		ToolCalls: []ToolCall{},
+	}
+
+	copied := deepCopyResult(original)
+	if copied == nil {
+		t.Fatal("Expected non-nil copy")
+	}
+
+	if copied.ToolCalls == nil {
+		t.Error("Expected non-nil but empty tool calls slice")
+	}
+
+	if len(copied.ToolCalls) != 0 {
+		t.Errorf("Expected empty tool calls, got %d", len(copied.ToolCalls))
+	}
+}
+
+// TestDeepCopyResult_ToolCallsWithNilArguments tests tool calls with nil arguments
+func TestDeepCopyResult_ToolCallsWithNilArguments(t *testing.T) {
+	original := &GenerateResult{
+		Content: "test",
+		ToolCalls: []ToolCall{
+			{ID: "1", Name: "tool1", Arguments: nil},
+		},
+	}
+
+	copied := deepCopyResult(original)
+	if copied == nil {
+		t.Fatal("Expected non-nil copy")
+	}
+
+	if len(copied.ToolCalls) != 1 {
+		t.Fatalf("Expected 1 tool call, got %d", len(copied.ToolCalls))
+	}
+
+	if copied.ToolCalls[0].Arguments != nil {
+		t.Error("Expected nil arguments in copied tool call")
+	}
+}
+
+// TestCanonicalizeMap_UnsupportedType tests error handling for unsupported types
+func TestCanonicalizeMap_UnsupportedType(t *testing.T) {
+	// Maps containing channels or functions cannot be marshaled to JSON
+	unsupportedMap := map[string]any{
+		"channel": make(chan int),
+	}
+
+	_, err := canonicalizeMap(unsupportedMap)
+	if err == nil {
+		t.Error("Expected error for map with unsupported type (channel)")
+	}
+}
+
+// TestCanonicalizeMap_NestedUnsupportedType tests error handling in nested maps
+func TestCanonicalizeMap_NestedUnsupportedType(t *testing.T) {
+	// Nested map with unsupported type should return error
+	nestedUnsupportedMap := map[string]any{
+		"outer": map[string]any{
+			"inner": make(chan int),
+		},
+	}
+
+	_, err := canonicalizeMap(nestedUnsupportedMap)
+	if err == nil {
+		t.Error("Expected error for nested map with unsupported type")
+	}
+}
+
+// TestGenerateCacheKey_EmptyTools tests with empty tools list
+func TestGenerateCacheKey_EmptyTools(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	options := DefaultGenerateOptions()
+	options.Tools = []Tool{}
+
+	key := GenerateCacheKey("gpt-4", messages, options)
+	if key == "" {
+		t.Error("Expected non-empty key for empty tools list")
+	}
+}
+
+// TestGenerateCacheKey_MarshalError tests fallback when JSON marshaling fails
+func TestGenerateCacheKey_MarshalError(t *testing.T) {
+	// Create a message with a tool call that contains an unmarshalable type (channel)
+	messages := []Message{
+		{
+			Role:    "assistant",
+			Content: "test",
+			ToolCalls: []ToolCall{
+				{
+					ID:   "call1",
+					Name: "test_tool",
+					Arguments: map[string]interface{}{
+						"channel": make(chan int), // This cannot be marshaled to JSON
+					},
+				},
+			},
+		},
+	}
+
+	options := DefaultGenerateOptions()
+
+	// This should trigger the error path in GenerateCacheKey and use the fallback
+	key := GenerateCacheKey("gpt-4", messages, options)
+
+	// The fallback key format is "lmName:messageCount"
+	expectedFallback := "gpt-4:1"
+	if key != expectedFallback {
+		t.Errorf("Expected fallback key '%s', got '%s'", expectedFallback, key)
+	}
+}
