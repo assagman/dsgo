@@ -99,6 +99,9 @@ Go port of DSPy (Declarative Self-improving Language Programs).
    Note: `go install` only installs v1.x; v2.x requires binary installation
 7. **Test Examples**: Run `make test-matrix-quick` for fast verification or `make test-matrix-sample N=3` for broader coverage
 8. **Final Check**: Run `make all` before committing (clean, check, test, eof-check)
+9. **Post-Development**: Always run `make all` after development to ensure everything is clean and tested
+10. **Coverage**: Maintain unit test coverage above 92%
+11. **Documentation**: Update all git-included docs when making changes that affect them. Always reflect new features and fixes to examples/ - add new examples for new features, update or remove examples for fixes/removals.
 
 
 ## Production-Grade Robustness Features
