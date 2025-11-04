@@ -18,6 +18,12 @@ import (
 	"github.com/assagman/dsgo/logging"
 )
 
+func init() {
+	dsgo.RegisterLM("openai", func(model string) dsgo.LM {
+		return NewOpenAI(model)
+	})
+}
+
 const (
 	DefaultBaseURL = "https://api.openai.com/v1"
 )
@@ -119,6 +125,9 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 		return nil, err
 	}
 
+	// Extract metadata from response headers
+	result.Metadata = o.extractMetadata(resp.Header)
+
 	// Log API response
 	duration := time.Since(startTime)
 	logging.LogAPIResponse(ctx, o.Model, resp.StatusCode, duration, result.Usage)
@@ -151,7 +160,20 @@ func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOpt
 		req["stop"] = options.Stop
 	}
 	if options.ResponseFormat == "json" {
-		req["response_format"] = map[string]string{"type": "json_schema"}
+		if options.ResponseSchema != nil {
+			// Full structured output with JSON schema
+			req["response_format"] = map[string]any{
+				"type": "json_schema",
+				"json_schema": map[string]any{
+					"name":   "response",
+					"schema": options.ResponseSchema,
+					"strict": true,
+				},
+			}
+		} else {
+			// Basic JSON mode without schema
+			req["response_format"] = map[string]string{"type": "json_object"}
+		}
 	}
 	if options.FrequencyPenalty != 0 {
 		req["frequency_penalty"] = options.FrequencyPenalty
@@ -296,6 +318,46 @@ func (o *OpenAI) parseResponse(resp *openAIResponse) (*dsgo.GenerateResult, erro
 	}
 
 	return result, nil
+}
+
+// extractMetadata extracts provider-specific metadata from HTTP response headers
+func (o *OpenAI) extractMetadata(headers http.Header) map[string]any {
+	metadata := make(map[string]any)
+
+	// Cache detection (OpenAI uses Cloudflare)
+	if cacheStatus := headers.Get("CF-Cache-Status"); cacheStatus != "" {
+		metadata["cache_status"] = cacheStatus
+		metadata["cache_hit"] = (cacheStatus == "HIT")
+	}
+	if cache := headers.Get("X-Cache"); cache != "" {
+		metadata["x_cache"] = cache
+	}
+
+	// OpenAI rate limit headers
+	if rateLimit := headers.Get("X-RateLimit-Limit-Requests"); rateLimit != "" {
+		metadata["rate_limit_requests"] = rateLimit
+	}
+	if rateRemaining := headers.Get("X-RateLimit-Remaining-Requests"); rateRemaining != "" {
+		metadata["rate_limit_remaining_requests"] = rateRemaining
+	}
+	if rateLimit := headers.Get("X-RateLimit-Limit-Tokens"); rateLimit != "" {
+		metadata["rate_limit_tokens"] = rateLimit
+	}
+	if rateRemaining := headers.Get("X-RateLimit-Remaining-Tokens"); rateRemaining != "" {
+		metadata["rate_limit_remaining_tokens"] = rateRemaining
+	}
+
+	// OpenAI request ID for debugging
+	if requestID := headers.Get("X-Request-ID"); requestID != "" {
+		metadata["request_id"] = requestID
+	}
+
+	// OpenAI organization
+	if org := headers.Get("Openai-Organization"); org != "" {
+		metadata["organization"] = org
+	}
+
+	return metadata
 }
 
 // Stream generates a streaming response from OpenAI

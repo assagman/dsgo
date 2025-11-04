@@ -18,6 +18,12 @@ import (
 	"github.com/assagman/dsgo/logging"
 )
 
+func init() {
+	dsgo.RegisterLM("openrouter", func(model string) dsgo.LM {
+		return NewOpenRouter(model)
+	})
+}
+
 const (
 	DefaultBaseURL = "https://openrouter.ai/api/v1"
 )
@@ -129,6 +135,9 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []dsgo.Message, opti
 		return nil, err
 	}
 
+	// Extract metadata from response headers
+	result.Metadata = o.extractMetadata(resp.Header)
+
 	// Log API response
 	duration := time.Since(startTime)
 	logging.LogAPIResponse(ctx, o.Model, resp.StatusCode, duration, result.Usage)
@@ -169,7 +178,7 @@ func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.Generat
 			}
 		} else {
 			// Basic JSON mode without schema
-			req["response_format"] = map[string]string{"type": "json_schema"}
+			req["response_format"] = map[string]string{"type": "json_object"}
 		}
 	}
 	if options.FrequencyPenalty != 0 {
@@ -315,6 +324,38 @@ func (o *OpenRouter) parseResponse(resp *openRouterResponse) (*dsgo.GenerateResu
 	}
 
 	return result, nil
+}
+
+// extractMetadata extracts provider-specific metadata from HTTP response headers
+func (o *OpenRouter) extractMetadata(headers http.Header) map[string]any {
+	metadata := make(map[string]any)
+
+	// Cache detection (OpenRouter uses Cloudflare)
+	if cacheStatus := headers.Get("CF-Cache-Status"); cacheStatus != "" {
+		metadata["cache_status"] = cacheStatus
+		metadata["cache_hit"] = (cacheStatus == "HIT")
+	}
+	if cache := headers.Get("X-Cache"); cache != "" {
+		metadata["x_cache"] = cache
+	}
+
+	// Rate limit headers (OpenRouter specific)
+	if rateLimit := headers.Get("X-RateLimit-Limit"); rateLimit != "" {
+		metadata["rate_limit_limit"] = rateLimit
+	}
+	if rateRemaining := headers.Get("X-RateLimit-Remaining"); rateRemaining != "" {
+		metadata["rate_limit_remaining"] = rateRemaining
+	}
+	if rateReset := headers.Get("X-RateLimit-Reset"); rateReset != "" {
+		metadata["rate_limit_reset"] = rateReset
+	}
+
+	// OpenRouter-specific headers
+	if genID := headers.Get("X-OpenRouter-Generation-ID"); genID != "" {
+		metadata["generation_id"] = genID
+	}
+
+	return metadata
 }
 
 // Stream generates a streaming response from OpenRouter

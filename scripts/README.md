@@ -7,7 +7,7 @@
 **Replaces both `test_examples` and `test_matrix`** with a single, flexible script.
 
 ```bash
-# Run all examples with single model (default: gpt-4o-mini)
+# Run all examples with single model (default: gpt-3.5-turbo)
 make test-matrix-quick
 
 # Run with 3 random models
@@ -21,7 +21,7 @@ go run scripts/test_examples_matrix/main.go -p=false -v
 ```
 
 **Make Targets:**
-- `make test-matrix-quick` - Single model, fast (default: gpt-4o-mini)
+- `make test-matrix-quick` - Single model, fast (default: gpt-3.5-turbo)
 - `make test-matrix-sample N=<number>` - Test with N random models (e.g., `N=3`)
 - `make test-matrix` - All models, comprehensive
 

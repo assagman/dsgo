@@ -355,8 +355,9 @@ func (s *Signature) SignatureToJSONSchema() map[string]any {
 	}
 
 	schema := map[string]any{
-		"type":       "object",
-		"properties": properties,
+		"type":                 "object",
+		"properties":           properties,
+		"additionalProperties": false, // Required for OpenAI strict mode
 	}
 
 	if len(required) > 0 {

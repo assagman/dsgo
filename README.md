@@ -21,6 +21,8 @@ DSGo is a Go implementation of the [DSPy framework](https://github.com/stanfordn
 
 ## Features
 
+- ✅ **Global Configuration**: Centralized settings with environment variables + dynamic LM factory
+- ✅ **LM Factory Pattern**: Dynamic provider/model switching via `dsgo.NewLM(ctx)`
 - ✅ **Signatures**: Define structured inputs and outputs for LM calls
 - ✅ **Type Safety**: Strong typing with validation for inputs and outputs
 - ✅ **Production-Grade Robustness**:
@@ -63,6 +65,7 @@ import (
     "context"
     "fmt"
     "log"
+    "time"
 
     "github.com/assagman/dsgo"
     "github.com/assagman/dsgo/module"
@@ -70,14 +73,25 @@ import (
 )
 
 func main() {
+    // Configure global settings
+    dsgo.Configure(
+        dsgo.WithProvider("openai"),
+        dsgo.WithModel("gpt-4"),
+        dsgo.WithTimeout(30*time.Second),
+    )
+
     // Create signature
     sig := dsgo.NewSignature("Analyze the sentiment of the given text").
         AddInput("text", dsgo.FieldTypeString, "The text to analyze").
         AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "The sentiment").
         AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score")
 
-    // Create language model
-    lm := openai.NewOpenAI("gpt-4")
+    // Create language model from config (or use openai.NewOpenAI("gpt-4") directly)
+    ctx := context.Background()
+    lm, err := dsgo.NewLM(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
 
     // Create Predict module
     predict := module.NewPredict(sig, lm)
@@ -173,6 +187,104 @@ result, err := react.Forward(ctx, map[string]interface{}{
 ```
 
 ## Core Concepts
+
+### Global Configuration
+
+DSGo provides centralized configuration management for consistent settings across your application:
+
+```go
+import (
+    "time"
+    "github.com/assagman/dsgo"
+)
+
+// Configure via functional options
+dsgo.Configure(
+    dsgo.WithProvider("openrouter"),
+    dsgo.WithModel("google/gemini-2.5-flash"),
+    dsgo.WithTimeout(30*time.Second),
+    dsgo.WithMaxRetries(3),
+    dsgo.WithTracing(true),
+    dsgo.WithAPIKey("openrouter", "your-api-key"),
+)
+
+// Access current settings
+settings := dsgo.GetSettings()
+fmt.Printf("Model: %s\n", settings.DefaultModel)
+```
+
+**Environment Variable Support:**
+
+DSGo automatically loads configuration from environment variables:
+
+- `DSGO_PROVIDER` - Default provider (e.g., "openai", "openrouter")
+- `DSGO_MODEL` - Default model identifier
+- `DSGO_TIMEOUT` - Timeout in seconds
+- `DSGO_MAX_RETRIES` - Number of retries for failed calls
+- `DSGO_TRACING` - Enable tracing ("true" or "false")
+- `DSGO_OPENAI_API_KEY` - OpenAI API key
+- `DSGO_OPENROUTER_API_KEY` - OpenRouter API key
+- `OPENAI_API_KEY`, `OPENROUTER_API_KEY` - Fallback API keys
+
+**Configuration Priority:**
+
+1. Environment variables are loaded first
+2. Functional options override environment variables
+3. Later calls to `Configure()` override earlier calls
+
+```go
+// Environment: DSGO_MODEL=gpt-4
+dsgo.Configure(
+    dsgo.WithModel("google/gemini-2.5-flash"), // Overrides env
+)
+```
+
+**Available Options:**
+
+- `WithProvider(string)` - Set default provider
+- `WithModel(string)` - Set default model
+- `WithTimeout(time.Duration)` - Set default timeout
+- `WithLM(LM)` - Set default LM instance
+- `WithAPIKey(provider, key string)` - Set provider API key
+- `WithMaxRetries(int)` - Set retry count
+- `WithTracing(bool)` - Enable/disable tracing
+
+### LM Factory Pattern
+
+Create LM instances dynamically from global configuration:
+
+```go
+import (
+    "github.com/assagman/dsgo"
+    _ "github.com/assagman/dsgo/providers/openai"     // Auto-registers "openai"
+    _ "github.com/assagman/dsgo/providers/openrouter" // Auto-registers "openrouter"
+)
+
+// Configure once
+dsgo.Configure(
+    dsgo.WithProvider("openrouter"),
+    dsgo.WithModel("google/gemini-2.5-flash"),
+)
+
+// Create LM from configuration
+ctx := context.Background()
+lm, err := dsgo.NewLM(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Switch provider dynamically
+dsgo.Configure(dsgo.WithProvider("openai"), dsgo.WithModel("gpt-4"))
+lm2, _ := dsgo.NewLM(ctx)
+```
+
+**Benefits:**
+- **Centralized Configuration**: Set provider/model once, use everywhere
+- **Easy Switching**: Change providers without code changes
+- **Environment-Based**: Use env vars for deployment flexibility
+- **Auto-Registration**: Providers register themselves via `init()`
+
+See [examples/lm_factory](examples/lm_factory) for complete usage patterns.
 
 ### Signatures
 

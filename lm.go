@@ -32,7 +32,7 @@ type GenerateOptions struct {
 	Tools            []Tool
 	ToolChoice       string // "auto", "none", or specific tool name
 	Stream           bool
-	StreamCallback   StreamCallback // Optional callback for each streaming chunk
+	StreamCallback   StreamCallback `json:"-"` // Optional callback for each streaming chunk
 	FrequencyPenalty float64
 	PresencePenalty  float64
 }
@@ -43,6 +43,7 @@ type GenerateResult struct {
 	ToolCalls    []ToolCall
 	FinishReason string
 	Usage        Usage
+	Metadata     map[string]any // Provider-specific metadata (cache headers, rate limits, etc.)
 }
 
 // ToolCall represents a tool call made by the LM
@@ -52,11 +53,13 @@ type ToolCall struct {
 	Arguments map[string]interface{}
 }
 
-// Usage represents token usage statistics
+// Usage represents token usage and cost statistics
 type Usage struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	Cost             float64 // Total cost in USD
+	Latency          int64   // Latency in milliseconds
 }
 
 // Chunk represents a streaming response chunk from the LM

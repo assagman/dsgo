@@ -32,12 +32,13 @@ graph LR
 - Advanced: `go test -run TestName` (single test by name)
 
 ## Current Test Coverage
-- **Total**: 91.4% ✅
-- **Core**: 93.6% ✅ (up from 34.1%)
+- **Total**: 91.8% ✅
+- **Core**: 94.0% ✅ (up from 34.1%)
 - **Module**: 89.0% ✅ (up from 52.9%)
 - **jsonutil**: 88.8% ✅ (up from 9.3%)
-- **OpenAI Provider**: 93.4% ✅ (up from 13.4%)
-- **OpenRouter Provider**: 89.2% ✅ (up from 13.8%)
+- **retry**: 87.2% ✅ (up from 80.9%)
+- **OpenAI Provider**: 92.9% ✅ (up from 13.4%)
+- **OpenRouter Provider**: 88.8% ✅ (up from 13.8%)
 
 ## Architecture
 

@@ -72,5 +72,6 @@ func GetModel() string {
 		return model
 	}
 	// Default model
-	return "openai/gpt-4o-mini"
+	return "deepseek/deepseek-v3.2-exp"
 }
+

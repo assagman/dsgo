@@ -8,7 +8,7 @@ all-with-examples: clean check check-eof test test-matrix-quick
 
 test:
 	@echo "Running comprehensive tests (race detector + coverage)..."
-	@go test -v -race -coverpkg=./... -coverprofile=coverage.txt $(PACKAGES)
+	@go test -v -race -coverpkg=./internal/...,./module/...,./providers/...,./logging/...,github.com/assagman/dsgo -coverprofile=coverage.txt $(PACKAGES)
 	@echo "\nTest coverage summary:"
 	@go tool cover -func=coverage.txt | grep total
 

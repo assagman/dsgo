@@ -20,7 +20,7 @@ type Tool struct {
 	Name        string
 	Description string
 	Parameters  []ToolParameter
-	Function    ToolFunction
+	Function    ToolFunction `json:"-"` // Exclude from JSON serialization
 }
 
 // ToolFunction is the actual function implementation

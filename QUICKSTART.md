@@ -12,8 +12,17 @@ go get github.com/assagman/dsgo
 export OPENAI_API_KEY=sk-...          # For OpenAI
 # or
 export OPENROUTER_API_KEY=sk-or-...   # For OpenRouter
+# or use DSGO_* prefixed variables
+export DSGO_OPENAI_API_KEY=sk-...
+export DSGO_OPENROUTER_API_KEY=sk-or-...
 
-# 3. Run the quick test suite
+# 3. Optional: Configure defaults via environment
+export DSGO_PROVIDER=openai
+export DSGO_MODEL=gpt-4
+export DSGO_TIMEOUT=30
+export DSGO_MAX_RETRIES=3
+
+# 4. Run the quick test suite
 make test-matrix-quick
 ```
 
@@ -33,6 +42,12 @@ import (
 )
 
 func main() {
+    // Optional: Configure global settings
+    dsgo.Configure(
+        dsgo.WithProvider("openai"),
+        dsgo.WithModel("gpt-4"),
+    )
+
     // 1. Define what you want (Signature)
     sig := dsgo.NewSignature("Classify the sentiment").
         AddInput("text", dsgo.FieldTypeString, "Text to analyze").

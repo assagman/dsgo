@@ -287,15 +287,55 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 			},
 		},
 		{
-			name:     "with json format",
+			name:     "with json format (no schema)",
 			messages: []dsgo.Message{{Role: "user", Content: "test"}},
 			options: &dsgo.GenerateOptions{
 				ResponseFormat: "json",
 			},
 			check: func(t *testing.T, req map[string]any) {
 				rf, ok := req["response_format"].(map[string]string)
-				if !ok || rf["type"] != "json_schema" {
-					t.Error("expected response_format to be json")
+				if !ok || rf["type"] != "json_object" {
+					t.Errorf("expected response_format to be json_object, got %v", req["response_format"])
+				}
+			},
+		},
+		{
+			name:     "with json format and schema",
+			messages: []dsgo.Message{{Role: "user", Content: "test"}},
+			options: &dsgo.GenerateOptions{
+				ResponseFormat: "json",
+				ResponseSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"answer": map[string]any{"type": "string"},
+					},
+					"required": []string{"answer"},
+				},
+			},
+			check: func(t *testing.T, req map[string]any) {
+				rf, ok := req["response_format"].(map[string]any)
+				if !ok {
+					t.Fatal("expected response_format to be map[string]any")
+				}
+				if rf["type"] != "json_schema" {
+					t.Errorf("expected type json_schema, got %v", rf["type"])
+				}
+				jsonSchema, ok := rf["json_schema"].(map[string]any)
+				if !ok {
+					t.Fatal("expected json_schema field")
+				}
+				if jsonSchema["name"] != "response" {
+					t.Errorf("expected name 'response', got %v", jsonSchema["name"])
+				}
+				if jsonSchema["strict"] != true {
+					t.Error("expected strict to be true")
+				}
+				schema, ok := jsonSchema["schema"].(map[string]any)
+				if !ok {
+					t.Fatal("expected schema in json_schema")
+				}
+				if schema["type"] != "object" {
+					t.Errorf("expected schema type object, got %v", schema["type"])
 				}
 			},
 		},

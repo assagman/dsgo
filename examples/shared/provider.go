@@ -11,9 +11,9 @@ import (
 // GetLM returns an LM based on model name prefix
 // Usage:
 //
-//	lm := examples.GetLM("openai/gpt-4o-mini") // Uses OpenAI with "gpt-4o-mini"
+//	lm := examples.GetLM("gpt-3.5-turbo") // Uses OpenAI with "gpt-3.5-turbo"
 //	lm := examples.GetLM("openrouter/minimax/minimax-m2") // Uses OpenRouter with "minimax/minimax-m2"
-//	lm := examples.GetLM("openrouter/openai/gpt-4o-mini") // Uses OpenRouter with "openai/gpt-4o-mini"
+//	lm := examples.GetLM("openrouter/openai/gpt-3.5-turbo") // Uses OpenRouter with "openai/gpt-3.5-turbo"
 func GetLM(model string) dsgo.LM {
 	// Check if model name starts with "openrouter/"
 	if strings.HasPrefix(model, "openrouter/") {

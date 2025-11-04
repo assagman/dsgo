@@ -344,6 +344,117 @@ func mapsEqual(a, b map[string]any) bool {
 	return true
 }
 
+func TestIsJSONLiteral(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"true literal", "true", true},
+		{"false literal", "false", true},
+		{"null literal", "null", true},
+		{"integer", "42", true},
+		{"float", "3.14", true},
+		{"negative number", "-10", true},
+		{"scientific notation", "1.5e10", true},
+		{"string is not literal", "\"text\"", false},
+		{"object is not literal", "{}", false},
+		{"array is not literal", "[]", false},
+		{"invalid is not literal", "invalid", false},
+		{"whitespace around number", "  42  ", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isJSONLiteral(tt.input)
+			if got != tt.want {
+				t.Errorf("isJSONLiteral(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFixSingleQuotes_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "escaped single quote inside double quotes",
+			input: `{"text": "it\'s ok"}`,
+			want:  `{"text": "it\'s ok"}`,
+		},
+		{
+			name:  "backslash before single quote",
+			input: `{\'key\': \'val\'}`,
+			want:  `{\'key\': \'val\'}`,
+		},
+		{
+			name:  "single quote in nested structure",
+			input: `{'a': {'b': 'c'}}`,
+			want:  `{"a": {"b": "c"}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fixSingleQuotes(tt.input)
+			if got != tt.want {
+				t.Errorf("fixSingleQuotes() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRemoveTrailingCommas_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "comma in string value",
+			input: `{"text": "a,b,c"}`,
+			want:  `{"text": "a,b,c"}`,
+		},
+		{
+			name:  "multiple trailing commas",
+			input: `{"a": 1,}`,
+			want:  `{"a": 1}`,
+		},
+		{
+			name:  "trailing comma with whitespace",
+			input: `{"a": 1,  }`,
+			want:  `{"a": 1  }`,
+		},
+		{
+			name:  "trailing comma in array",
+			input: `[1, 2, 3,]`,
+			want:  `[1, 2, 3]`,
+		},
+		{
+			name:  "escaped quote before comma",
+			input: `{"text": "quote\"", }`,
+			want:  `{"text": "quote\"" }`,
+		},
+		{
+			name:  "normal comma preserved",
+			input: `{"a": 1, "b": 2}`,
+			want:  `{"a": 1, "b": 2}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := removeTrailingCommas(tt.input)
+			if got != tt.want {
+				t.Errorf("removeTrailingCommas() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func BenchmarkExtractJSON(b *testing.B) {
 	inputs := []string{
 		`{"simple": "json"}`,

@@ -67,6 +67,116 @@ func TestOpenRouter_SupportsTools(t *testing.T) {
 	}
 }
 
+func TestOpenRouter_ExtractMetadata(t *testing.T) {
+	lm := &OpenRouter{}
+
+	t.Run("extracts all headers", func(t *testing.T) {
+		headers := http.Header{}
+		headers.Set("CF-Cache-Status", "HIT")
+		headers.Set("X-Cache", "HIT from cloudflare")
+		headers.Set("X-RateLimit-Limit", "1000")
+		headers.Set("X-RateLimit-Remaining", "999")
+		headers.Set("X-RateLimit-Reset", "1234567890")
+		headers.Set("X-OpenRouter-Generation-ID", "gen-123")
+
+		metadata := lm.extractMetadata(headers)
+
+		if metadata["cache_status"] != "HIT" {
+			t.Errorf("expected cache_status HIT, got %v", metadata["cache_status"])
+		}
+		if metadata["cache_hit"] != true {
+			t.Errorf("expected cache_hit true, got %v", metadata["cache_hit"])
+		}
+		if metadata["x_cache"] != "HIT from cloudflare" {
+			t.Errorf("expected x_cache, got %v", metadata["x_cache"])
+		}
+		if metadata["rate_limit_limit"] != "1000" {
+			t.Errorf("expected rate_limit_limit 1000, got %v", metadata["rate_limit_limit"])
+		}
+		if metadata["rate_limit_remaining"] != "999" {
+			t.Errorf("expected rate_limit_remaining 999, got %v", metadata["rate_limit_remaining"])
+		}
+		if metadata["rate_limit_reset"] != "1234567890" {
+			t.Errorf("expected rate_limit_reset, got %v", metadata["rate_limit_reset"])
+		}
+		if metadata["generation_id"] != "gen-123" {
+			t.Errorf("expected generation_id gen-123, got %v", metadata["generation_id"])
+		}
+	})
+
+	t.Run("cache miss", func(t *testing.T) {
+		headers := http.Header{}
+		headers.Set("CF-Cache-Status", "MISS")
+
+		metadata := lm.extractMetadata(headers)
+
+		if metadata["cache_status"] != "MISS" {
+			t.Errorf("expected cache_status MISS, got %v", metadata["cache_status"])
+		}
+		if metadata["cache_hit"] != false {
+			t.Errorf("expected cache_hit false, got %v", metadata["cache_hit"])
+		}
+	})
+
+	t.Run("empty headers", func(t *testing.T) {
+		headers := http.Header{}
+		metadata := lm.extractMetadata(headers)
+
+		if len(metadata) != 0 {
+			t.Errorf("expected empty metadata, got %v", metadata)
+		}
+	})
+
+	t.Run("partial headers", func(t *testing.T) {
+		headers := http.Header{}
+		headers.Set("X-RateLimit-Limit", "500")
+
+		metadata := lm.extractMetadata(headers)
+
+		if metadata["rate_limit_limit"] != "500" {
+			t.Errorf("expected rate_limit_limit 500, got %v", metadata["rate_limit_limit"])
+		}
+		if len(metadata) != 1 {
+			t.Errorf("expected 1 metadata entry, got %d", len(metadata))
+		}
+	})
+}
+
+func TestInit_RegistersLM(t *testing.T) {
+	// The init function should register "openrouter" as an LM factory
+	// We can test this indirectly by configuring and creating an LM
+	ctx := context.Background()
+
+	// Configure with openrouter provider
+	dsgo.Configure(
+		dsgo.WithProvider("openrouter"),
+		dsgo.WithModel("test-model"),
+	)
+
+	lm, err := dsgo.NewLM(ctx)
+	if err != nil {
+		t.Fatalf("expected LM to be created, got error: %v", err)
+	}
+
+	if lm.Name() != "test-model" {
+		t.Errorf("expected model name test-model, got %s", lm.Name())
+	}
+
+	// Verify it's actually an OpenRouter instance (or wrapped)
+	// Could be LMWrapper, so we check the base type
+	switch v := lm.(type) {
+	case *OpenRouter:
+		// Direct OpenRouter
+	case interface{ Unwrap() dsgo.LM }:
+		// Wrapped LM, check the base
+		if _, ok := v.Unwrap().(*OpenRouter); !ok {
+			t.Errorf("expected wrapped *OpenRouter, got %T", v.Unwrap())
+		}
+	default:
+		t.Errorf("expected *OpenRouter or wrapper, got %T", lm)
+	}
+}
+
 func TestOpenRouter_Generate_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -425,15 +535,15 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 			},
 		},
 		{
-			name:     "with json format",
+			name:     "with json format (no schema)",
 			messages: []dsgo.Message{{Role: "user", Content: "test"}},
 			options: &dsgo.GenerateOptions{
 				ResponseFormat: "json",
 			},
 			check: func(t *testing.T, req map[string]interface{}) {
 				rf, ok := req["response_format"].(map[string]string)
-				if !ok || rf["type"] != "json_schema" {
-					t.Error("expected response_format to be json")
+				if !ok || rf["type"] != "json_object" {
+					t.Errorf("expected response_format to be json_object, got %v", req["response_format"])
 				}
 			},
 		},

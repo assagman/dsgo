@@ -601,7 +601,7 @@ func getDefaultModel() string {
 	}
 
 	// Default to a fast, reliable model
-	return "openai/gpt-4o-mini"
+	return "deepseek/deepseek-v3.2-exp"
 }
 
 func extractErrorFromResult(result TestResult) string {
