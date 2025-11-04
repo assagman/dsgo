@@ -65,10 +65,101 @@ func (w *LMWrapper) Generate(ctx context.Context, messages []Message, options *G
 	return result, err
 }
 
-// Stream wraps the underlying LM's Stream (delegates for now)
+// Stream wraps the underlying LM's Stream with observability
 func (w *LMWrapper) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
-	// TODO: Add streaming observability in future phase
-	return w.lm.Stream(ctx, messages, options)
+	startTime := time.Now()
+	entryID := ids.NewUUID()
+
+	// Create output channels
+	outChunkChan := make(chan Chunk)
+	outErrChan := make(chan error, 1)
+
+	// Get underlying stream channels
+	inChunkChan, inErrChan := w.lm.Stream(ctx, messages, options)
+
+	// Start goroutine to wrap and observe streaming
+	go func() {
+		defer close(outChunkChan)
+		defer close(outErrChan)
+
+		var (
+			accumulatedContent string
+			accumulatedCalls   []ToolCall
+			finalUsage         Usage
+			finishReason       string
+			streamErr          error
+		)
+
+		// Forward chunks and accumulate data
+		for {
+			select {
+			case chunk, ok := <-inChunkChan:
+				if !ok {
+					// Channel closed, stream complete
+					goto StreamComplete
+				}
+
+				// Accumulate data
+				accumulatedContent += chunk.Content
+				if len(chunk.ToolCalls) > 0 {
+					accumulatedCalls = append(accumulatedCalls, chunk.ToolCalls...)
+				}
+				if chunk.FinishReason != "" {
+					finishReason = chunk.FinishReason
+				}
+				// Update usage (final chunk typically has complete usage)
+				if chunk.Usage.TotalTokens > 0 {
+					finalUsage = chunk.Usage
+				}
+
+				// Forward to caller
+				outChunkChan <- chunk
+
+			case err := <-inErrChan:
+				if err != nil {
+					streamErr = err
+					outErrChan <- err
+					goto StreamComplete
+				}
+			}
+		}
+
+	StreamComplete:
+		// Calculate latency
+		latency := time.Since(startTime).Milliseconds()
+
+		// Build synthetic result for history entry
+		var result *GenerateResult
+		if streamErr == nil {
+			result = &GenerateResult{
+				Content:      accumulatedContent,
+				ToolCalls:    accumulatedCalls,
+				FinishReason: finishReason,
+				Usage:        finalUsage,
+			}
+		}
+
+		// Build and collect history entry
+		entry := w.buildHistoryEntry(entryID, startTime, messages, options, result, latency, streamErr)
+
+		// Update cost in entry if we have usage data
+		if result != nil && result.Usage.TotalTokens > 0 {
+			modelName := w.lm.Name()
+			calculatedCost := w.calculator.Calculate(
+				modelName,
+				result.Usage.PromptTokens,
+				result.Usage.CompletionTokens,
+			)
+			entry.Usage.Cost = calculatedCost
+		}
+
+		// Collect history (best effort)
+		if w.collector != nil {
+			_ = w.collector.Collect(entry)
+		}
+	}()
+
+	return outChunkChan, outErrChan
 }
 
 // Name returns the underlying LM's name

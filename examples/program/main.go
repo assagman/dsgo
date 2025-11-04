@@ -161,7 +161,7 @@ func conditionalPipeline(lm dsgo.LM) {
 	techSig := dsgo.NewSignature("Generate a technical support response.").
 		AddInput("message", dsgo.FieldTypeString, "Customer message").
 		AddOutput("response", dsgo.FieldTypeString, "Technical support response").
-		AddOutput("escalate", dsgo.FieldTypeBool, "Should escalate to engineer")
+		AddClassOutput("escalate", []string{"true", "false"}, "Should escalate to engineer")
 
 	techModule := module.NewPredict(techSig, lm)
 
@@ -169,7 +169,7 @@ func conditionalPipeline(lm dsgo.LM) {
 	billingSig := dsgo.NewSignature("Generate a billing support response.").
 		AddInput("message", dsgo.FieldTypeString, "Customer message").
 		AddOutput("response", dsgo.FieldTypeString, "Billing support response").
-		AddOutput("refund_eligible", dsgo.FieldTypeBool, "Is customer eligible for refund")
+		AddClassOutput("refund_eligible", []string{"true", "false"}, "Is customer eligible for refund")
 
 	billingModule := module.NewPredict(billingSig, lm)
 
@@ -217,7 +217,7 @@ func conditionalPipeline(lm dsgo.LM) {
 				log.Fatal(err)
 			}
 			fmt.Printf("💻 Technical Response:\n%s\n", responseResult.Outputs["response"])
-			if responseResult.Outputs["escalate"].(bool) {
+			if responseResult.Outputs["escalate"].(string) == "true" {
 				fmt.Println("⚠️  ESCALATE TO ENGINEERING TEAM")
 			}
 
@@ -229,7 +229,7 @@ func conditionalPipeline(lm dsgo.LM) {
 				log.Fatal(err)
 			}
 			fmt.Printf("💰 Billing Response:\n%s\n", responseResult.Outputs["response"])
-			if responseResult.Outputs["refund_eligible"].(bool) {
+			if responseResult.Outputs["refund_eligible"].(string) == "true" {
 				fmt.Println("✅ REFUND ELIGIBLE")
 			}
 

@@ -33,7 +33,7 @@ func researchAssistant() {
 		AddOutput("summary", dsgo.FieldTypeString, "Executive summary of findings").
 		AddOutput("key_findings", dsgo.FieldTypeString, "Bullet-pointed key discoveries").
 		AddClassOutput("confidence_level", []string{"high", "medium", "low"}, "Confidence in the research").
-		AddOutput("sources_consulted", dsgo.FieldTypeInt, "Number of sources checked").
+		AddOutput("sources_consulted", dsgo.FieldTypeFloat, "Number of sources checked").
 		AddOptionalOutput("statistics", dsgo.FieldTypeString, "Statistical data if requested").
 		AddOutput("recommendations", dsgo.FieldTypeString, "Action items or next steps").
 		AddClassOutput("research_quality", []string{"excellent", "good", "fair", "limited"}, "Quality assessment")

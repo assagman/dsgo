@@ -155,12 +155,12 @@ var allModels = []string{
 	"openrouter/google/gemini-2.5-pro",
 	"openrouter/qwen/qwen3-235b-a22b-2507",
 	"openrouter/meta-llama/llama-3.1-8b-instruct",
-	"openrouter/openai/gpt-oss-20b",
+	// "openrouter/openai/gpt-oss-20b", ❌
 	"openrouter/qwen/qwen3-30b-a3b",
 	"openrouter/google/gemini-2.0-flash-lite-001",
 	// "mistralai/ministral-8b", ❌
 	// "google/gemini-2.5-flash-lite-preview-09-2025", ❌
-	"openrouter/deepseek/deepseek-v3.2-exp",
+	// "openrouter/deepseek/deepseek-v3.2-exp", ❌
 }
 
 var allExamples = []string{
@@ -175,11 +175,17 @@ var allExamples = []string{
 	"examples/customer_support",
 	"examples/data_analyst",
 	"examples/fewshot_conversation",
+	"examples/global_config",
+	"examples/history",
 	"examples/interview",
+	"examples/lm_factory",
 	"examples/logging_tracing",
 	"examples/math_solver",
+	"examples/observability",
+	"examples/program",
 	"examples/program_of_thought",
 	"examples/react_agent",
+	"examples/refine",
 	"examples/research_assistant",
 	"examples/retry_resilience",
 	"examples/sentiment",
@@ -601,7 +607,7 @@ func getDefaultModel() string {
 	}
 
 	// Default to a fast, reliable model
-	return "deepseek/deepseek-v3.2-exp"
+	return "openrouter/google/gemini-2.5-flash"
 }
 
 func extractErrorFromResult(result TestResult) string {

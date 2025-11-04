@@ -116,7 +116,7 @@ Go port of DSPy (Declarative Self-improving Language Programs).
 ✅ **Partial Output Validation** - For training/optimization:
 - `ValidateOutputsPartial()` returns diagnostics instead of failing
 - Missing fields set to `nil` with detailed tracking
-- `ParseDiagnostics` attached to predictions for telemetry
+- `ParseDiagnostics` attached to predictions for observability
 
 ✅ **Class/Enum Normalization** - Flexible matching:
 - Case-insensitive: `"POSITIVE"` → `"positive"`

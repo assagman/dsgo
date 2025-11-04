@@ -72,6 +72,5 @@ func GetModel() string {
 		return model
 	}
 	// Default model
-	return "deepseek/deepseek-v3.2-exp"
+	return "openrouter/meta-llama/llama-3.3-70b-instruct"
 }
-

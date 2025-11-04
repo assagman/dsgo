@@ -7,12 +7,13 @@ import (
 	"os"
 
 	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	_ "github.com/assagman/dsgo/providers/openai"
-	_ "github.com/assagman/dsgo/providers/openrouter"
 )
 
 func main() {
+	shared.LoadEnv()
+	
 	fmt.Println("=== LM Factory Pattern Demo ===")
 
 	// Setup a collector to track LM usage
@@ -21,20 +22,9 @@ func main() {
 	// Example 1: Basic usage with OpenRouter + Observability
 	fmt.Println("Example 1: Basic Factory Usage with Observability")
 	fmt.Println("--------------------------------------------------")
-	dsgo.Configure(
-		dsgo.WithProvider("openrouter"),
-		dsgo.WithModel("google/gemini-2.5-flash"),
-		dsgo.WithCollector(memCollector),
-	)
-
-	ctx := context.Background()
-	lm, err := dsgo.NewLM(ctx)
-	if err != nil {
-		fmt.Printf("Error creating LM: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("✓ Created instrumented LM: %s\n\n", lm.Name())
+	
+	lm := shared.GetLM(shared.GetModel())
+	fmt.Printf("✓ Created instrumented LM: %s\n\n", shared.GetModel())
 
 	// Use the LM
 	sig := dsgo.NewSignature("Classify sentiment").
@@ -43,6 +33,7 @@ func main() {
 
 	predictor := module.NewPredict(sig, lm)
 
+	ctx := context.Background()
 	prediction, err := predictor.Forward(ctx, map[string]any{
 		"text": "I love this library! It makes AI development so easy.",
 	})

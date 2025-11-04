@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/examples/shared"
 	"github.com/assagman/dsgo/module"
-	_ "github.com/assagman/dsgo/providers/openrouter"
 )
 
 func main() {
+	shared.LoadEnv()
+	
 	// Example 1: Configure using functional options
 	fmt.Println("=== Example 1: Functional Options ===")
 	dsgo.Configure(
@@ -59,20 +61,9 @@ func main() {
 
 	// Example 4: Actual usage with configured LM
 	fmt.Println("=== Example 4: Using Configured Settings ===")
-	dsgo.ResetConfig()
-	dsgo.Configure(
-		dsgo.WithProvider("openrouter"),
-		dsgo.WithModel("google/gemini-2.5-flash"),
-	)
-
-	// Create LM using the factory
-	ctx := context.Background()
-	lm, err := dsgo.NewLM(ctx)
-	if err != nil {
-		fmt.Printf("Error creating LM: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("Created LM: %s\n", lm.Name())
+	
+	lm := shared.GetLM(shared.GetModel())
+	fmt.Printf("Created LM: %s\n", shared.GetModel())
 
 	// Use the LM
 	sig := dsgo.NewSignature("Generate a greeting").
@@ -81,6 +72,7 @@ func main() {
 
 	predictor := module.NewPredict(sig, lm)
 
+	ctx := context.Background()
 	prediction, err := predictor.Forward(ctx, map[string]any{
 		"name": "Alice",
 	})

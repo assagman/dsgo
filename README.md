@@ -584,6 +584,7 @@ dsgo/
 │   ├── composition/         # Module pipelines
 │   ├── caching/             # LRU cache usage
 │   ├── streaming/           # Real-time streaming
+│   ├── observability/       # Metadata, tracking, streaming observability
 │   └── ...                  # 10+ more examples
 ├── QUICKSTART.md            # Get started in 30 seconds
 ├── AGENTS.md                # Development guide
@@ -593,22 +594,25 @@ dsgo/
 
 ## Roadmap
 
-**Current Status**: ~75% feature parity with DSPy core (see [ROADMAP.md](ROADMAP.md) for details)
+**Current Status**: [ROADMAP.md](ROADMAP.md)
 
 **Completed** ✅:
 - Core modules (Predict, ChainOfThought, ReAct, Refine, BestOfN, ProgramOfThought, Program)
 - Robust adapters (JSON, Chat, TwoStep, Fallback)
-- Production robustness (JSON repair, partial validation, class normalization)
+- JSON repair, partial validation, class normalization
 - Logging and caching infrastructure
 - 20+ working examples
 
+**Recently Completed** ✅:
+- Streaming observability and metrics (Phase 4.2)
+
 **In Progress** 🚧:
-- Streaming enhancements
+- Cache key improvements
 - Advanced retry mechanisms
 - Disk-backed cache persistence
 
 **Planned**:
-- Additional LM providers (Anthropic, Google, Ollama)
+- Additional LM providers (Anthropic, Google, Groq, Cerebras)
 - Evaluation framework
 - Optimizer framework (future)
 

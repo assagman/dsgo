@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/assagman/dsgo/internal/cost"
 )
 
 // mockWrapperLM is a mock LM for testing the wrapper
@@ -798,7 +800,7 @@ func TestLMWrapper_ExtractProviderFromModel(t *testing.T) {
 	}
 }
 
-func TestLMWrapper_FullTelemetryIntegration(t *testing.T) {
+func TestLMWrapper_FullObservabilityIntegration(t *testing.T) {
 	// Save current settings
 	oldSettings := GetSettings()
 	defer func() {
@@ -905,4 +907,354 @@ func TestLMWrapper_FullTelemetryIntegration(t *testing.T) {
 	if entry.Usage.Latency < 0 {
 		t.Errorf("Expected latency >= 0, got %d", entry.Usage.Latency)
 	}
+}
+
+func TestLMWrapper_Stream_Success(t *testing.T) {
+	mock := &mockStreamSuccessLM{
+		name: "gpt-4",
+	}
+
+	memCollector := NewMemoryCollector(10)
+	wrapper := NewLMWrapper(mock, memCollector)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+	options := DefaultGenerateOptions()
+
+	chunkChan, errChan := wrapper.Stream(ctx, messages, options)
+
+	var content string
+
+	// Consume stream
+	for chunk := range chunkChan {
+		content += chunk.Content
+	}
+
+	// Check for errors
+	if err := <-errChan; err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Allow goroutine time to collect history
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify accumulated content
+	if content != "Hello world!" {
+		t.Errorf("Expected 'Hello world!', got '%s'", content)
+	}
+
+	// Verify history was collected
+	entries := memCollector.GetAll()
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(entries))
+	}
+
+	entry := entries[0]
+
+	// Verify entry fields
+	if entry.Response.Content != "Hello world!" {
+		t.Errorf("Expected response 'Hello world!', got '%s'", entry.Response.Content)
+	}
+
+	if entry.Response.FinishReason != "stop" {
+		t.Errorf("Expected finish reason 'stop', got '%s'", entry.Response.FinishReason)
+	}
+
+	if entry.Usage.PromptTokens != 10 {
+		t.Errorf("Expected 10 prompt tokens, got %d", entry.Usage.PromptTokens)
+	}
+
+	if entry.Usage.CompletionTokens != 5 {
+		t.Errorf("Expected 5 completion tokens, got %d", entry.Usage.CompletionTokens)
+	}
+
+	if entry.Usage.TotalTokens != 15 {
+		t.Errorf("Expected 15 total tokens, got %d", entry.Usage.TotalTokens)
+	}
+
+	if entry.Usage.Cost <= 0 {
+		t.Errorf("Expected cost > 0, got %f", entry.Usage.Cost)
+	}
+
+	if entry.Usage.Latency < 0 {
+		t.Errorf("Expected latency >= 0, got %d", entry.Usage.Latency)
+	}
+
+	if entry.Error != nil {
+		t.Errorf("Expected no error, got %v", entry.Error)
+	}
+}
+
+func TestLMWrapper_Stream_Error(t *testing.T) {
+	expectedErr := errors.New("stream failed")
+
+	memCollector := NewMemoryCollector(10)
+
+	// Create wrapper with custom stream behavior
+	wrapper := &LMWrapper{
+		lm: &mockStreamErrorLM{
+			name: "gpt-4",
+			err:  expectedErr,
+		},
+		collector:  memCollector,
+		calculator: cost.NewCalculator(),
+		sessionID:  "test-session",
+	}
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+	options := DefaultGenerateOptions()
+
+	chunkChan, errChan := wrapper.Stream(ctx, messages, options)
+
+	// Consume stream
+	for range chunkChan {
+		// Just consume
+	}
+
+	// Check for error
+	err := <-errChan
+	if err == nil {
+		t.Fatal("Expected error but got none")
+	}
+
+	if err.Error() != expectedErr.Error() {
+		t.Errorf("Expected error '%v', got '%v'", expectedErr, err)
+	}
+
+	// Allow goroutine time to collect history
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify error was recorded in history
+	entries := memCollector.GetAll()
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(entries))
+	}
+
+	entry := entries[0]
+	if entry.Error == nil {
+		t.Fatal("Expected error metadata to be set")
+	}
+
+	if entry.Error.Message != "stream failed" {
+		t.Errorf("Expected error message 'stream failed', got '%s'", entry.Error.Message)
+	}
+}
+
+func TestLMWrapper_Stream_WithToolCalls(t *testing.T) {
+	mock := &mockStreamToolCallsLM{
+		name: "gpt-4",
+	}
+
+	memCollector := NewMemoryCollector(10)
+	wrapper := NewLMWrapper(mock, memCollector)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "What's the weather?"}}
+	options := DefaultGenerateOptions()
+
+	chunkChan, errChan := wrapper.Stream(ctx, messages, options)
+
+	var toolCalls []ToolCall
+
+	// Consume stream
+	for chunk := range chunkChan {
+		if len(chunk.ToolCalls) > 0 {
+			toolCalls = append(toolCalls, chunk.ToolCalls...)
+		}
+	}
+
+	// Check for errors
+	if err := <-errChan; err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	// Allow goroutine time to collect history
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify tool calls were accumulated
+	if len(toolCalls) != 1 {
+		t.Fatalf("Expected 1 tool call, got %d", len(toolCalls))
+	}
+
+	if toolCalls[0].Name != "get_weather" {
+		t.Errorf("Expected tool name 'get_weather', got '%s'", toolCalls[0].Name)
+	}
+
+	// Verify history entry
+	entries := memCollector.GetAll()
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(entries))
+	}
+
+	entry := entries[0]
+
+	if len(entry.Response.ToolCalls) != 1 {
+		t.Fatalf("Expected 1 tool call in history, got %d", len(entry.Response.ToolCalls))
+	}
+
+	if entry.Response.ToolCalls[0].Name != "get_weather" {
+		t.Errorf("Expected tool name 'get_weather', got '%s'", entry.Response.ToolCalls[0].Name)
+	}
+
+	if entry.Response.ToolCallCount != 1 {
+		t.Errorf("Expected tool call count 1, got %d", entry.Response.ToolCallCount)
+	}
+}
+
+func TestLMWrapper_Stream_NoCollector(t *testing.T) {
+	mock := &mockWrapperLM{name: "gpt-4"}
+
+	// Create wrapper without collector
+	wrapper := NewLMWrapper(mock, nil)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+	options := DefaultGenerateOptions()
+
+	chunkChan, errChan := wrapper.Stream(ctx, messages, options)
+
+	// Consume stream
+	for range chunkChan {
+		// Just consume
+	}
+
+	// Check for errors
+	if err := <-errChan; err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Should not panic even without collector
+	time.Sleep(50 * time.Millisecond)
+}
+
+// mockStreamSuccessLM is a mock that returns successful streaming chunks
+type mockStreamSuccessLM struct {
+	name string
+}
+
+func (m *mockStreamSuccessLM) Generate(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+	return nil, nil
+}
+
+func (m *mockStreamSuccessLM) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
+	chunkChan := make(chan Chunk, 3)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		// Send chunks
+		chunkChan <- Chunk{Content: "Hello"}
+		chunkChan <- Chunk{Content: " world"}
+		chunkChan <- Chunk{
+			Content:      "!",
+			FinishReason: "stop",
+			Usage: Usage{
+				PromptTokens:     10,
+				CompletionTokens: 5,
+				TotalTokens:      15,
+			},
+		}
+	}()
+
+	return chunkChan, errChan
+}
+
+func (m *mockStreamSuccessLM) Name() string {
+	return m.name
+}
+
+func (m *mockStreamSuccessLM) SupportsJSON() bool {
+	return false
+}
+
+func (m *mockStreamSuccessLM) SupportsTools() bool {
+	return false
+}
+
+// mockStreamErrorLM is a mock that returns an error during streaming
+type mockStreamErrorLM struct {
+	name string
+	err  error
+}
+
+func (m *mockStreamErrorLM) Generate(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+	return nil, m.err
+}
+
+func (m *mockStreamErrorLM) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
+	chunkChan := make(chan Chunk)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+		errChan <- m.err
+	}()
+
+	return chunkChan, errChan
+}
+
+func (m *mockStreamErrorLM) Name() string {
+	return m.name
+}
+
+func (m *mockStreamErrorLM) SupportsJSON() bool {
+	return false
+}
+
+func (m *mockStreamErrorLM) SupportsTools() bool {
+	return false
+}
+
+// mockStreamToolCallsLM is a mock that returns tool calls during streaming
+type mockStreamToolCallsLM struct {
+	name string
+}
+
+func (m *mockStreamToolCallsLM) Generate(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+	return nil, nil
+}
+
+func (m *mockStreamToolCallsLM) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
+	chunkChan := make(chan Chunk, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		chunkChan <- Chunk{
+			ToolCalls: []ToolCall{
+				{
+					ID:   "call_123",
+					Name: "get_weather",
+					Arguments: map[string]interface{}{
+						"location": "San Francisco",
+					},
+				},
+			},
+			FinishReason: "tool_calls",
+			Usage: Usage{
+				PromptTokens:     20,
+				CompletionTokens: 10,
+				TotalTokens:      30,
+			},
+		}
+	}()
+
+	return chunkChan, errChan
+}
+
+func (m *mockStreamToolCallsLM) Name() string {
+	return m.name
+}
+
+func (m *mockStreamToolCallsLM) SupportsJSON() bool {
+	return false
+}
+
+func (m *mockStreamToolCallsLM) SupportsTools() bool {
+	return true
 }
