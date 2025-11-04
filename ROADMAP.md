@@ -2,7 +2,7 @@
 
 **Goal**: Complete Go port of DSPy framework based on [official Python API](https://dspy.ai/api/)
 
-**Status**: Phase 2.7 Complete ✅ | Production-Grade Robustness | ~75% DSPy Core Feature Coverage
+**Status**: Phase 2.7 Complete ✅ | DSPy Output Parity Plan Defined 🎯 | ~75% DSPy Core Feature Coverage
 
 ## Visual Progress
 
@@ -17,18 +17,201 @@ gantt
     Adapter Interface & JSONAdapter               :done, p2a, 2025-10-29, 1d
     Prediction Pipeline Implementation            :done, p2b, 2025-10-29, 1d
 
-    section Phase 3 - Advanced
-    Advanced Modules (Parallel, etc.)             :p3, 2025-11-11, 14d
+    section Phase 3 - DSPy Parity 🔥
+    Global Settings & Configuration               :active, p3a, 2025-11-04, 3d
+    Provider Core Infrastructure                  :p3b, 2025-11-07, 5d
+    Rich History Schema & Collectors              :p3c, 2025-11-07, 3d
+    LM Wrapper & Session Integration              :p3d, 2025-11-12, 2d
+    Provider Adapters (Usage/Cost/Cache)          :p3e, 2025-11-14, 2d
+    Typed Signature API                           :p3f, 2025-11-16, 3d
+    Documentation & Examples                      :p3g, 2025-11-19, 1d
 
-    section Phase 4 - Utils
-    Caching, Streaming, Logging                   :p4, 2025-11-25, 14d
+    section Phase 4 - Advanced Modules (Deferred)
+    Advanced Modules (Parallel, etc.)             :p4, 2025-11-20, 14d
 
-    section Phase 5 - Embeddings
-    Embedder Interface & Providers                :p5, 2025-12-09, 7d
+    section Phase 5 - Utils (Deferred)
+    Caching, Streaming, Logging                   :p5, 2025-12-04, 14d
 
-    section Phase 6 - Multimodal
-    Audio & Image Primitives                      :p6, 2025-12-16, 7d
+    section Phase 6 - Embeddings
+    Embedder Interface & Providers                :p6, 2025-12-18, 7d
+
+    section Phase 7 - Multimodal
+    Audio & Image Primitives                      :p7, 2025-12-25, 7d
 ```
+
+---
+
+## 🎯 NEW: DSPy Output Parity (Priority: CRITICAL)
+
+**Goal**: Match DSPy's rich telemetry, observability, and ergonomics
+
+### Background
+Current comparison shows DSGo outputs simple message history while DSPy provides:
+- ✅ Rich structured history with metadata (cost, timestamp, UUID, cache_hit, usage)
+- ✅ Global settings and configuration (`dspy.settings.configure()`)
+- ✅ LM-level history management
+- ✅ Provider-specific metadata tracking
+- ✅ Typed signature support with class-based definitions
+
+### Implementation Phases
+
+#### **Phase 1: Global Settings & Configuration** 🔥
+**Priority**: CRITICAL - Foundation for all features
+
+New files:
+- `settings.go` - Settings struct with defaults
+- `configure.go` - `Configure(opts ...Option)` global setup
+- `context.go` - Context-based settings override
+- `env.go` - Environment variable loading (DSGO_*)
+
+Features:
+- [ ] Global `dsgo.Configure()` with functional options
+- [ ] `dsgo.Settings` struct for defaults (LM, timeout, collectors)
+- [ ] Context-based override layering
+- [ ] Environment variable support (DSGO_MODEL, DSGO_PROVIDER, etc.)
+
+**API Example**:
+```go
+dsgo.Configure(
+    dsgo.WithProvider("openrouter"),
+    dsgo.WithModel("google/gemini-2.5-flash"),
+    dsgo.WithHistoryCollector(collector),
+    dsgo.WithTimeout(30*time.Second),
+)
+```
+
+#### **Phase 2: Provider Core Infrastructure** 🔥
+**Priority**: CRITICAL - Enables instrumentation
+
+New structure:
+- `provider/provider.go` - Standard Provider interface
+- `provider/registry.go` - Provider factory registry
+- `transport/httpclient.go` - Instrumented RoundTripper
+
+Features:
+- [ ] Standard `Provider` interface for all LM providers
+- [ ] Provider registry with factory pattern
+- [ ] Instrumented HTTP transport (timing, request IDs, retry)
+- [ ] Standardized Request/Response types
+- [ ] Cache detection via provider headers
+
+**Benefits**: Centralized timing, request IDs, retry/backoff logic
+
+#### **Phase 3: Rich History Schema & Collectors** 🔥
+**Priority**: CRITICAL - Core observability feature
+
+New files:
+- `history/entry.go` - **Rich HistoryEntry struct**
+- `history/collector.go` - Collector interface (JSONL, in-memory, composite)
+- `internal/cost/cost.go` - Model pricing tables & calculators
+- `internal/ids/ids.go` - UUID generation helpers
+
+**HistoryEntry Schema**:
+```go
+type HistoryEntry struct {
+    ID            string          // UUID for this call
+    Timestamp     time.Time       // Call timestamp
+    SessionID     string          // Conversation session
+    Provider      string          // "openrouter", "openai"
+    Model         string          // Model identifier
+    Request       RequestMeta     // Input messages, options
+    Response      ResponseMeta    // Output text, tool calls
+    Usage         UsageMeta       // Token counts (prompt/completion/total)
+    Cost          CostMeta        // Amount, currency, pricing
+    Cache         CacheMeta       // Hit status, source, TTL
+    Latency       LatencyMeta     // Roundtrip timing
+    Error         *ErrorMeta      // Error details if failed
+}
+```
+
+Features:
+- [ ] Rich structured event model matching DSPy output
+- [ ] JSONL collector for production observability
+- [ ] In-memory ring buffer collector for debugging
+- [ ] Composite collector for multiple sinks
+- [ ] Model pricing calculators with configurable overrides
+- [ ] Redaction support for sensitive data
+
+**Output Format**: Matches DSPy's comprehensive JSON output!
+
+#### **Phase 4: LM Wrapper & Session Integration** 🔥
+**Priority**: CRITICAL - Wires everything together
+
+New files:
+- `lm/history_manager.go` - HistoryManager interface
+- `lm/session.go` - Session ID handling via context
+
+Features:
+- [ ] Wrap all LM calls to emit HistoryEntry events
+- [ ] Capture before/after state (timing, tokens, cost)
+- [ ] Session ID propagation via context
+- [ ] Correlation ID for request tracing
+- [ ] Integration with collectors from Settings
+
+**Integration**: Automatically tracks all LM interactions with zero code changes in modules
+
+#### **Phase 5: Provider Adapters (Usage/Cost/Cache)** 🔥
+**Priority**: HIGH - Populate metadata
+
+Modifications:
+- `providers/openrouter/` - Extract usage, cache headers, cost
+- `providers/openai/` - Extract usage, model response details
+- Each adapter implements standard `Provider` interface
+
+Features:
+- [ ] OpenRouter: Extract usage from response headers
+- [ ] OpenAI: Extract usage from response body
+- [ ] Cache hit detection from provider headers (X-Cache, etc.)
+- [ ] Cost calculation using pricing tables
+- [ ] Model response object preservation
+
+**Goal**: Automatic metadata population for all provider calls
+
+#### **Phase 6: Typed Signature API** 🟡
+**Priority**: MEDIUM - Ergonomics improvement
+
+New package:
+- `typed/signature.go` - Generic signature types
+- `typed/llmfunc.go` - `Func[I, O]` with `Run(ctx, I) (O, error)`
+- `typed/jsonparse.go` - Robust JSON extraction/validation
+
+**API Example**:
+```go
+type CodeGenerator struct {
+    Request string `dsgo:"input"`
+    Code    string `dsgo:"output"`
+}
+
+predictor := typed.NewFunc[CodeGenerator](lm)
+out, err := predictor.Run(ctx, CodeGenerator{
+    Request: "Binary search in PHP",
+})
+fmt.Println(out.Code) // Type-safe access
+```
+
+Features:
+- [ ] Struct tag parsing for signature definition
+- [ ] Generic `Func[I, O]` with compile-time safety
+- [ ] Automatic JSON schema generation from structs
+- [ ] Integration with existing module system
+- [ ] Keep current map-based API for dynamic use
+
+**Benefits**: Matches DSPy's class-based signatures, compile-time safety
+
+#### **Phase 7: Documentation & Examples**
+**Priority**: HIGH - User adoption
+
+Updates:
+- Migration guide from current API
+- Examples showing new features
+- API documentation with godoc
+
+Features:
+- [ ] Migration guide: old API → new API
+- [ ] Rich history example with metadata
+- [ ] Typed signature examples
+- [ ] Global configuration patterns
+- [ ] Update existing examples to showcase new features
 
 ---
 
@@ -520,54 +703,77 @@ graph TD
 
 ---
 
-## 🎯 Next Immediate Steps (Updated Oct 31, 2025)
+## 🎯 Next Immediate Steps (Updated Nov 4, 2025)
 
-### **URGENT: Critical Cache & Retry Bugs** 🔴
+### **🔥 CRITICAL: DSPy Output Parity Initiative**
 
-1. **Phase 4A: Critical Cache Fixes** (IMMEDIATE)
+**Context**: Comparison with DSPy revealed significant gaps in telemetry, observability, and ergonomics. DSGo currently outputs simple message history while DSPy provides rich structured data with cost, usage, timestamps, cache status, etc.
+
+**Priority Order** (based on dependencies):
+
+1. **Phase 1: Global Settings & Configuration** 🔴
+   - Foundation for all other features
+   - Enables global defaults and context overrides
+   - Start: ASAP
+
+2. **Phase 2: Provider Core Infrastructure** 🔴
+   - Enables instrumentation and standardization
+   - Required for history tracking
+   - Start: After Phase 1 basics
+
+3. **Phase 3: Rich History Schema & Collectors** 🔴
+   - Core observability feature
+   - Matches DSPy output format
+   - Start: In parallel with Phase 2
+
+4. **Phase 4: LM Wrapper & Session Integration** 🔴
+   - Wires everything together
+   - Requires Phases 1, 2, 3
+   - Start: After dependencies complete
+
+5. **Phase 5: Provider Adapters** 🟡
+   - Populate usage/cost/cache metadata
+   - Requires Phase 4
+   - Start: After LM wrapper ready
+
+6. **Phase 6: Typed Signature API** 🟢
+   - Ergonomics improvement (optional for parity)
+   - Can run in parallel
+   - Start: Anytime after Phase 1
+
+7. **Phase 7: Documentation & Examples** 🟢
+   - User adoption and migration
+   - Start: After core features complete
+
+**Minimal Viable Parity**: Phases 1-5
+**Full Feature Parity**: All phases
+
+---
+
+### **DEFERRED: Critical Cache & Retry Bugs** 🟡
+
+*(Deferred until after DSPy Parity Initiative - these are important but not blocking the main objective)*
+
+1. **Phase 4A: Critical Cache Fixes** (DEFERRED)
    - [ ] Fix cache key fidelity - add Tools, ToolChoice, penalties
    - [ ] Canonicalize maps for deterministic keys
    - [ ] Implement deep copy for cache entries
    - [ ] Return error on quota exhaustion
-   - **Impact**: Prevents cache collisions, silent failures, data races
 
-### **High Priority: Production Hardening** 🟡
-
-2. **Phase 4B: Retry & Configuration** (HIGH)
+2. **Phase 4B: Retry & Configuration** (DEFERRED)
    - [ ] Respect Retry-After header
    - [ ] Configurable retry parameters
    - [ ] Seed jitter randomness
-   - [ ] TwoStepAdapter context improvements (30 min)
-   - **Impact**: Production reliability, provider compliance
 
-### **Medium Priority: Feature Parity** 🔵 (3-4 days)
+3. **Phase 4C-E: Advanced Features** (DEFERRED)
+   - Progressive streaming
+   - Two-level caching
+   - Application-level retry
 
-3. **Phase 4C: Progressive Streaming** (MEDIUM, 1-2 days)
-   - [ ] Implement StreamListener interface
-   - [ ] Add progressive parsing to adapters
-   - [ ] Field-specific streaming events
-   - [ ] Tool call streaming support
-   - **Impact**: Real-time UI updates, DSPy parity
-
-4. **Phase 4D: Two-Level Caching** (MEDIUM, 1-2 days)
-   - [ ] Implement disk cache with sharding
-   - [ ] Create TwoLevelCache wrapper
-   - [ ] Cache promotion (disk → memory)
-   - [ ] Persistence across restarts
-   - **Impact**: 30GB+ capacity, persistent cache
-
-5. **Phase 4E: Application-Level Retry** (MEDIUM, 0.5 day)
-   - [ ] Enhance Refine module with feedback
-   - [ ] Implement OfferFeedback pattern
-   - **Impact**: Self-correction for semantic errors
-
-### **Previous Phases**
-
-6. ✅ ~~All previous phases (Phase 1, 2, 2.5, 2.6, 2.7) complete~~
-7. **Phase 3: Advanced Modules** (DEFERRED, ~2 days)
-   - [ ] Implement Parallel module with worker pool
-   - [ ] Implement MultiChainComparison
-   - [ ] Stub CodeAct (safety-gated)
+4. **Phase 3: Advanced Modules** (DEFERRED)
+   - Parallel module with worker pool
+   - MultiChainComparison
+   - CodeAct (safety-gated)
 
 ---
 
@@ -580,27 +786,27 @@ graph TD
 
 ## 🚀 Quick Implementation Roadmap
 
-### Phase A: Adapter Robustness 🔥 (1-2 days, CRITICAL)
+### Phase A: Adapter Robustness 🔥
 - [ ] Complete ChatAdapter testing and integration
 - [ ] Implement TwoStepAdapter for reasoning models
 - [ ] Wire fallback chain: Chat → JSON → TwoStep
 - [ ] Add parse success metrics to Prediction metadata
 - **Goal**: >95% parse success rate
 
-### Phase B: Production Utilities 🔥 (1-2 days, CRITICAL)
+### Phase B: Production Utilities 🔥
 - [ ] Streaming with callbacks (OnStart/OnToken/OnComplete)
 - [ ] Retries and exponential backoff in providers
 - [ ] Logging/callbacks interface for observability
 - [ ] In-memory LRU cache with hit/miss metrics
 - **Goal**: Production-ready infrastructure
 
-### Phase C: Validation Hardening 🟡 (1 day, MEDIUM)
+### Phase C: Validation Hardening 🟡
 - [ ] Tool parameter type validation
 - [ ] Input coercion symmetry (mirror output coercion)
 - [ ] Stricter schema validation
 - **Goal**: Robust input/output validation
 
-### Phase D: Advanced Modules 🟡 (1-2 days, MEDIUM)
+### Phase D: Advanced Modules 🟡
 - [ ] Parallel module with worker pool
 - [ ] MultiChainComparison with LM-based synthesis
 - **Goal**: Performance and quality improvements
