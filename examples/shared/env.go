@@ -61,16 +61,16 @@ func loadEnvFiles(dir string) {
 }
 
 // GetModel returns the model to use from env vars, or a default
-// Priority: OPENROUTER_MODEL (test matrix) > EXAMPLES_MODEL (manual) > default
+// Priority: EXAMPLES_DEFAULT_MODEL (test matrix) > EXAMPLES_MODEL (manual) > default
 func GetModel() string {
-	// Check OPENROUTER_MODEL first (used by test matrix script)
-	if model := os.Getenv("OPENROUTER_MODEL"); model != "" {
+	// Check EXAMPLES_DEFAULT_MODEL first (used by test matrix)
+	if model := os.Getenv("EXAMPLES_DEFAULT_MODEL"); model != "" {
 		return model
 	}
 	// Check EXAMPLES_MODEL (manual override)
 	if model := os.Getenv("EXAMPLES_MODEL"); model != "" {
 		return model
 	}
-	// Default model
-	return "openrouter/meta-llama/llama-3.3-70b-instruct"
+	// Default: fast, reliable model for examples
+	return "openrouter/google/gemini-2.5-flash"
 }

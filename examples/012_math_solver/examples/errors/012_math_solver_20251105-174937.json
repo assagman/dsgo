@@ -1,0 +1,5 @@
+{
+  "error": "simple calculation failed: failed to parse output: all adapters failed to parse response:\n  - adapter 0 (*dsgo.ChatAdapter): required field 'code' not found in response (expected marker: [[ ## code ## ]])\n  - adapter 1 (*dsgo.JSONAdapter): no JSON object found in content\n",
+  "example": "012_math_solver",
+  "timestamp": "20251105-174937"
+}

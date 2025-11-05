@@ -575,17 +575,16 @@ dsgo/
 │   └── test_examples_matrix/ # Unified example testing
 ├── examples/                 # 20+ working examples
 │   ├── shared/              # Shared provider utilities
+│   ├── 001_predict/         # Basic prediction
+│   ├── 002-014_*/           # Core modules and features
+│   ├── 015_fewshot/         # Few-shot learning
+│   ├── 011_history_prediction/ # History and prediction primitives
+│   ├── 022_caching/         # LRU cache usage
 │   ├── sentiment/           # Basic prediction & chain-of-thought
 │   ├── chat_predict/        # Multi-turn conversation
 │   ├── react_agent/         # ReAct agent with tools
 │   ├── research_assistant/  # Complex signatures + multiple tools
-│   ├── logging_tracing/     # Request ID propagation & observability
-│   ├── fewshot_conversation/ # Few-shot learning
-│   ├── composition/         # Module pipelines
-│   ├── caching/             # LRU cache usage
-│   ├── streaming/           # Real-time streaming
-│   ├── observability/       # Metadata, tracking, streaming observability
-│   └── ...                  # 10+ more examples
+│   └── ...                  # 20+ more examples
 ├── QUICKSTART.md            # Get started in 30 seconds
 ├── AGENTS.md                # Development guide
 ├── ROADMAP.md               # Implementation roadmap

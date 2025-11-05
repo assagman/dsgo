@@ -1,0 +1,5 @@
+{
+  "error": "react failed: LM generation failed at iteration 1: API request failed with status 401: {\"error\":{\"message\":\"No cookie auth credentials found\",\"code\":401}}",
+  "example": "003_react",
+  "timestamp": "20251105-203429"
+}

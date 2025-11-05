@@ -14,18 +14,15 @@ test:
 
 # Quick test: single model (default)
 test-matrix-quick:
-	@echo "\nRunning examples with single model (quick)..."
-	@go run scripts/test_examples_matrix/main.go -n 1
+	@go run examples/test_matrix/main.go -n 1
 
 # Sample test: N random models (usage: make test-matrix-sample N=3)
 test-matrix-sample:
-	@echo "\nRunning examples with $(N) random model(s)..."
-	@go run scripts/test_examples_matrix/main.go -n $(N)
+	@go run examples/test_matrix/main.go -n $(N)
 
 # Full test: all models (comprehensive)
 test-matrix:
-	@echo "Running comprehensive test matrix (all models) ❄︎"
-	@go run scripts/test_examples_matrix/main.go -n 0
+	@go run examples/test_matrix/main.go -n 0
 
 build:
 	go build $(PACKAGES)

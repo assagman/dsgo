@@ -211,10 +211,13 @@ sig := dsgo.NewSignature("Research topic").
 ## Examples by Use Case
 
 ### Need to classify something?
-→ `examples/sentiment/` - Classification with Predict
+→ `examples/001_predict/` - Classification with Predict
 
 ### Need step-by-step reasoning?
-→ `examples/sentiment/` - Chain of Thought
+→ `examples/013_sentiment/` - Chain of Thought reasoning
+
+### Need caching for performance?
+→ `examples/022_caching/` - LM cache demonstration
 
 ### Need to use external APIs/tools?
 → `examples/react_agent/` - ReAct with tools
@@ -257,12 +260,30 @@ if diags := result.ParseDiagnostics; diags != nil {
 ## Next Steps
 
 1. **Run Examples** - Explore `examples/` directory:
-   - `sentiment/` - Basic Predict and ChainOfThought
-   - `react_agent/` - ReAct with tools
-   - `fewshot_conversation/` - Few-shot learning
-   - `composition/` - Module pipelines
+   - `001_predict/` - Basic Predict
+   - `013_sentiment/` - ChainOfThought reasoning
+   - `015_fewshot/` - Few-shot learning
+   - `022_caching/` - Performance optimization
+   - `003_react/` - ReAct with tools
+   - `007_program_composition/` - Module pipelines
 2. **Read Docs** - Check README.md for complete overview
 3. **Build!** - Start with a simple Predict module and expand
+
+## New Harness Infrastructure
+
+Numbered examples (001-028) use the new harness for better observability:
+
+```bash
+cd examples/001_predict
+go run main.go -verbose -format=json
+```
+
+**Harness Features:**
+- Concurrent execution (up to 50 workers)
+- Automatic error dumps with full History
+- Detailed statistics (tokens, cache hits, timing)
+- Multiple output formats (summary, json, ndjson)
+- CLI flags and environment variable support
 
 ## Cheat Sheet
 
