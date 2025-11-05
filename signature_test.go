@@ -2,6 +2,7 @@ package dsgo
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -1178,5 +1179,236 @@ func TestSignature_JSONSchema_EdgeCases(t *testing.T) {
 			}
 			tt.validate(t, schema)
 		})
+	}
+}
+
+// TestSignature_ConcurrentValidation tests concurrent ValidateOutputs calls
+// to ensure thread-safe operation and no race conditions
+func TestSignature_ConcurrentValidation(t *testing.T) {
+	sig := NewSignature("Test").
+		AddOutput("field1", FieldTypeString, "First field").
+		AddOutput("field2", FieldTypeInt, "Second field").
+		AddClassOutput("category", []string{"A", "B", "C"}, "Category")
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 100)
+
+	// Run 100 concurrent validations
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			// Create valid outputs
+			outputs := map[string]any{
+				"field1":   fmt.Sprintf("test_%d", id),
+				"field2":   id,
+				"category": []string{"A", "B", "C"}[id%3],
+			}
+
+			err := sig.ValidateOutputs(outputs)
+			if err != nil {
+				errChan <- fmt.Errorf("goroutine %d: %w", id, err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check for any errors
+	for err := range errChan {
+		t.Errorf("Concurrent validation error: %v", err)
+	}
+}
+
+// TestSignature_ConcurrentInputValidation tests concurrent ValidateInputs calls
+func TestSignature_ConcurrentInputValidation(t *testing.T) {
+	sig := NewSignature("Test").
+		AddInput("query", FieldTypeString, "Query").
+		AddInput("limit", FieldTypeInt, "Limit")
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 50)
+
+	// Run 50 concurrent input validations
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			inputs := map[string]any{
+				"query": fmt.Sprintf("query_%d", id),
+				"limit": id + 1,
+			}
+
+			err := sig.ValidateInputs(inputs)
+			if err != nil {
+				errChan <- fmt.Errorf("goroutine %d: %w", id, err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check for any errors
+	for err := range errChan {
+		t.Errorf("Concurrent input validation error: %v", err)
+	}
+}
+
+// BenchmarkSignature_ValidateOutputs benchmarks output validation with varying field counts
+func BenchmarkSignature_ValidateOutputs(b *testing.B) {
+	benchmarks := []struct {
+		name       string
+		fieldCount int
+	}{
+		{"Fields=10", 10},
+		{"Fields=100", 100},
+		{"Fields=500", 500},
+		{"Fields=1000", 1000},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			// Create signature with N fields
+			sig := NewSignature("BenchTest")
+			outputs := make(map[string]any, bm.fieldCount)
+
+			for i := 0; i < bm.fieldCount; i++ {
+				fieldName := fmt.Sprintf("field_%d", i)
+				sig.AddOutput(fieldName, FieldTypeString, "")
+				outputs[fieldName] = fmt.Sprintf("value_%d", i)
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				err := sig.ValidateOutputs(outputs)
+				if err != nil {
+					b.Fatalf("ValidateOutputs() error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkSignature_ValidateInputs benchmarks input validation with varying field counts
+func BenchmarkSignature_ValidateInputs(b *testing.B) {
+	benchmarks := []struct {
+		name       string
+		fieldCount int
+	}{
+		{"Fields=10", 10},
+		{"Fields=100", 100},
+		{"Fields=500", 500},
+		{"Fields=1000", 1000},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			// Create signature with N fields
+			sig := NewSignature("BenchTest")
+			inputs := make(map[string]any, bm.fieldCount)
+
+			for i := 0; i < bm.fieldCount; i++ {
+				fieldName := fmt.Sprintf("field_%d", i)
+				sig.AddInput(fieldName, FieldTypeString, "")
+				inputs[fieldName] = fmt.Sprintf("value_%d", i)
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				err := sig.ValidateInputs(inputs)
+				if err != nil {
+					b.Fatalf("ValidateInputs() error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkSignature_ValidateMixedTypes benchmarks validation with various field types
+func BenchmarkSignature_ValidateMixedTypes(b *testing.B) {
+	sig := NewSignature("MixedTypes")
+
+	// Create 1000 fields with mixed types
+	for i := 0; i < 250; i++ {
+		sig.AddOutput(fmt.Sprintf("str_%d", i), FieldTypeString, "")
+		sig.AddOutput(fmt.Sprintf("int_%d", i), FieldTypeInt, "")
+		sig.AddOutput(fmt.Sprintf("float_%d", i), FieldTypeFloat, "")
+		sig.AddOutput(fmt.Sprintf("bool_%d", i), FieldTypeBool, "")
+	}
+
+	outputs := make(map[string]any, 1000)
+	for i := 0; i < 250; i++ {
+		outputs[fmt.Sprintf("str_%d", i)] = fmt.Sprintf("value_%d", i)
+		outputs[fmt.Sprintf("int_%d", i)] = i
+		outputs[fmt.Sprintf("float_%d", i)] = float64(i) * 1.5
+		outputs[fmt.Sprintf("bool_%d", i)] = i%2 == 0
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := sig.ValidateOutputs(outputs)
+		if err != nil {
+			b.Fatalf("ValidateOutputs() error: %v", err)
+		}
+	}
+}
+
+// BenchmarkSignature_ValidateWithClasses benchmarks validation with class/enum fields
+func BenchmarkSignature_ValidateWithClasses(b *testing.B) {
+	sig := NewSignature("ClassValidation")
+
+	// Create 500 class fields
+	for i := 0; i < 500; i++ {
+		sig.AddClassOutput(
+			fmt.Sprintf("class_%d", i),
+			[]string{"positive", "negative", "neutral"},
+			"",
+		)
+	}
+
+	outputs := make(map[string]any, 500)
+	for i := 0; i < 500; i++ {
+		classes := []string{"positive", "negative", "neutral"}
+		outputs[fmt.Sprintf("class_%d", i)] = classes[i%3]
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := sig.ValidateOutputs(outputs)
+		if err != nil {
+			b.Fatalf("ValidateOutputs() error: %v", err)
+		}
+	}
+}
+
+// BenchmarkSignature_ConcurrentValidation benchmarks concurrent validation
+func BenchmarkSignature_ConcurrentValidation(b *testing.B) {
+	sig := NewSignature("ConcurrentTest")
+
+	// Create 100 fields
+	for i := 0; i < 100; i++ {
+		sig.AddOutput(fmt.Sprintf("field_%d", i), FieldTypeString, "")
+	}
+
+	outputs := make(map[string]any, 100)
+	for i := 0; i < 100; i++ {
+		outputs[fmt.Sprintf("field_%d", i)] = fmt.Sprintf("value_%d", i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		for j := 0; j < 10; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sig.ValidateOutputs(outputs)
+			}()
+		}
+		wg.Wait()
 	}
 }

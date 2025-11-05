@@ -1046,3 +1046,134 @@ func TestGenerateCacheKey_MarshalError(t *testing.T) {
 		t.Errorf("Expected fallback key '%s', got '%s'", expectedFallback, key)
 	}
 }
+
+// TestLMCache_ConcurrentEviction tests concurrent Set() operations during eviction
+// This is critical to ensure no race conditions occur when multiple goroutines
+// trigger LRU eviction simultaneously
+func TestLMCache_ConcurrentEviction(t *testing.T) {
+	cache := NewLMCache(5) // Small capacity to force evictions
+	var wg sync.WaitGroup
+
+	// Fill cache to capacity concurrently with many more items than capacity
+	for i := 0; i < 20; i++ {
+		wg.Go(func() {
+			key := string(rune('a' + (i % 26)))
+			cache.Set(key, &GenerateResult{Content: key})
+		})
+	}
+	wg.Wait()
+
+	// Verify cache integrity - should not exceed capacity
+	size := cache.Size()
+	if size > 5 {
+		t.Errorf("Cache exceeded capacity: got %d, want <= 5", size)
+	}
+
+	// Verify all cached items are retrievable
+	stats := cache.Stats()
+	if stats.Size != size {
+		t.Errorf("Stats size mismatch: Stats.Size=%d, Size()=%d", stats.Size, size)
+	}
+}
+
+// BenchmarkLMCache_ConcurrentSet benchmarks concurrent Set() operations with 10k+ goroutines
+// This stress test ensures cache performance and stability under heavy concurrent load
+func BenchmarkLMCache_ConcurrentSet(b *testing.B) {
+	cache := NewLMCache(1000)
+	result := &GenerateResult{
+		Content: "benchmark result",
+		Usage:   Usage{TotalTokens: 100},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		for j := 0; j < 10000; j++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				key := string(rune('a' + (id % 26)))
+				cache.Set(key, result)
+			}(j)
+		}
+		wg.Wait()
+	}
+}
+
+// BenchmarkLMCache_ConcurrentGet benchmarks concurrent Get() operations with 10k+ goroutines
+func BenchmarkLMCache_ConcurrentGet(b *testing.B) {
+	cache := NewLMCache(1000)
+
+	// Pre-populate cache
+	for i := 0; i < 100; i++ {
+		key := string(rune('a' + (i % 26)))
+		cache.Set(key, &GenerateResult{
+			Content: key,
+			Usage:   Usage{TotalTokens: 100},
+		})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		for j := 0; j < 10000; j++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				key := string(rune('a' + (id % 26)))
+				cache.Get(key)
+			}(j)
+		}
+		wg.Wait()
+	}
+}
+
+// BenchmarkLMCache_ConcurrentMixed benchmarks mixed Set/Get operations with 10k+ goroutines
+func BenchmarkLMCache_ConcurrentMixed(b *testing.B) {
+	cache := NewLMCache(1000)
+	result := &GenerateResult{
+		Content: "benchmark result",
+		Usage:   Usage{TotalTokens: 100},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		for j := 0; j < 10000; j++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				key := string(rune('a' + (id % 26)))
+				if id%2 == 0 {
+					cache.Set(key, result)
+				} else {
+					cache.Get(key)
+				}
+			}(j)
+		}
+		wg.Wait()
+	}
+}
+
+// BenchmarkLMCache_ConcurrentEviction benchmarks concurrent operations with heavy eviction
+func BenchmarkLMCache_ConcurrentEviction(b *testing.B) {
+	cache := NewLMCache(50) // Small capacity to force frequent evictions
+	result := &GenerateResult{
+		Content: "benchmark result",
+		Usage:   Usage{TotalTokens: 100},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		for j := 0; j < 10000; j++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				key := string(rune('a' + (id % 1000))) // Many unique keys to force evictions
+				cache.Set(key, result)
+			}(j)
+		}
+		wg.Wait()
+	}
+}

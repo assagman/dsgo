@@ -425,3 +425,226 @@ func TestConfidenceScorer(t *testing.T) {
 		})
 	}
 }
+
+// TestBestOfN_ConcurrentForward tests concurrent Forward() calls
+// to ensure thread safety when multiple goroutines use the same BestOfN module
+func TestBestOfN_ConcurrentForward(t *testing.T) {
+	var callCount int
+	var mu sync.Mutex
+
+	module := &MockModule{
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+			mu.Lock()
+			callCount++
+			count := callCount
+			mu.Unlock()
+
+			// Simulate some work
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+				return dsgo.NewPrediction(map[string]interface{}{"answer": count}), nil
+			}
+		},
+	}
+
+	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+		return float64(prediction.Outputs["answer"].(int)), nil
+	}
+
+	bon := NewBestOfN(module, 3).WithScorer(scorer)
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 10)
+
+	// Run 10 concurrent Forward() calls
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			_, err := bon.Forward(context.Background(), map[string]interface{}{"id": id})
+			if err != nil {
+				errChan <- err
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check for any errors
+	for err := range errChan {
+		t.Errorf("Concurrent forward failed: %v", err)
+	}
+}
+
+// TestBestOfN_Forward_ParallelContextCancellation tests that context cancellation
+// during parallel execution properly terminates all goroutines and returns an error
+func TestBestOfN_Forward_ParallelContextCancellation(t *testing.T) {
+	// Track how many goroutines started
+	var startedCount int
+	var mu sync.Mutex
+
+	module := &MockModule{
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+			mu.Lock()
+			startedCount++
+			mu.Unlock()
+
+			// Simulate long-running operation that respects context
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+
+	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+		return 1.0, nil
+	}
+
+	bon := NewBestOfN(module, 5).WithScorer(scorer).WithParallel(true)
+
+	// Create a context that is already cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := bon.Forward(ctx, map[string]interface{}{})
+
+	if err == nil {
+		t.Error("Expected error from cancelled context during parallel execution")
+	}
+
+	// Verify that at least some goroutines started and detected cancellation
+	mu.Lock()
+	started := startedCount
+	mu.Unlock()
+
+	if started == 0 {
+		t.Error("Expected at least one goroutine to start")
+	}
+}
+
+// BenchmarkBestOfN_Sequential benchmarks sequential execution with varying N values
+func BenchmarkBestOfN_Sequential(b *testing.B) {
+	module := &MockModule{
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+			return dsgo.NewPrediction(map[string]interface{}{"result": "test"}), nil
+		},
+	}
+
+	scorer := DefaultScorer()
+
+	benchmarks := []struct {
+		name string
+		n    int
+	}{
+		{"N=10", 10},
+		{"N=50", 50},
+		{"N=100", 100},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			bon := NewBestOfN(module, bm.n).WithScorer(scorer)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := bon.Forward(context.Background(), map[string]interface{}{})
+				if err != nil {
+					b.Fatalf("Forward() error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkBestOfN_Parallel benchmarks parallel execution with 100+ attempts
+// This stress test ensures stability and performance under heavy concurrent load
+func BenchmarkBestOfN_Parallel(b *testing.B) {
+	module := &MockModule{
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+			return dsgo.NewPrediction(map[string]interface{}{"result": "test"}), nil
+		},
+	}
+
+	scorer := DefaultScorer()
+
+	benchmarks := []struct {
+		name string
+		n    int
+	}{
+		{"N=10", 10},
+		{"N=50", 50},
+		{"N=100", 100},
+		{"N=200", 200},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			bon := NewBestOfN(module, bm.n).WithScorer(scorer).WithParallel(true)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := bon.Forward(context.Background(), map[string]interface{}{})
+				if err != nil {
+					b.Fatalf("Forward() error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkBestOfN_ParallelWithFailures benchmarks parallel execution with partial failures
+func BenchmarkBestOfN_ParallelWithFailures(b *testing.B) {
+	var callCount int
+	var mu sync.Mutex
+
+	module := &MockModule{
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+			mu.Lock()
+			callCount++
+			count := callCount
+			mu.Unlock()
+
+			// Fail 20% of the time
+			if count%5 == 0 {
+				return nil, errors.New("simulated failure")
+			}
+			return dsgo.NewPrediction(map[string]interface{}{"value": count}), nil
+		},
+	}
+
+	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+		return float64(prediction.Outputs["value"].(int)), nil
+	}
+
+	bon := NewBestOfN(module, 100).WithScorer(scorer).WithParallel(true).WithMaxFailures(30)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		callCount = 0 // Reset for each iteration
+		_, err := bon.Forward(context.Background(), map[string]interface{}{})
+		if err != nil {
+			b.Fatalf("Forward() error: %v", err)
+		}
+	}
+}
+
+// BenchmarkBestOfN_ParallelReturnAll benchmarks parallel execution with all completions returned
+func BenchmarkBestOfN_ParallelReturnAll(b *testing.B) {
+	module := &MockModule{
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+			return dsgo.NewPrediction(map[string]interface{}{"result": "test"}), nil
+		},
+	}
+
+	scorer := DefaultScorer()
+	bon := NewBestOfN(module, 100).WithScorer(scorer).WithParallel(true).WithReturnAll(true)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := bon.Forward(context.Background(), map[string]interface{}{})
+		if err != nil {
+			b.Fatalf("Forward() error: %v", err)
+		}
+	}
+}

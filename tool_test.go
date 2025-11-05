@@ -211,3 +211,31 @@ func TestTool_NormalizeArguments(t *testing.T) {
 		})
 	}
 }
+
+// TestTool_Execute_ContextCancellation tests that context cancellation mid-execution
+// is properly handled by Tool.Execute
+func TestTool_Execute_ContextCancellation(t *testing.T) {
+	tool := NewTool(
+		"long_running_tool",
+		"A tool that simulates long-running work",
+		func(ctx context.Context, args map[string]any) (any, error) {
+			// Simulate long-running operation that respects context
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	).AddParameter("input", "string", "Input parameter", true)
+
+	// Create a context that is already cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := tool.Execute(ctx, map[string]any{"input": "test"})
+
+	if err == nil {
+		t.Error("Expected error from cancelled context")
+	}
+
+	if err != context.Canceled {
+		t.Errorf("Expected context.Canceled, got %v", err)
+	}
+}

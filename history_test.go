@@ -309,3 +309,153 @@ func TestHistory_Clone_DeepCopy(t *testing.T) {
 		t.Errorf("Cloned should have 2 messages, got %d", cloned.Len())
 	}
 }
+
+// BenchmarkHistory_LargeRetention benchmarks memory usage and performance
+// with large message history retention (1000+ messages with varying content sizes)
+// This stress test profiles memory allocation efficiency for long-running conversations
+func BenchmarkHistory_LargeRetention(b *testing.B) {
+	// Test with different message content sizes
+	benchmarks := []struct {
+		name        string
+		numMessages int
+		contentSize int // bytes per message
+	}{
+		{"1K_messages_100B", 1000, 100},
+		{"1K_messages_1KB", 1000, 1024},
+		{"1K_messages_10KB", 1000, 10 * 1024},
+		{"5K_messages_1KB", 5000, 1024},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			// Pre-generate message content to avoid counting string generation in benchmark
+			content := make([]byte, bm.contentSize)
+			for i := range content {
+				content[i] = 'a' + byte(i%26)
+			}
+			contentStr := string(content)
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				h := NewHistory()
+
+				// Add many messages to profile retention
+				for j := 0; j < bm.numMessages; j++ {
+					h.AddUserMessage(contentStr)
+				}
+
+				// Perform common operations
+				_ = h.GetLast(10)
+				_ = h.Len()
+				_ = h.Get()
+			}
+		})
+	}
+}
+
+// BenchmarkHistory_WithLimitRetention benchmarks memory with limited history
+func BenchmarkHistory_WithLimitRetention(b *testing.B) {
+	benchmarks := []struct {
+		name        string
+		limit       int
+		numMessages int
+		contentSize int
+	}{
+		{"Limit100_Add1K", 100, 1000, 1024},
+		{"Limit500_Add5K", 500, 5000, 1024},
+		{"Limit1K_Add10K", 1000, 10000, 1024},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			content := make([]byte, bm.contentSize)
+			for i := range content {
+				content[i] = 'a' + byte(i%26)
+			}
+			contentStr := string(content)
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				h := NewHistoryWithLimit(bm.limit)
+
+				for j := 0; j < bm.numMessages; j++ {
+					h.AddUserMessage(contentStr)
+				}
+
+				// Should only retain 'limit' messages
+				if h.Len() != bm.limit {
+					b.Errorf("Expected %d messages, got %d", bm.limit, h.Len())
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkHistory_CloneLarge benchmarks cloning large histories
+func BenchmarkHistory_CloneLarge(b *testing.B) {
+	benchmarks := []struct {
+		name        string
+		numMessages int
+		contentSize int
+	}{
+		{"Clone1K_1KB", 1000, 1024},
+		{"Clone5K_1KB", 5000, 1024},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			// Pre-populate a large history
+			h := NewHistory()
+			content := make([]byte, bm.contentSize)
+			for i := range content {
+				content[i] = 'a' + byte(i%26)
+			}
+			contentStr := string(content)
+
+			for j := 0; j < bm.numMessages; j++ {
+				h.AddUserMessage(contentStr)
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_ = h.Clone()
+			}
+		})
+	}
+}
+
+// BenchmarkHistory_Operations benchmarks common history operations
+func BenchmarkHistory_Operations(b *testing.B) {
+	// Pre-populate a large history
+	h := NewHistory()
+	for i := 0; i < 1000; i++ {
+		h.AddUserMessage(fmt.Sprintf("message %d", i))
+	}
+
+	b.Run("GetLast10", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			_ = h.GetLast(10)
+		}
+	})
+
+	b.Run("GetAll", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			_ = h.Get()
+		}
+	})
+
+	b.Run("Len", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			_ = h.Len()
+		}
+	})
+}

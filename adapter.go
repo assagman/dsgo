@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/assagman/dsgo/internal/jsonutil"
@@ -761,6 +762,7 @@ func (a *ChatAdapter) FormatHistory(history *History) []Message {
 // This implements the critical fallback chain: ChatAdapter → JSONAdapter → Salvage
 type FallbackAdapter struct {
 	adapters        []Adapter
+	mu              sync.RWMutex
 	lastUsedAdapter int // Track which adapter succeeded (for debugging)
 }
 
@@ -821,7 +823,9 @@ func (f *FallbackAdapter) Parse(sig *Signature, content string) (map[string]any,
 	for i, adapter := range f.adapters {
 		outputs, err := adapter.Parse(sig, content)
 		if err == nil {
+			f.mu.Lock()
 			f.lastUsedAdapter = i
+			f.mu.Unlock()
 			// Add adapter metadata to outputs for tracking
 			// This will be picked up by modules to add to Prediction
 			outputs["__adapter_used"] = fmt.Sprintf("%T", adapter)
@@ -852,6 +856,8 @@ func (f *FallbackAdapter) FormatHistory(history *History) []Message {
 // GetLastUsedAdapter returns the index of the adapter that last succeeded in Parse
 // Returns -1 if Parse hasn't been called or all adapters failed
 func (f *FallbackAdapter) GetLastUsedAdapter() int {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.lastUsedAdapter
 }
 

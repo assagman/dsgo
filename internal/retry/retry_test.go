@@ -399,3 +399,122 @@ func TestWithExponentialBackoff_ContextCanceledDuringBackoff(t *testing.T) {
 		t.Errorf("Expected at most 2 calls, got %d", callCount)
 	}
 }
+
+// BenchmarkRetryLogic_RateLimit tests retry logic under sustained rate limiting
+// Simulates thousands of requests hitting continuous 429 responses
+func BenchmarkRetryLogic_RateLimit(b *testing.B) {
+	ctx := context.Background()
+	rateLimitCount := 0
+
+	// Simulate sustained rate limiting - always return 429
+	fn := func() (*http.Response, error) {
+		rateLimitCount++
+		return &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Body:       io.NopCloser(bytes.NewBufferString(`{"error":{"code":"rate_limit_exceeded"}}`)),
+		}, nil
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp, _ := WithExponentialBackoff(ctx, fn)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+	}
+	b.ReportMetric(float64(rateLimitCount)/float64(b.N), "retries/op")
+}
+
+// BenchmarkRetryLogic_SporadicFailures tests retry logic with intermittent failures
+func BenchmarkRetryLogic_SporadicFailures(b *testing.B) {
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		attemptCount := 0
+		fn := func() (*http.Response, error) {
+			attemptCount++
+			// Fail first 2 attempts, succeed on 3rd
+			if attemptCount <= 2 {
+				return &http.Response{
+					StatusCode: http.StatusServiceUnavailable,
+					Body:       http.NoBody,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
+			}, nil
+		}
+
+		resp, _ := WithExponentialBackoff(ctx, fn)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+	}
+}
+
+// BenchmarkRetryLogic_ImmediateSuccess tests baseline performance with no retries
+func BenchmarkRetryLogic_ImmediateSuccess(b *testing.B) {
+	ctx := context.Background()
+
+	fn := func() (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       http.NoBody,
+		}, nil
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp, _ := WithExponentialBackoff(ctx, fn)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+	}
+}
+
+// BenchmarkRetryLogic_NetworkErrors tests retry logic with persistent network errors
+func BenchmarkRetryLogic_NetworkErrors(b *testing.B) {
+	ctx := context.Background()
+
+	fn := func() (*http.Response, error) {
+		return nil, errors.New("network connection refused")
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = WithExponentialBackoff(ctx, fn)
+	}
+}
+
+// BenchmarkRetryLogic_Concurrent tests retry logic under concurrent load
+func BenchmarkRetryLogic_Concurrent(b *testing.B) {
+	ctx := context.Background()
+
+	b.RunParallel(func(pb *testing.PB) {
+		attemptNum := 0
+		for pb.Next() {
+			attemptNum++
+			localAttempt := attemptNum
+			fn := func() (*http.Response, error) {
+				// Vary behavior: some succeed, some fail transiently
+				if localAttempt%3 == 0 {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       http.NoBody,
+					}, nil
+				}
+				return &http.Response{
+					StatusCode: http.StatusTooManyRequests,
+					Body:       io.NopCloser(bytes.NewBufferString(`{"error":{"code":"rate_limit_exceeded"}}`)),
+				}, nil
+			}
+
+			resp, _ := WithExponentialBackoff(ctx, fn)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+		}
+	})
+}

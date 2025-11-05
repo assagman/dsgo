@@ -3,6 +3,8 @@ package module
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/assagman/dsgo"
@@ -394,5 +396,100 @@ func TestPredict_CustomSchemaOverridesAutoGeneration(t *testing.T) {
 		// Expected to fail validation since we're using custom schema
 		// but that's OK - we just want to verify the custom schema was used
 		t.Logf("Expected validation error: %v", err)
+	}
+}
+
+// TestPredict_ConcurrentForward tests concurrent Forward() calls
+// to ensure thread safety when multiple goroutines use the same Predict module
+func TestPredict_ConcurrentForward(t *testing.T) {
+	var callCount int
+	var mu sync.Mutex
+
+	sig := dsgo.NewSignature("Test").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			mu.Lock()
+			callCount++
+			count := callCount
+			mu.Unlock()
+
+			// Simulate some work
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+				return &dsgo.GenerateResult{Content: fmt.Sprintf(`{"answer": "response-%d"}`, count)}, nil
+			}
+		},
+	}
+
+	p := NewPredict(sig, lm)
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 50)
+
+	// Run 50 concurrent Forward() calls
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			_, err := p.Forward(context.Background(), map[string]interface{}{"question": fmt.Sprintf("test-%d", id)})
+			if err != nil {
+				errChan <- err
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check for any errors
+	for err := range errChan {
+		t.Errorf("Concurrent forward failed: %v", err)
+	}
+}
+
+// TestPredict_ContextTimeout tests that context timeout is properly handled
+// during Forward() execution and LM Generate() calls
+func TestPredict_ContextTimeout(t *testing.T) {
+	sig := dsgo.NewSignature("Test").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			// Check if context is already cancelled
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+
+			// This should be interrupted by context timeout
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+
+	p := NewPredict(sig, lm)
+
+	// Create a context that times out immediately
+	ctx, cancel := context.WithTimeout(context.Background(), 1)
+	defer cancel()
+
+	_, err := p.Forward(ctx, map[string]interface{}{"question": "test"})
+
+	if err == nil {
+		t.Error("Expected error from context timeout")
+	}
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Expected context.DeadlineExceeded, got %v", err)
 	}
 }
