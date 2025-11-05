@@ -2,7 +2,7 @@
 
 **Goal**: Complete Go port of DSPy framework based on [official Python API](https://dspy.ai/api/)
 
-**Current Status**: ~67% DSPy Core Feature Coverage | Phase 3 Complete ✅ | Phase 4 Complete ✅
+**Current Status**: ~70% DSPy Core Feature Coverage | Phase 3 Complete ✅ | Phase 4 Complete ✅ | Phase 5 Complete ✅
 
 ---
 
@@ -167,55 +167,50 @@ pie title Component Coverage vs DSPy
 - [x] Comprehensive unit tests for cache key generation ✅
 - [x] Document cache key components ✅
 
-**Completed**: ✅ | **Coverage**: 100% of new code paths | **Example**: Updated `examples/caching/`
-
-**Implementation Details**:
-- Cache keys now include: Tools, ToolChoice, FrequencyPenalty, PresencePenalty, ResponseSchema
-- Map canonicalization ensures deterministic keys regardless of insertion order
-- Deep copy on Get/Set prevents external mutation of cached data
-- Recursive deep copy for nested maps and slices in metadata/tool calls
-- 10 new test functions with 40+ test cases covering all cache improvements
-
 #### 4.4: Provider vs Vendor Naming (Priority: MEDIUM)
 - [x] Provider naming uses `settings.DefaultProvider` (done in 4.1) ✅
 - [ ] Track separate "vendor" field (openai/google/meta) extracted from model prefix
 - [ ] Add vendor-specific metadata (e.g., model family, version)
 - [ ] Update examples and documentation
 
-**Effort**: 1-2 hours | **Impact**: Medium
-
-**Phase 4 Goal**: Achieve true DSPy observability parity
-
-**Status**: ✅ **COMPLETE** | All 5 critical gaps closed (100%) | Tasks 4.1, 4.2, 4.3 complete ✅
-
 ---
 
-## 📋 Phase 5: Typed Signatures (PLANNED)
+## ✅ Phase 5: Typed Signatures (COMPLETE)
 
 ### Objective
 Match DSPy's class-based signatures with Go generics for type safety and better ergonomics.
 
-### Tasks
-- [ ] Create `typed/` package
-- [ ] `Func[I, O]` generic module with `Run(ctx, I) (O, error)`
-- [ ] Struct tag parsing (`dsgo:"input/output,desc=...,enum=..."`)
-- [ ] JSON schema generation from struct types
-- [ ] Integration with existing module system
-- [ ] Keep map-based API for dynamic use cases
+### Implemented Features
+- [x] Created `typed/` package with full implementation
+- [x] `Func[I, O]` generic module with `Run(ctx, I) (O, error)`
+- [x] Struct tag parsing (`dsgo:"input/output,desc=...,enum=...,optional"`)
+- [x] Automatic field type inference from Go types
+- [x] `StructToSignature()` for converting tagged structs to signatures
+- [x] `StructToMap()` and `MapToStruct()` for seamless conversion
+- [x] Full integration with existing module system (Predict)
+- [x] Support for `WithDemosTyped()` for type-safe few-shot examples
+- [x] `RunWithPrediction()` to access both typed output and raw prediction
+- [x] All builder methods: `WithOptions()`, `WithAdapter()`, `WithHistory()`
+- [x] Comprehensive unit tests (100% coverage)
+- [x] Example: `examples/typed_signatures/`
 
 **API Example**:
 ```go
-type Sentiment struct {
-    Text   string `dsgo:"input,desc=Text to analyze"`
-    Result string `dsgo:"output,enum=positive|negative|neutral"`
+type SentimentInput struct {
+    Text string `dsgo:"input,desc=Text to analyze"`
 }
 
-predictor := typed.NewFunc[Sentiment](lm)
-out, err := predictor.Run(ctx, Sentiment{Text: "I love this!"})
-fmt.Println(out.Result) // Type-safe access
+type SentimentOutput struct {
+    Sentiment string `dsgo:"output,enum=positive|negative|neutral"`
+    Score     int    `dsgo:"output,desc=Confidence score"`
+}
+
+predictor, _ := typed.NewPredict[SentimentInput, SentimentOutput](lm)
+out, _ := predictor.Run(ctx, SentimentInput{Text: "I love this!"})
+fmt.Println(out.Sentiment, out.Score) // Type-safe access
 ```
 
-**Effort**: 1-2 days | **Priority**: Medium
+**Status**: ✅ Complete | **Test Coverage**: 100% | **Example**: `examples/typed_signatures/`
 
 ---
 
@@ -229,28 +224,20 @@ Missing modules to reach full DSPy parity:
 - [ ] Error aggregation
 - [ ] Thread-safe execution
 
-**Effort**: 1 day
-
 ### 6.2: MultiChainComparison
 - [ ] Generate N outputs from different chains
 - [ ] LM-based synthesis/comparison
 - [ ] Best answer selection
-
-**Effort**: 1-2 days
 
 ### 6.3: KNN (k-Nearest Neighbors)
 - [ ] Vector similarity search for few-shot selection
 - [ ] Embedding integration required (Phase 7)
 - [ ] Dynamic demo selection
 
-**Effort**: 2 days
-
 ### 6.4: CodeAct
 - [ ] Safety-gated code generation and execution
 - [ ] Sandbox environment integration
 - [ ] Enhanced tool integration
-
-**Effort**: 2-3 days
 
 **Priority**: Medium
 
@@ -271,8 +258,6 @@ Missing modules to reach full DSPy parity:
 ### 7.3: Vector Operations
 - [ ] Similarity search utilities
 - [ ] Integration with KNN module
-
-**Effort**: 3-5 days | **Priority**: Medium
 
 ---
 
@@ -296,8 +281,6 @@ Missing modules to reach full DSPy parity:
 - [ ] PDF/text extraction
 - [ ] Citation tracking
 
-**Effort**: 3-5 days | **Priority**: Low
-
 ---
 
 ## 📋 Phase 9: Additional Providers (PLANNED)
@@ -307,8 +290,6 @@ Missing modules to reach full DSPy parity:
 - [ ] Google AI (Gemini direct)
 - [ ] Mistral AI
 - [ ] Cohere
-
-**Effort**: 1-2 days per provider | **Priority**: Low-Medium
 
 ---
 
@@ -327,8 +308,6 @@ Missing modules to reach full DSPy parity:
 - [ ] Request/response debugging tools
 - [ ] Performance profiling
 
-**Effort**: 5-7 days | **Priority**: Low
-
 ---
 
 ## 🎯 Immediate Next Steps
@@ -340,12 +319,12 @@ Missing modules to reach full DSPy parity:
    - ✅ ~~Add streaming instrumentation~~ (Phase 4.2 complete)
    - ✅ ~~Improve cache key fidelity~~ (Phase 4.3 complete)
 
-2. **Implement Phase 5** (Typed Signatures) - 1-2 days
-   - Create typed/ package
-   - Generic Func[I,O] module
-   - Struct tag parsing
+2. ✅ ~~**Complete Phase 5** (Typed Signatures)~~ - COMPLETE
+   - ✅ ~~Create typed/ package~~ (complete with 100% test coverage)
+   - ✅ ~~Generic Func[I,O] module~~ (complete)
+   - ✅ ~~Struct tag parsing~~ (complete)
 
-3. **Advanced Modules** (Phase 6) - 5-10 days
+3. **Advanced Modules** (Phase 6)
    - Parallel, MultiChainComparison, KNN, CodeAct
 
 ---
@@ -367,11 +346,11 @@ Missing modules to reach full DSPy parity:
 | Phase 2: Adapters | ✅ Complete |
 | Phase 3: Config & Observability | ✅ Complete |
 | Phase 4: Observability Parity | ✅ Complete |
-| Phase 5: Typed Signatures | 📋 Planned |
+| Phase 5: Typed Signatures | ✅ Complete |
 | Phase 6: Advanced Modules | 📋 Planned |
 | Phase 7: Embeddings | 📋 Planned |
 | Phase 8: Multimodal | 📋 Planned |
 | Phase 9: Providers | 📋 Planned |
 | Phase 10: Infrastructure | 📋 Planned |
 
-**Target for 80%+ parity**: Completion of Phases 4-6 (~2-3 weeks)
+**Target for 80%+ parity**: Completion of Phases 4-6

@@ -161,10 +161,10 @@ func (s *Signature) ValidateOutputs(outputs map[string]any) error {
 			normalized := normalizeClassValue(valueStr, field)
 			valid := false
 			for _, class := range field.Classes {
-				if normalized == class {
+				if strings.EqualFold(normalized, class) {
 					valid = true
-					// Update output with normalized value
-					outputs[field.Name] = normalized
+					// Update output with normalized value (use the class name from the list)
+					outputs[field.Name] = class
 					break
 				}
 			}
@@ -213,10 +213,10 @@ func (s *Signature) ValidateOutputsPartial(outputs map[string]any) *ValidationDi
 			normalized := normalizeClassValue(valueStr, field)
 			valid := false
 			for _, class := range field.Classes {
-				if normalized == class {
+				if strings.EqualFold(normalized, class) {
 					valid = true
-					// Update output with normalized value
-					outputs[field.Name] = normalized
+					// Update output with normalized value (use the class name from the list)
+					outputs[field.Name] = class
 					break
 				}
 			}
@@ -292,6 +292,10 @@ func (s *Signature) validateFieldType(field Field, value any) error {
 // normalizeClassValue normalizes a class value for comparison using case-insensitive matching and aliases
 func normalizeClassValue(value string, field Field) string {
 	v := strings.ToLower(strings.TrimSpace(value))
+
+	// Strip common decorations (parentheses, quotes, brackets)
+	v = strings.Trim(v, "()[]{}\"'`")
+	v = strings.TrimSpace(v)
 
 	// Check if there's an exact case-insensitive match first
 	for _, class := range field.Classes {

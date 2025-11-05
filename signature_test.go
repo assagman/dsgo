@@ -759,6 +759,30 @@ func TestSignature_ValidateOutputs_WithNormalization(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name:      "with parentheses",
+			outputs:   map[string]any{"sentiment": "(positive)"},
+			wantValue: "positive",
+			wantErr:   false,
+		},
+		{
+			name:      "with brackets",
+			outputs:   map[string]any{"sentiment": "[positive]"},
+			wantValue: "positive",
+			wantErr:   false,
+		},
+		{
+			name:      "with quotes",
+			outputs:   map[string]any{"sentiment": "\"positive\""},
+			wantValue: "positive",
+			wantErr:   false,
+		},
+		{
+			name:      "with multiple decorations",
+			outputs:   map[string]any{"sentiment": "  (positive)  "},
+			wantValue: "positive",
+			wantErr:   false,
+		},
+		{
 			name:      "invalid value",
 			outputs:   map[string]any{"sentiment": "invalid"},
 			wantValue: "",

@@ -190,6 +190,7 @@ var allExamples = []string{
 	"examples/retry_resilience",
 	"examples/sentiment",
 	"examples/streaming",
+	"examples/typed_signatures",
 }
 
 func main() {
