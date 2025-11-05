@@ -2,7 +2,10 @@ package module
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/assagman/dsgo"
@@ -32,7 +35,7 @@ func NewReAct(signature *dsgo.Signature, lm dsgo.LM, tools []dsgo.Tool) *ReAct {
 		LM:            lm,
 		Tools:         tools,
 		Options:       dsgo.DefaultGenerateOptions(),
-		Adapter:       dsgo.NewFallbackAdapter().WithReasoning(true),
+		Adapter:       dsgo.NewFallbackAdapter(),
 		MaxIterations: MaxReActIterations,
 		Verbose:       false,
 	}
@@ -188,27 +191,66 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 				fmt.Println("Action: None (Final Answer)")
 			}
 
+			// Apply hardened parsing (P2)
+			cleanedContent := stripToJSON(result.Content)
+
 			// Use adapter to parse output
-			outputs, err := r.Adapter.Parse(r.Signature, result.Content)
+			outputs, err := r.Adapter.Parse(r.Signature, cleanedContent)
 			if err != nil {
+				// If in early iterations and parsing fails, guide model to use tools instead of accepting bad output
+				if !finalMode && i < r.MaxIterations-2 {
+					if r.Verbose {
+						fmt.Println("⚠️  Parsing failed and tools available - requesting tool use")
+					}
+					messages = append(messages, dsgo.Message{
+						Role:    "assistant",
+						Content: result.Content,
+					})
+					messages = append(messages, dsgo.Message{
+						Role:    "user",
+						Content: "Please use the available tools to gather the information needed, then provide a complete answer in the requested format. Do not include any meta-commentary or explanations - just the answer.",
+					})
+					continue
+				}
+
+				// If in final mode and parsing fails, run extraction (P1)
+				if finalMode {
+					if r.Verbose {
+						fmt.Println("⚠️  Final answer parsing failed - running extraction")
+					}
+					return r.runExtract(ctx, messages, inputs)
+				}
+
 				// FALLBACK: If structured parsing fails, attempt text extraction for string fields
 				// This makes ReAct resilient to less capable models that don't follow structured formats
-				extractedOutputs := r.extractTextOutputs(result.Content, messages)
+				extractedOutputs := r.extractTextOutputs(cleanedContent, messages)
 				if len(extractedOutputs) > 0 {
 					if r.Verbose {
 						fmt.Println("⚠️  Structured parsing failed - falling back to raw text extraction")
 					}
 					outputs = extractedOutputs
 				} else {
-					return nil, fmt.Errorf("failed to parse final answer: %w", err)
+					// Last resort: run extraction
+					if r.Verbose {
+						fmt.Println("⚠️  All parsing failed - running extraction")
+					}
+					return r.runExtract(ctx, messages, inputs)
 				}
 			}
 
-			// Apply output normalization and coercion before validation
+			// Apply type coercion (P2)
+			outputs = coerceBasicTypes(r.Signature, outputs)
+
+			// Apply output normalization
 			outputs = dsgo.NormalizeOutputKeys(r.Signature, outputs)
 
+			// Use partial validation to allow missing optional fields
 			if err := r.Signature.ValidateOutputs(outputs); err != nil {
-				return nil, fmt.Errorf("output validation failed: %w", err)
+				// Validation failed - try extraction as fallback
+				if r.Verbose {
+					fmt.Printf("⚠️  Output validation failed: %v - running extraction\n", err)
+				}
+				return r.runExtract(ctx, messages, inputs)
 			}
 
 			// Extract adapter metadata
@@ -366,7 +408,11 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 		lastObservation = currentObservation
 	}
 
-	return nil, fmt.Errorf("exceeded maximum iterations (%d) without reaching final answer", r.MaxIterations)
+	// Max iterations exceeded - run extraction to salvage an answer (P1)
+	if r.Verbose {
+		fmt.Printf("\n⚠️  Exceeded maximum iterations (%d) - running extraction\n", r.MaxIterations)
+	}
+	return r.runExtract(ctx, messages, inputs)
 }
 
 func (r *ReAct) buildSystemPrompt() string {
@@ -376,14 +422,17 @@ func (r *ReAct) buildSystemPrompt() string {
 	}
 
 	var prompt strings.Builder
-	prompt.WriteString("You are a helpful AI assistant that can use tools to answer questions.\n\n")
-	prompt.WriteString("Follow the ReAct (Reasoning and Acting) pattern:\n")
-	prompt.WriteString("1. Think: Reason about the problem and what information you need\n")
-	prompt.WriteString("2. Act: Use available tools to gather information\n")
-	prompt.WriteString("3. Observe: Analyze the tool results\n")
-	prompt.WriteString("4. Repeat until you have enough information to provide a final answer\n\n")
-	prompt.WriteString("When you have gathered sufficient information, call the 'finish' tool with your complete answer. ")
-	prompt.WriteString("The finish tool takes all the required output fields as parameters and cleanly concludes your research.\n")
+	prompt.WriteString("You are a helpful AI assistant that uses tools to answer questions.\n\n")
+	prompt.WriteString("Follow these steps:\n")
+	prompt.WriteString("1. Use the available tools to gather the information you need\n")
+	prompt.WriteString("2. Once you have enough information, call the 'finish' tool with your complete answer\n")
+	prompt.WriteString("3. If you already have the answer, call 'finish' immediately\n\n")
+
+	prompt.WriteString("IMPORTANT:\n")
+	prompt.WriteString("- Use the native tool calling mechanism\n")
+	prompt.WriteString("- Do NOT write textual representations like 'Action: search(...)' or 'Thought:'\n")
+	prompt.WriteString("- When calling 'finish', provide ALL required fields in the tool arguments\n")
+	prompt.WriteString("- Do not include explanations or meta-commentary\n")
 
 	return prompt.String()
 }
@@ -392,8 +441,8 @@ func (r *ReAct) buildFinalAnswerPrompt() string {
 	var prompt strings.Builder
 	prompt.WriteString("Based on all the information gathered above, please provide your final answer now.\n\n")
 
-	// Add output format specification
-	prompt.WriteString("Respond with a JSON object containing:\n")
+	// Add output format specification (P3: clearer JSON instructions)
+	prompt.WriteString("Respond with a valid JSON object containing these fields:\n")
 	for _, field := range r.Signature.OutputFields {
 		optional := ""
 		if field.Optional {
@@ -410,8 +459,11 @@ func (r *ReAct) buildFinalAnswerPrompt() string {
 		}
 	}
 
-	prompt.WriteString("\nIMPORTANT: Provide a complete answer based on the observations you've gathered. ")
-	prompt.WriteString("Return ONLY valid JSON with all required fields.\n")
+	prompt.WriteString("\nCRITICAL REQUIREMENTS:\n")
+	prompt.WriteString("- Return ONLY a valid JSON object (no code fences, no explanations)\n")
+	prompt.WriteString("- Include all required fields with appropriate values\n")
+	prompt.WriteString("- Use the exact field names specified above\n")
+	prompt.WriteString("- Provide a complete answer based on all observations you've gathered\n")
 
 	return prompt.String()
 }
@@ -562,4 +614,243 @@ func buildFinishTool(signature *dsgo.Signature) *dsgo.Tool {
 	}
 
 	return tool
+}
+
+// stripToJSON removes common LLM artifacts from JSON output
+// Handles: code fences, trailing commentary, leading/trailing text
+func stripToJSON(content string) string {
+	content = strings.TrimSpace(content)
+
+	// Remove markdown code fences
+	re := regexp.MustCompile("(?s)```(?:json)?\n?(.*?)\n?```")
+	if matches := re.FindStringSubmatch(content); len(matches) > 1 {
+		content = strings.TrimSpace(matches[1])
+	}
+
+	// Find JSON object boundaries
+	start := strings.Index(content, "{")
+	end := strings.LastIndex(content, "}")
+
+	if start != -1 && end != -1 && end > start {
+		content = content[start : end+1]
+	}
+
+	return strings.TrimSpace(content)
+}
+
+// coerceBasicTypes handles type mismatches in parsed outputs
+// Converts: string numbers to ints, string bools to bools, etc.
+func coerceBasicTypes(signature *dsgo.Signature, outputs map[string]any) map[string]any {
+	coerced := make(map[string]any)
+
+	for key, value := range outputs {
+		field := signature.GetOutputField(key)
+		if field == nil {
+			coerced[key] = value
+			continue
+		}
+
+		switch field.Type {
+		case dsgo.FieldTypeInt:
+			// Try to convert string to int
+			if strVal, ok := value.(string); ok {
+				// Extract first number from string (e.g., "5 years" -> 5)
+				re := regexp.MustCompile(`-?\d+`)
+				if match := re.FindString(strVal); match != "" {
+					if intVal, err := strconv.Atoi(match); err == nil {
+						coerced[key] = intVal
+						continue
+					}
+				}
+			}
+			// Try float64 (from JSON unmarshaling) to int
+			if floatVal, ok := value.(float64); ok {
+				coerced[key] = int(floatVal)
+				continue
+			}
+			coerced[key] = value
+
+		case dsgo.FieldTypeBool:
+			// Try to convert string to bool
+			if strVal, ok := value.(string); ok {
+				strVal = strings.ToLower(strings.TrimSpace(strVal))
+				if strVal == "true" || strVal == "yes" || strVal == "1" {
+					coerced[key] = true
+					continue
+				}
+				if strVal == "false" || strVal == "no" || strVal == "0" {
+					coerced[key] = false
+					continue
+				}
+			}
+			coerced[key] = value
+
+		case dsgo.FieldTypeString:
+			// Convert any type to string if needed
+			if value != nil {
+				coerced[key] = fmt.Sprintf("%v", value)
+			} else {
+				coerced[key] = value
+			}
+
+		default:
+			coerced[key] = value
+		}
+	}
+
+	return coerced
+}
+
+// runExtract performs post-loop extraction to synthesize a final answer
+// from the accumulated message history (trajectory). This is the critical
+// fallback that ensures ReAct always returns something, even if the main
+// loop fails or produces unparseable output.
+//
+// This phase uses a temporary adapter WITH reasoning enabled, mimicking
+// ChainOfThought behavior during extraction.
+func (r *ReAct) runExtract(ctx context.Context, messages []dsgo.Message, inputs map[string]any) (*dsgo.Prediction, error) {
+	if r.Verbose {
+		fmt.Println("\n=== Running Post-Loop Extraction (with reasoning) ===")
+	}
+
+	// Build extraction prompt
+	extractPrompt := r.buildExtractionPrompt()
+
+	// Append extraction request to message history
+	extractMessages := make([]dsgo.Message, len(messages))
+	copy(extractMessages, messages)
+	extractMessages = append(extractMessages, dsgo.Message{
+		Role:    "user",
+		Content: extractPrompt,
+	})
+
+	// Copy options and force JSON mode
+	options := r.Options.Copy()
+	options.Tools = nil
+	options.ToolChoice = "none"
+
+	if r.LM.SupportsJSON() {
+		options.ResponseFormat = "json"
+		if options.ResponseSchema == nil {
+			options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+		}
+	}
+
+	// Generate extraction
+	result, err := r.LM.Generate(ctx, extractMessages, options)
+	if err != nil {
+		return nil, fmt.Errorf("extraction generation failed: %w", err)
+	}
+
+	if r.Verbose {
+		fmt.Printf("Extraction response: %s\n", result.Content)
+	}
+
+	// Apply hardened parsing
+	cleanedContent := stripToJSON(result.Content)
+
+	// Create temporary adapter WITH reasoning for extraction phase
+	extractAdapter := dsgo.NewFallbackAdapter().WithReasoning(true)
+
+	// Try adapter parsing first (with reasoning)
+	outputs, err := extractAdapter.Parse(r.Signature, cleanedContent)
+	if err != nil {
+		// Fallback: try direct JSON parsing
+		outputs = make(map[string]any)
+		if jsonErr := json.Unmarshal([]byte(cleanedContent), &outputs); jsonErr != nil {
+			// Last resort: extract text outputs
+			outputs = r.extractTextOutputs(cleanedContent, extractMessages)
+			if len(outputs) == 0 {
+				return nil, fmt.Errorf("extraction failed to parse output: %w (JSON error: %v)", err, jsonErr)
+			}
+		}
+	}
+
+	// Extract and remove rationale/reasoning field from outputs
+	var rationale string
+	if val, ok := outputs["rationale"]; ok {
+		if str, ok := val.(string); ok {
+			rationale = str
+			delete(outputs, "rationale")
+		}
+	}
+	if rationale == "" {
+		if val, ok := outputs["reasoning"]; ok {
+			if str, ok := val.(string); ok {
+				rationale = str
+				delete(outputs, "reasoning")
+			}
+		}
+	}
+
+	// Apply type coercion
+	outputs = coerceBasicTypes(r.Signature, outputs)
+
+	// Apply output normalization
+	outputs = dsgo.NormalizeOutputKeys(r.Signature, outputs)
+
+	// Use partial validation (allow missing optional fields)
+	diagnostics := r.Signature.ValidateOutputsPartial(outputs)
+
+	// Extract adapter metadata
+	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+
+	// Build prediction with diagnostics and rationale
+	pred := &dsgo.Prediction{
+		Outputs:          outputs,
+		Usage:            result.Usage,
+		AdapterUsed:      adapterUsed,
+		ParseAttempts:    parseAttempts,
+		FallbackUsed:     fallbackUsed,
+		ParseDiagnostics: diagnostics,
+	}
+
+	// Attach rationale if found
+	if rationale != "" {
+		pred = pred.WithRationale(rationale)
+		if r.Verbose {
+			fmt.Printf("Extracted rationale: %s\n", rationale)
+		}
+	}
+
+	if r.Verbose {
+		fmt.Printf("Extracted outputs: %+v\n", outputs)
+		if diagnostics != nil && diagnostics.HasErrors() {
+			fmt.Printf("⚠️  Extraction diagnostics: %v\n", diagnostics)
+		}
+	}
+
+	return pred, nil
+}
+
+// buildExtractionPrompt creates a prompt for post-loop extraction
+func (r *ReAct) buildExtractionPrompt() string {
+	var prompt strings.Builder
+	prompt.WriteString("Based on the conversation above, including all tool observations and reasoning, ")
+	prompt.WriteString("please synthesize a final answer now.\n\n")
+
+	prompt.WriteString("Respond with a JSON object containing:\n")
+	for _, field := range r.Signature.OutputFields {
+		optional := ""
+		if field.Optional {
+			optional = " (optional)"
+		}
+		classInfo := ""
+		if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
+			classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
+		}
+		if field.Description != "" {
+			prompt.WriteString(fmt.Sprintf("- %s (%s)%s%s: %s\n", field.Name, field.Type, optional, classInfo, field.Description))
+		} else {
+			prompt.WriteString(fmt.Sprintf("- %s (%s)%s%s\n", field.Name, field.Type, optional, classInfo))
+		}
+	}
+
+	prompt.WriteString("\nIMPORTANT:\n")
+	prompt.WriteString("- Use all information from the tool observations above\n")
+	prompt.WriteString("- Provide your best answer even if some information is missing\n")
+	prompt.WriteString("- Return ONLY valid JSON with the required fields\n")
+	prompt.WriteString("- Do not include any explanations or commentary\n")
+
+	return prompt.String()
 }

@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -129,12 +130,23 @@ func TestReAct_Forward_MaxIterations(t *testing.T) {
 	}
 
 	react := NewReAct(sig, lm, []dsgo.Tool{}).WithMaxIterations(2)
-	_, err := react.Forward(context.Background(), map[string]interface{}{
+	result, err := react.Forward(context.Background(), map[string]interface{}{
 		"question": "test",
 	})
 
-	if err == nil {
-		t.Error("Forward() should error when max iterations exceeded")
+	// With the extraction phase, ReAct should now return a result instead of erroring
+	if err != nil {
+		t.Errorf("Forward() should not error when max iterations exceeded, got: %v", err)
+	}
+	if result == nil {
+		t.Error("Forward() should return a result via extraction")
+	}
+	// Verify that extraction was called (should have made additional LM call)
+	if result != nil {
+		answer, _ := result.GetString("answer")
+		if answer == "" {
+			t.Error("Extraction should have produced an answer")
+		}
 	}
 }
 
@@ -279,8 +291,11 @@ func TestReAct_BuildSystemPrompt_WithTools(t *testing.T) {
 		t.Error("System prompt should not be empty with tools")
 	}
 
-	if !contains(prompt, "ReAct") {
-		t.Error("System prompt should mention ReAct")
+	if !contains(prompt, "tools") {
+		t.Error("System prompt should mention tools")
+	}
+	if !contains(prompt, "finish") {
+		t.Error("System prompt should mention finish tool")
 	}
 }
 
@@ -747,27 +762,40 @@ func TestReAct_Forward_OutputValidationError(t *testing.T) {
 		AddOutput("answer", dsgo.FieldTypeString, "Answer").
 		AddOutput("score", dsgo.FieldTypeInt, "Required score")
 
+	callCount := 0
 	lm := &MockLM{
 		SupportsJSONVal: true,
 		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			// Missing required "score" field
+			callCount++
+			if callCount == 1 {
+				// Missing required "score" field - will trigger extraction
+				return &dsgo.GenerateResult{
+					Content: `{"answer": "incomplete"}`,
+				}, nil
+			}
+			// Extraction call - provide complete answer
 			return &dsgo.GenerateResult{
-				Content: `{"answer": "incomplete"}`,
+				Content: `{"answer": "extracted answer", "score": 42}`,
 			}, nil
 		},
 	}
 
 	react := NewReAct(sig, lm, []dsgo.Tool{})
-	_, err := react.Forward(context.Background(), map[string]interface{}{
+	result, err := react.Forward(context.Background(), map[string]interface{}{
 		"question": "test",
 	})
 
-	if err == nil {
-		t.Error("Forward() should error when output validation fails")
+	// With extraction, validation failures should be handled gracefully
+	if err != nil {
+		t.Errorf("Forward() should not error with extraction fallback, got: %v", err)
 	}
 
-	if !contains(err.Error(), "validation failed") {
-		t.Errorf("Expected validation error, got %v", err)
+	if result == nil {
+		t.Error("Forward() should return a result via extraction")
+	}
+
+	if callCount != 2 {
+		t.Errorf("Expected 2 LM calls (initial + extraction), got %d", callCount)
 	}
 }
 
@@ -964,5 +992,113 @@ func TestReAct_SynthesizeAnswerFromHistory_SkipsShortObservations(t *testing.T) 
 
 	if contains(result, "short") && !contains(result, "longer observation") {
 		t.Errorf("Should skip observations <= 20 chars, got '%s'", result)
+	}
+}
+
+// TestReAct_ExtractionWithReasoning verifies that runExtract uses reasoning adapter
+// and attaches rationale to the prediction when hitting MaxIterations
+func TestReAct_ExtractionWithReasoning(t *testing.T) {
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer").
+		AddOutput("confidence", dsgo.FieldTypeInt, "Confidence score")
+
+	iterationCount := 0
+	lm := &MockLM{
+		SupportsToolsVal: true,
+		SupportsJSONVal:  true,
+		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+			iterationCount++
+
+			// Always return tool calls to force hitting MaxIterations
+			// Use different queries to avoid stagnation detection
+			if len(options.Tools) > 0 {
+				query := fmt.Sprintf("test query %d", iterationCount)
+				return &dsgo.GenerateResult{
+					Content: "Using search tool",
+					ToolCalls: []dsgo.ToolCall{
+						{
+							ID:   fmt.Sprintf("call_%d", iterationCount),
+							Name: "search",
+							Arguments: map[string]any{
+								"query": query,
+							},
+						},
+					},
+				}, nil
+			}
+
+			// No tools mode (final mode or extraction)
+			// During final mode (iteration 2): return malformed JSON to force extraction
+			// During extraction (iteration 3): return proper JSON with reasoning
+			if iterationCount == 2 {
+				// Return malformed JSON that will fail parsing and trigger extraction
+				return &dsgo.GenerateResult{
+					Content: "I'm thinking about it but not formatting correctly",
+				}, nil
+			}
+
+			// Extraction phase (iteration 3): return proper answer with reasoning
+			return &dsgo.GenerateResult{
+				Content: `{
+					"rationale": "Based on all the tool observations, I can now provide the final answer.",
+					"answer": "The answer based on search results",
+					"confidence": 95
+				}`,
+			}, nil
+		},
+	}
+
+	callNumber := 0
+	searchTool := dsgo.NewTool(
+		"search",
+		"Search for information",
+		func(ctx context.Context, args map[string]any) (any, error) {
+			callNumber++
+			return fmt.Sprintf("Search results %d: relevant information", callNumber), nil
+		},
+	).AddParameter("query", "string", "Search query", true)
+
+	react := NewReAct(sig, lm, []dsgo.Tool{*searchTool}).
+		WithMaxIterations(2).
+		WithVerbose(false)
+
+	result, err := react.Forward(context.Background(), map[string]any{
+		"question": "What is the answer?",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	// Should have hit MaxIterations and triggered extraction
+	// 2 tool-using iterations + 1 extraction call = 3 total
+	if iterationCount < 3 {
+		t.Errorf("Expected at least 3 LM calls (2 iterations + extraction), got %d", iterationCount)
+	}
+
+	// Check that answer was extracted
+	answer, ok := result.GetString("answer")
+	if !ok {
+		t.Error("Expected answer field in result")
+	}
+	if !contains(answer, "answer based on search") {
+		t.Errorf("Expected answer to contain extracted text, got: %s", answer)
+	}
+
+	// CRITICAL: Check that rationale was attached to prediction
+	if result.Rationale == "" {
+		t.Error("Expected non-empty rationale from extraction phase with reasoning adapter")
+	}
+	if !contains(result.Rationale, "tool observations") {
+		t.Errorf("Expected rationale to contain reasoning, got: %s", result.Rationale)
+	}
+
+	// Verify rationale was removed from outputs (not part of signature)
+	if _, exists := result.Outputs["rationale"]; exists {
+		t.Error("Rationale should be removed from outputs map")
+	}
+	if _, exists := result.Outputs["reasoning"]; exists {
+		t.Error("Reasoning should be removed from outputs map")
 	}
 }
