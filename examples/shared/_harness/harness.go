@@ -21,20 +21,20 @@ type Config struct {
 }
 
 type ExecutionStats struct {
-	StartTime    time.Time         `json:"start_time"`
-	EndTime      time.Time         `json:"end_time"`
-	Duration     time.Duration     `json:"duration_ms"`
-	TokensUsed   int               `json:"tokens_used"`
-	CacheHits    int               `json:"cache_hits"`
-	Retries      int               `json:"retries"`
-	Status       string            `json:"status"`
-	Error        string            `json:"error,omitempty"`
-	Metadata     map[string]any    `json:"metadata,omitempty"`
+	StartTime  time.Time      `json:"start_time"`
+	EndTime    time.Time      `json:"end_time"`
+	Duration   time.Duration  `json:"duration_ms"`
+	TokensUsed int            `json:"tokens_used"`
+	CacheHits  int            `json:"cache_hits"`
+	Retries    int            `json:"retries"`
+	Status     string         `json:"status"`
+	Error      string         `json:"error,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 type ExecutionResult struct {
-	ExampleName string          `json:"example_name"`
-	Stats       ExecutionStats  `json:"stats"`
+	ExampleName string           `json:"example_name"`
+	Stats       ExecutionStats   `json:"stats"`
 	Prediction  *dsgo.Prediction `json:"-"`
 }
 
@@ -48,10 +48,10 @@ type Harness struct {
 
 func NewHarness(config Config) *Harness {
 	if config.Concurrency <= 0 {
-		config.Concurrency = 50
+		config.Concurrency = 16
 	}
 	if config.Timeout <= 0 {
-		config.Timeout = 30 * time.Second
+		config.Timeout = 5 * time.Minute
 	}
 	if config.ErrorDumpDir == "" {
 		config.ErrorDumpDir = "examples/errors"
@@ -74,11 +74,11 @@ func (h *Harness) Run(ctx context.Context, exampleName string, fn ExampleFunc) e
 
 	start := time.Now()
 	pred, stats, err := fn(ctx)
-	
+
 	if stats == nil {
 		stats = &ExecutionStats{}
 	}
-	
+
 	stats.StartTime = start
 	stats.EndTime = time.Now()
 	stats.Duration = stats.EndTime.Sub(stats.StartTime)

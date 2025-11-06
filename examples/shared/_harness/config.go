@@ -17,10 +17,10 @@ type FlagConfig struct {
 
 func ParseFlags() (Config, *flag.FlagSet) {
 	fs := flag.NewFlagSet("harness", flag.ContinueOnError)
-	
+
 	fc := FlagConfig{
 		Concurrency:  fs.Int("concurrency", 50, "Number of concurrent executions"),
-		Timeout:      fs.Int("timeout", 30, "Timeout in seconds per execution"),
+		Timeout:      fs.Int("timeout", 300, "Timeout in seconds per execution"),
 		ErrorDumpDir: fs.String("error-dir", "examples/errors", "Directory for error dumps"),
 		OutputFormat: fs.String("format", "summary", "Output format: json, ndjson, or summary"),
 		Verbose:      fs.Bool("verbose", false, "Verbose output"),

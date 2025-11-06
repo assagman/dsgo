@@ -154,7 +154,7 @@ func runExample(ctx context.Context) (*dsgo.Prediction, *harness.ExecutionStats,
 
 	qaPredict := module.NewPredict(qaSig, lm).
 		WithOptions(&dsgo.GenerateOptions{
-			MaxTokens:   800,
+			MaxTokens:   1500,
 			Temperature: 0.5,
 		})
 
