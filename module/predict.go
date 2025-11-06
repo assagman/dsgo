@@ -115,6 +115,24 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 		return nil, predErr
 	}
 
+	// Handle finish_reason: Predict doesn't support tool execution loops
+	if result.FinishReason == "tool_calls" {
+		predErr = fmt.Errorf("model requested tool execution (finish_reason=tool_calls) but Predict module doesn't support tool loops - use React module instead")
+		return nil, predErr
+	}
+
+	// Handle finish_reason=length: Model hit max_tokens, output truncated/incomplete
+	if result.FinishReason == "length" {
+		predErr = fmt.Errorf("model hit max_tokens limit (finish_reason=length) - output truncated - increase MaxTokens in options")
+		return nil, predErr
+	}
+
+	// Check for empty content with finish_reason=stop (actual error)
+	if result.Content == "" && result.FinishReason == "stop" {
+		predErr = fmt.Errorf("model returned empty content despite finish_reason=stop (model error)")
+		return nil, predErr
+	}
+
 	// Use adapter to parse output
 	outputs, err := p.Adapter.Parse(p.Signature, result.Content)
 	if err != nil {

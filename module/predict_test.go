@@ -1447,3 +1447,85 @@ func TestPredict_HistoryNotUpdatedOnError(t *testing.T) {
 		t.Errorf("History should not be updated on error, got %d messages", history.Len())
 	}
 }
+
+// TestPredict_FinishReasonHandling tests all finish_reason scenarios
+func TestPredict_FinishReasonHandling(t *testing.T) {
+	sig := dsgo.NewSignature("Test signature").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	tests := []struct {
+		name          string
+		finishReason  string
+		content       string
+		toolCalls     []dsgo.ToolCall
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "finish_reason=stop with valid content",
+			finishReason: "stop",
+			content:      "[[ ## answer ## ]]\nTest answer",
+			expectError:  false,
+		},
+		{
+			name:          "finish_reason=stop with empty content (error)",
+			finishReason:  "stop",
+			content:       "",
+			expectError:   true,
+			errorContains: "model returned empty content despite finish_reason=stop",
+		},
+		{
+			name:          "finish_reason=length with content (error - truncated)",
+			finishReason:  "length",
+			content:       "[[ ## answer ## ]]\nPartial answer that was cut off mid",
+			expectError:   true,
+			errorContains: "model hit max_tokens limit (finish_reason=length)",
+		},
+		{
+			name:          "finish_reason=length with empty content (error)",
+			finishReason:  "length",
+			content:       "",
+			expectError:   true,
+			errorContains: "model hit max_tokens limit (finish_reason=length)",
+		},
+		{
+			name:          "finish_reason=tool_calls (error - not supported)",
+			finishReason:  "tool_calls",
+			content:       "",
+			toolCalls:     []dsgo.ToolCall{{ID: "1", Name: "test_tool"}},
+			expectError:   true,
+			errorContains: "finish_reason=tool_calls) but Predict module doesn't support tool loops",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLM := &MockLM{
+				GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+					return &dsgo.GenerateResult{
+						Content:      tt.content,
+						FinishReason: tt.finishReason,
+						ToolCalls:    tt.toolCalls,
+						Usage:        dsgo.Usage{TotalTokens: 10},
+					}, nil
+				},
+			}
+
+			predict := NewPredict(sig, mockLM)
+			_, err := predict.Forward(context.Background(), map[string]any{"input": "test"})
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.errorContains)
+				}
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error containing %q, got: %v", tt.errorContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+			}
+		})
+	}
+}

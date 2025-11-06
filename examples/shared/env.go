@@ -83,16 +83,16 @@ func GetModel() string {
 // - EXAMPLES_TEMPERATURE (default: 0.7)
 func GetDefaultOptions() *dsgo.GenerateOptions {
 	opts := dsgo.DefaultGenerateOptions()
-	
+
 	// Max tokens
 	if maxTokensStr := os.Getenv("EXAMPLES_MAX_TOKENS"); maxTokensStr != "" {
 		if maxTokens, err := strconv.Atoi(maxTokensStr); err == nil && maxTokens > 0 {
 			opts.MaxTokens = maxTokens
 		}
 	} else {
-		opts.MaxTokens = 10000 // Default for examples
+		opts.MaxTokens = 100000 // Default for examples
 	}
-	
+
 	// Temperature
 	if tempStr := os.Getenv("EXAMPLES_TEMPERATURE"); tempStr != "" {
 		if temp, err := strconv.ParseFloat(tempStr, 64); err == nil && temp >= 0 {
@@ -101,6 +101,6 @@ func GetDefaultOptions() *dsgo.GenerateOptions {
 	} else {
 		opts.Temperature = 0.7 // Default for examples
 	}
-	
+
 	return opts
 }

@@ -113,15 +113,37 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 		return nil, err
 	}
 
+	// Read response body for logging and decoding
+	bodyBytes, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		logging.LogAPIError(ctx, o.Model, readErr)
+		return nil, fmt.Errorf("failed to read response body: %w", readErr)
+	}
+
+	// Save raw response if debug enabled
+	if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
+		if err := saveRawResponse(o.Model, bodyBytes); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save raw response: %v\n", err)
+		}
+	}
+
 	var apiResp openAIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		logging.LogAPIError(ctx, o.Model, err)
+		// Save failed response for debugging
+		if err := saveRawResponse(o.Model+"_DECODE_FAILED", bodyBytes); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save failed response: %v\n", err)
+		}
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	result, err := o.parseResponse(&apiResp)
 	if err != nil {
 		logging.LogAPIError(ctx, o.Model, err)
+		// Save raw response on parse error
+		if err := saveRawResponse(o.Model+"_PARSE_FAILED", bodyBytes); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save failed response: %v\n", err)
+		}
 		return nil, err
 	}
 
@@ -511,4 +533,28 @@ type openAIStreamResponse struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage,omitempty"`
+}
+
+// saveRawResponse saves raw API response to a file for debugging
+func saveRawResponse(model string, data []byte) error {
+	// Create raw_responses directory if it doesn't exist
+	dir := "raw_responses"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	// Create filename with timestamp and model
+	timestamp := time.Now().Format("20060102_150405.000000")
+	// Sanitize model name for filename
+	safeModel := strings.ReplaceAll(model, "/", "_")
+	safeModel = strings.ReplaceAll(safeModel, ":", "_")
+	filename := fmt.Sprintf("%s/%s_%s.json", dir, safeModel, timestamp)
+
+	// Write to file
+	if err := os.WriteFile(filename, data, 0644); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "📝 Raw response saved to: %s\n", filename)
+	return nil
 }

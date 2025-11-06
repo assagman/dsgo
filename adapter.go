@@ -892,12 +892,13 @@ func (f *FallbackAdapter) Parse(sig *Signature, content string) (map[string]any,
 		parseErrors = append(parseErrors, fmt.Errorf("adapter %d (%T): %w", i, adapter, err))
 	}
 
-	// All adapters failed - return combined error
+	// All adapters failed - return combined error with raw content debug
 	var errMsg strings.Builder
 	errMsg.WriteString("all adapters failed to parse response:\n")
 	for _, err := range parseErrors {
 		errMsg.WriteString(fmt.Sprintf("  - %v\n", err))
 	}
+	errMsg.WriteString(fmt.Sprintf("\nRAW RESPONSE (length=%d):\n%s\n", len(content), content))
 	return nil, fmt.Errorf("%s", errMsg.String())
 }
 

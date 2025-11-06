@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"strings"
+
 	"github.com/assagman/dsgo"
 )
 
@@ -429,5 +431,71 @@ func TestProgramOfThought_FillRequiredStringFields_SkipsExisting(t *testing.T) {
 	// Should not overwrite existing values
 	if outputs["answer"] != "existing value" {
 		t.Error("fillRequiredStringFields should not overwrite existing values")
+	}
+}
+
+// TestProgramOfThought_FinishReasonHandling tests finish_reason scenarios
+func TestProgramOfThought_FinishReasonHandling(t *testing.T) {
+	sig := dsgo.NewSignature("Test signature").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
+
+	tests := []struct {
+		name          string
+		finishReason  string
+		content       string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "finish_reason=stop with valid content",
+			finishReason: "stop",
+			content:      "[[ ## code ## ]]\nprint('hello')\n[[ ## explanation ## ]]\nPrints hello",
+			expectError:  false,
+		},
+		{
+			name:          "finish_reason=length (error)",
+			finishReason:  "length",
+			content:       "[[ ## code ## ]]\nprint('hello')\n[[ ## explanation ## ]]\nThis code",
+			expectError:   true,
+			errorContains: "model hit max_tokens limit (finish_reason=length)",
+		},
+		{
+			name:          "finish_reason=tool_calls (error)",
+			finishReason:  "tool_calls",
+			content:       "",
+			expectError:   true,
+			errorContains: "finish_reason=tool_calls) but ProgramOfThought module doesn't support tool loops",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLM := &MockLM{
+				GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+					return &dsgo.GenerateResult{
+						Content:      tt.content,
+						FinishReason: tt.finishReason,
+						Usage:        dsgo.Usage{TotalTokens: 10},
+					}, nil
+				},
+			}
+
+			pot := NewProgramOfThought(sig, mockLM, "python").WithAllowExecution(false)
+			_, err := pot.Forward(context.Background(), map[string]any{"problem": "test"})
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.errorContains)
+				}
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error containing %q, got: %v", tt.errorContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+			}
+		})
 	}
 }

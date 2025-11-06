@@ -3,6 +3,8 @@ package dsgo
 import (
 	"context"
 	"errors"
+	"os"
+	"strconv"
 )
 
 // Common errors
@@ -92,10 +94,29 @@ type LM interface {
 }
 
 // DefaultGenerateOptions returns default generation options
+// Respects environment variables:
+// - EXAMPLES_MAX_TOKENS (default: 100000)
+// - EXAMPLES_TEMPERATURE (default: 0.7)
 func DefaultGenerateOptions() *GenerateOptions {
+	maxTokens := 100000 // Production-grade default
+	temperature := 0.7
+
+	// Check environment variable overrides
+	if maxTokensStr := getEnv("EXAMPLES_MAX_TOKENS"); maxTokensStr != "" {
+		if parsed := parseInt(maxTokensStr); parsed > 0 {
+			maxTokens = parsed
+		}
+	}
+
+	if tempStr := getEnv("EXAMPLES_TEMPERATURE"); tempStr != "" {
+		if parsed := parseFloat(tempStr); parsed >= 0 {
+			temperature = parsed
+		}
+	}
+
 	return &GenerateOptions{
-		Temperature:      0.7,
-		MaxTokens:        2048,
+		Temperature:      temperature,
+		MaxTokens:        maxTokens,
 		TopP:             1.0,
 		Stop:             []string{},
 		ResponseFormat:   "text",
@@ -138,4 +159,23 @@ func (o *GenerateOptions) Copy() *GenerateOptions {
 	}
 
 	return copied
+}
+
+// Helper functions for environment variable parsing
+func getEnv(key string) string {
+	return os.Getenv(key)
+}
+
+func parseInt(s string) int {
+	if v, err := strconv.Atoi(s); err == nil {
+		return v
+	}
+	return 0
+}
+
+func parseFloat(s string) float64 {
+	if v, err := strconv.ParseFloat(s, 64); err == nil {
+		return v
+	}
+	return 0
 }

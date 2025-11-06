@@ -97,6 +97,21 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 		return nil, fmt.Errorf("LM generation failed: %w", err)
 	}
 
+	// Handle finish_reason: ChainOfThought doesn't support tool execution loops
+	if result.FinishReason == "tool_calls" {
+		return nil, fmt.Errorf("model requested tool execution (finish_reason=tool_calls) but ChainOfThought module doesn't support tool loops - use React module instead")
+	}
+
+	// Handle finish_reason=length: Model hit max_tokens, output truncated/incomplete
+	if result.FinishReason == "length" {
+		return nil, fmt.Errorf("model hit max_tokens limit (finish_reason=length) - output truncated - increase MaxTokens in options")
+	}
+
+	// Check for empty content with finish_reason=stop (actual error)
+	if result.Content == "" && result.FinishReason == "stop" {
+		return nil, fmt.Errorf("model returned empty content despite finish_reason=stop (model error)")
+	}
+
 	// Use adapter to parse output
 	outputs, err := cot.Adapter.Parse(cot.Signature, result.Content)
 	if err != nil {

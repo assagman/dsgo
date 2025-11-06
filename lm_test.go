@@ -230,8 +230,8 @@ func TestDefaultGenerateOptions(t *testing.T) {
 	if opts.Temperature != 0.7 {
 		t.Errorf("Expected default temperature 0.7, got %v", opts.Temperature)
 	}
-	if opts.MaxTokens != 2048 {
-		t.Errorf("Expected default max tokens 2048, got %v", opts.MaxTokens)
+	if opts.MaxTokens != 100000 {
+		t.Errorf("Expected default max tokens 100000, got %v", opts.MaxTokens)
 	}
 	if opts.TopP != 1.0 {
 		t.Errorf("Expected default TopP 1.0, got %v", opts.TopP)

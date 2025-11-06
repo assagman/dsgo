@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/assagman/dsgo"
@@ -524,5 +525,70 @@ func TestRefine_WithAdapter(t *testing.T) {
 	refine := NewRefine(sig, lm).WithAdapter(adapter)
 	if refine.Adapter != adapter {
 		t.Error("WithAdapter should set custom adapter")
+	}
+}
+
+// TestRefine_FinishReasonHandling tests finish_reason scenarios
+func TestRefine_FinishReasonHandling(t *testing.T) {
+	sig := dsgo.NewSignature("Test signature").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+
+	tests := []struct {
+		name          string
+		finishReason  string
+		content       string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "finish_reason=stop with valid content",
+			finishReason: "stop",
+			content:      "[[ ## answer ## ]]\nRefined answer",
+			expectError:  false,
+		},
+		{
+			name:          "finish_reason=length (error)",
+			finishReason:  "length",
+			content:       "[[ ## answer ## ]]\nPartial refinement",
+			expectError:   true,
+			errorContains: "model hit max_tokens limit (finish_reason=length)",
+		},
+		{
+			name:          "finish_reason=tool_calls (error)",
+			finishReason:  "tool_calls",
+			content:       "",
+			expectError:   true,
+			errorContains: "finish_reason=tool_calls) but Refine module doesn't support tool loops",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockLM := &MockLM{
+				GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+					return &dsgo.GenerateResult{
+						Content:      tt.content,
+						FinishReason: tt.finishReason,
+						Usage:        dsgo.Usage{TotalTokens: 10},
+					}, nil
+				},
+			}
+
+			refine := NewRefine(sig, mockLM).WithMaxIterations(1)
+			_, err := refine.Forward(context.Background(), map[string]any{"input": "test"})
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.errorContains)
+				}
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error containing %q, got: %v", tt.errorContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+			}
+		})
 	}
 }
