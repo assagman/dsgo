@@ -118,6 +118,19 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []dsgo.Message, opti
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+
+		// Verbose HTTP error logging for debugging
+		fmt.Fprintf(os.Stderr, "\n=== HTTP ERROR DEBUG ===\n")
+		fmt.Fprintf(os.Stderr, "Status: %d %s\n", resp.StatusCode, resp.Status)
+		fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
+		fmt.Fprintf(os.Stderr, "URL: %s\n", o.BaseURL+"/chat/completions")
+		fmt.Fprintf(os.Stderr, "\nResponse Headers:\n")
+		for k, v := range resp.Header {
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", k, strings.Join(v, ", "))
+		}
+		fmt.Fprintf(os.Stderr, "\nResponse Body:\n%s\n", string(body))
+		fmt.Fprintf(os.Stderr, "=======================\n\n")
+
 		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 		logging.LogAPIError(ctx, o.Model, err)
 		return nil, err
@@ -172,9 +185,14 @@ func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.Generat
 	if options.ResponseFormat == "json" {
 		if options.ResponseSchema != nil {
 			// Full structured output with JSON schema
+			// OpenAI format: { type: "json_schema", json_schema: { name, schema, strict } }
 			req["response_format"] = map[string]any{
-				"type":   "json_schema",
-				"schema": options.ResponseSchema,
+				"type": "json_schema",
+				"json_schema": map[string]any{
+					"name":   "response",
+					"schema": options.ResponseSchema,
+					"strict": true,
+				},
 			}
 		} else {
 			// Basic JSON mode without schema
@@ -289,6 +307,15 @@ func (o *OpenRouter) convertTool(tool *dsgo.Tool) map[string]any {
 
 func (o *OpenRouter) parseResponse(resp *openRouterResponse) (*dsgo.GenerateResult, error) {
 	if len(resp.Choices) == 0 {
+		// VERBOSE DEBUG for no choices error
+		if debugEnv := os.Getenv("DSGO_DEBUG_PARSE"); debugEnv == "1" || debugEnv == "true" {
+			respJSON, _ := json.MarshalIndent(resp, "", "  ")
+			fmt.Fprintf(os.Stderr, "\n=== NO CHOICES ERROR DEBUG ===\n")
+			fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
+			fmt.Fprintf(os.Stderr, "Response ID: %s\n", resp.ID)
+			fmt.Fprintf(os.Stderr, "Full Response:\n%s\n", string(respJSON))
+			fmt.Fprintf(os.Stderr, "==============================\n\n")
+		}
 		return nil, fmt.Errorf("no choices in response")
 	}
 
@@ -307,13 +334,9 @@ func (o *OpenRouter) parseResponse(resp *openRouterResponse) (*dsgo.GenerateResu
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]dsgo.ToolCall, 0, len(choice.Message.ToolCalls))
 		for _, tc := range choice.Message.ToolCalls {
-			var args map[string]any
-
-			// Apply JSON repair to handle malformed tool arguments from models
-			repairedArgs := jsonutil.RepairJSON(tc.Function.Arguments)
-
-			if err := json.Unmarshal([]byte(repairedArgs), &args); err != nil {
-				return nil, fmt.Errorf("failed to parse tool arguments (after repair): %w", err)
+			args, err := parseToolArguments(o.Model, resp.ID, choice.FinishReason, tc)
+			if err != nil {
+				return nil, err
 			}
 			result.ToolCalls = append(result.ToolCalls, dsgo.ToolCall{
 				ID:        tc.ID,
@@ -401,6 +424,19 @@ func (o *OpenRouter) Stream(ctx context.Context, messages []dsgo.Message, option
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
+
+			// Verbose HTTP error logging for streaming
+			fmt.Fprintf(os.Stderr, "\n=== HTTP STREAMING ERROR DEBUG ===\n")
+			fmt.Fprintf(os.Stderr, "Status: %d %s\n", resp.StatusCode, resp.Status)
+			fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
+			fmt.Fprintf(os.Stderr, "URL: %s\n", o.BaseURL+"/chat/completions")
+			fmt.Fprintf(os.Stderr, "\nResponse Headers:\n")
+			for k, v := range resp.Header {
+				fmt.Fprintf(os.Stderr, "  %s: %s\n", k, strings.Join(v, ", "))
+			}
+			fmt.Fprintf(os.Stderr, "\nResponse Body:\n%s\n", string(body))
+			fmt.Fprintf(os.Stderr, "==================================\n\n")
+
 			errChan <- fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 			return
 		}
@@ -515,4 +551,96 @@ type openRouterStreamResponse struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage,omitempty"`
+}
+
+// parseToolArguments attempts to parse tool call arguments with multiple fallback strategies
+func parseToolArguments(model, responseID, finishReason string, tc openRouterToolCall) (map[string]any, error) {
+	raw := tc.Function.Arguments
+
+	// Handle empty arguments (some models return empty string for zero-param tools)
+	if strings.TrimSpace(raw) == "" {
+		return map[string]any{}, nil
+	}
+
+	// Try primary parse with JSON repair
+	repaired := jsonutil.RepairJSON(raw)
+	var args map[string]any
+
+	if err := json.Unmarshal([]byte(repaired), &args); err == nil {
+		return args, nil
+	}
+
+	// Fallback 1: Try nested JSON string unescape (double-encoded args)
+	var inner string
+	if json.Unmarshal([]byte(repaired), &inner) == nil && strings.Contains(inner, "{") {
+		innerRepaired := jsonutil.RepairJSON(inner)
+		if err := json.Unmarshal([]byte(innerRepaired), &args); err == nil {
+			return args, nil
+		}
+	}
+
+	// Fallback 2: Extract largest valid object substring
+	if jsonStr, err := jsonutil.ExtractJSON(repaired); err == nil {
+		if err := json.Unmarshal([]byte(jsonStr), &args); err == nil {
+			return args, nil
+		}
+	}
+
+	// Fallback 3: Balance delimiters for truncated JSON
+	if strings.Contains(repaired, "{") || strings.Contains(repaired, "[") {
+		balanced := balanceDelimiters(repaired)
+		if err := json.Unmarshal([]byte(balanced), &args); err == nil {
+			return args, nil
+		}
+	}
+
+	// Final attempt: Log detailed debug info if enabled
+	if debugEnabled() {
+		fmt.Fprintf(os.Stderr, "\n=== TOOL ARGS PARSE ERROR DEBUG ===\n")
+		fmt.Fprintf(os.Stderr, "Model: %s\nResponse ID: %s\nFinish Reason: %s\n", model, responseID, finishReason)
+		fmt.Fprintf(os.Stderr, "Tool Call ID: %s  Name: %s\n", tc.ID, tc.Function.Name)
+		fmt.Fprintf(os.Stderr, "Raw args length: %d\n", len(raw))
+		fmt.Fprintf(os.Stderr, "Braces: {=%d }=%d  Brackets: [=%d ]=%d\n",
+			strings.Count(raw, "{"), strings.Count(raw, "}"),
+			strings.Count(raw, "["), strings.Count(raw, "]"))
+		fmt.Fprintf(os.Stderr, "Raw preview: %s\n", preview(raw, 200))
+		fmt.Fprintf(os.Stderr, "Repaired preview: %s\n", preview(repaired, 200))
+		fmt.Fprintf(os.Stderr, "===================================\n\n")
+	}
+
+	return nil, fmt.Errorf("failed to parse tool arguments (model=%s, tool=%s, finish_reason=%s): all parsing attempts failed",
+		model, tc.Function.Name, finishReason)
+}
+
+// balanceDelimiters attempts to balance unmatched braces and brackets
+func balanceDelimiters(s string) string {
+	// Balance curly braces
+	openCurly := strings.Count(s, "{")
+	closeCurly := strings.Count(s, "}")
+	if closeCurly < openCurly {
+		s += strings.Repeat("}", openCurly-closeCurly)
+	}
+
+	// Balance square brackets
+	openSquare := strings.Count(s, "[")
+	closeSquare := strings.Count(s, "]")
+	if closeSquare < openSquare {
+		s += strings.Repeat("]", openSquare-closeSquare)
+	}
+
+	return s
+}
+
+// preview returns a preview of a string with head and tail
+func preview(s string, n int) string {
+	if len(s) <= n*2 {
+		return s
+	}
+	return s[:n] + " ... " + s[len(s)-n:]
+}
+
+// debugEnabled checks if debug mode is enabled via environment variable
+func debugEnabled() bool {
+	d := os.Getenv("DSGO_DEBUG_PARSE")
+	return d == "1" || strings.ToLower(d) == "true"
 }

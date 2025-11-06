@@ -4,7 +4,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 
+	"github.com/assagman/dsgo"
 	"github.com/joho/godotenv"
 )
 
@@ -73,4 +75,32 @@ func GetModel() string {
 	}
 	// Default: fast, reliable model for examples
 	return "openrouter/google/gemini-2.5-flash"
+}
+
+// GetDefaultOptions returns default GenerateOptions for examples
+// Can be overridden via environment variables:
+// - EXAMPLES_MAX_TOKENS (default: 10000)
+// - EXAMPLES_TEMPERATURE (default: 0.7)
+func GetDefaultOptions() *dsgo.GenerateOptions {
+	opts := dsgo.DefaultGenerateOptions()
+	
+	// Max tokens
+	if maxTokensStr := os.Getenv("EXAMPLES_MAX_TOKENS"); maxTokensStr != "" {
+		if maxTokens, err := strconv.Atoi(maxTokensStr); err == nil && maxTokens > 0 {
+			opts.MaxTokens = maxTokens
+		}
+	} else {
+		opts.MaxTokens = 10000 // Default for examples
+	}
+	
+	// Temperature
+	if tempStr := os.Getenv("EXAMPLES_TEMPERATURE"); tempStr != "" {
+		if temp, err := strconv.ParseFloat(tempStr, 64); err == nil && temp >= 0 {
+			opts.Temperature = temp
+		}
+	} else {
+		opts.Temperature = 0.7 // Default for examples
+	}
+	
+	return opts
 }

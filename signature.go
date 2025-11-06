@@ -297,9 +297,32 @@ func normalizeClassValue(value string, field Field) string {
 	v = strings.Trim(v, "()[]{}\"'`")
 	v = strings.TrimSpace(v)
 
+	// Remove common prefixes that models might add
+	// e.g., "(one of: positive)" → "positive", "one: negative" → "negative"
+	prefixes := []string{"one of:", "one of", "one:", "one", "answer:", "result:"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(v, prefix) {
+			v = strings.TrimSpace(strings.TrimPrefix(v, prefix))
+			// Strip any remaining decorations after removing prefix
+			v = strings.Trim(v, "()[]{}\"'`:, ")
+			v = strings.TrimSpace(v)
+			break
+		}
+	}
+
 	// Check if there's an exact case-insensitive match first
 	for _, class := range field.Classes {
 		if strings.EqualFold(v, class) {
+			return class
+		}
+	}
+
+	// If no exact match, try word-boundary matching for each class
+	// This handles cases like "(positive)" or "answer: positive" but not "invalid" matching "a"
+	for _, class := range field.Classes {
+		lowerClass := strings.ToLower(class)
+		// Only match if class appears as a complete word (surrounded by non-letters)
+		if containsWord(v, lowerClass) {
 			return class
 		}
 	}
@@ -313,6 +336,30 @@ func normalizeClassValue(value string, field Field) string {
 
 	// Return original if no match found
 	return value
+}
+
+// containsWord checks if word appears as a complete word in s (not just a substring)
+// e.g., containsWord("positive", "positive") = true
+//
+//	containsWord("(positive)", "positive") = true
+//	containsWord("invalid", "a") = false (a is not a complete word)
+func containsWord(s, word string) bool {
+	idx := strings.Index(s, word)
+	if idx == -1 {
+		return false
+	}
+
+	// Check if word has proper boundaries (start/end or non-letter characters)
+	hasStartBoundary := idx == 0 || !isLetter(rune(s[idx-1]))
+	endIdx := idx + len(word)
+	hasEndBoundary := endIdx == len(s) || !isLetter(rune(s[endIdx]))
+
+	return hasStartBoundary && hasEndBoundary
+}
+
+// isLetter checks if a rune is a letter (for word boundary detection)
+func isLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
 // SignatureToJSONSchema generates a JSON schema from the signature's output fields

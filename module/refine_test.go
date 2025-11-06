@@ -511,3 +511,18 @@ func TestRefine_GenerateRefinement_ComplexPrompt(t *testing.T) {
 		t.Errorf("expected improved answer, got %v", result.Outputs["answer"])
 	}
 }
+
+// TestRefine_WithAdapter tests adapter configuration
+func TestRefine_WithAdapter(t *testing.T) {
+	sig := dsgo.NewSignature("test").
+		AddInput("question", dsgo.FieldTypeString, "").
+		AddOutput("answer", dsgo.FieldTypeString, "")
+
+	lm := &MockLM{}
+	adapter := dsgo.NewChatAdapter()
+
+	refine := NewRefine(sig, lm).WithAdapter(adapter)
+	if refine.Adapter != adapter {
+		t.Error("WithAdapter should set custom adapter")
+	}
+}

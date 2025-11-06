@@ -83,7 +83,8 @@ func simpleCalculation(ctx context.Context, lm dsgo.LM) (int, *dsgo.Prediction, 
 		AddOutput("answer", dsgo.FieldTypeString, "Final answer")
 
 	pot := module.NewProgramOfThought(sig, lm, "python").
-		WithAllowExecution(false) // Don't execute for safety
+		WithAllowExecution(false). // Don't execute for safety
+		WithOptions(shared.GetDefaultOptions())
 
 	inputs := map[string]any{
 		"problem": "Calculate the compound interest on $1000 invested at 5% annually for 3 years",
@@ -111,7 +112,8 @@ func complexProblem(ctx context.Context, lm dsgo.LM) (int, *dsgo.Prediction, err
 		AddOutput("explanation", dsgo.FieldTypeString, "Step-by-step explanation").
 		AddOutput("answer", dsgo.FieldTypeString, "Final numerical answer")
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := module.NewProgramOfThought(sig, lm, "python").
+		WithOptions(shared.GetDefaultOptions())
 
 	inputs := map[string]any{
 		"problem": "A train travels 120 km in 2 hours, then 180 km in 3 hours. What is the average speed for the entire journey?",
@@ -138,7 +140,8 @@ func statisticalAnalysis(ctx context.Context, lm dsgo.LM) (int, *dsgo.Prediction
 		AddOutput("explanation", dsgo.FieldTypeString, "Explanation of the code").
 		AddOutput("interpretation", dsgo.FieldTypeString, "How to interpret results")
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := module.NewProgramOfThought(sig, lm, "python").
+		WithOptions(shared.GetDefaultOptions())
 
 	inputs := map[string]any{
 		"data_description": "Dataset of exam scores: [75, 82, 90, 68, 85, 92, 78, 88, 95, 72]",

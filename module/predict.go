@@ -234,7 +234,8 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 			logging.LogPredictionEnd(ctx, "Predict.Stream", time.Since(startTime), streamErr)
 		}()
 
-		var fullContent strings.Builder
+		// Use StreamingBuffer for automatic recovery
+		streamBuffer := dsgo.NewStreamingBuffer()
 		var finalUsage dsgo.Usage
 
 		// Forward chunks and accumulate content
@@ -247,8 +248,8 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 				options.StreamCallback(chunk)
 			}
 
-			// Accumulate content
-			fullContent.WriteString(chunk.Content)
+			// Accumulate content with streaming buffer
+			streamBuffer.Write(chunk.Content)
 
 			// Capture final metadata
 			if chunk.Usage.TotalTokens > 0 {
@@ -267,8 +268,8 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		default:
 		}
 
-		// Parse accumulated content
-		content := fullContent.String()
+		// Finalize streaming buffer (applies recovery fixes)
+		content := streamBuffer.Finalize()
 		outputs, err := p.Adapter.Parse(p.Signature, content)
 		if err != nil {
 			streamErr = fmt.Errorf("failed to parse output: %w", err)

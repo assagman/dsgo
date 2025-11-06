@@ -62,10 +62,7 @@ func runExample(ctx context.Context) (*dsgo.Prediction, *harness.ExecutionStats,
 		AddOutput("genre", dsgo.FieldTypeString, "The story genre")
 
 	predict := module.NewPredict(sig, lm).
-		WithOptions(&dsgo.GenerateOptions{
-			MaxTokens:   2000,
-			Temperature: 0.7,
-		})
+		WithOptions(shared.GetDefaultOptions())
 
 	result, err := predict.Stream(ctx, map[string]any{
 		"prompt": "A lone astronaut discovers an ancient alien artifact on Mars",
@@ -152,11 +149,10 @@ func runExample(ctx context.Context) (*dsgo.Prediction, *harness.ExecutionStats,
 		AddOutput("explanation", dsgo.FieldTypeString, "Detailed explanation").
 		AddOutput("summary", dsgo.FieldTypeString, "Brief summary")
 
+	qaOpts := shared.GetDefaultOptions()
+	qaOpts.Temperature = 0.5 // Override for Q&A
 	qaPredict := module.NewPredict(qaSig, lm).
-		WithOptions(&dsgo.GenerateOptions{
-			MaxTokens:   1500,
-			Temperature: 0.5,
-		})
+		WithOptions(qaOpts)
 
 	qaResult, err := qaPredict.Stream(ctx, map[string]any{
 		"question": "How does photosynthesis work at the molecular level?",

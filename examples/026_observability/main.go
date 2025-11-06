@@ -61,9 +61,7 @@ func runExample(ctx context.Context) (*dsgo.Prediction, *harness.ExecutionStats,
 		{Role: "user", Content: "What are the three primary colors?"},
 	}
 
-	options := dsgo.DefaultGenerateOptions()
-	options.Temperature = 0.7
-	options.MaxTokens = 100
+	options := shared.GetDefaultOptions()
 
 	fmt.Println("Making API call...")
 	result, err := lm.Generate(ctx, messages, options)
@@ -146,9 +144,7 @@ func runExample(ctx context.Context) (*dsgo.Prediction, *harness.ExecutionStats,
 			{Role: "user", Content: fmt.Sprintf("Say 'Call %d' and nothing else.", i)},
 		}
 
-		options := dsgo.DefaultGenerateOptions()
-		options.Temperature = 0.7
-		options.MaxTokens = 20
+		options := shared.GetDefaultOptions()
 
 		result, err := lm2.Generate(ctx, messages, options)
 		if err != nil {
@@ -223,9 +219,7 @@ func runExample(ctx context.Context) (*dsgo.Prediction, *harness.ExecutionStats,
 	messages3a := []dsgo.Message{
 		{Role: "user", Content: "Write a haiku about Go programming."},
 	}
-	options3a := dsgo.DefaultGenerateOptions()
-	options3a.Temperature = 0.7
-	options3a.MaxTokens = 100
+	options3a := shared.GetDefaultOptions()
 
 	result3a, err := wrappedLM.Generate(ctx, messages3a, options3a)
 	if err != nil {
@@ -246,9 +240,7 @@ func runExample(ctx context.Context) (*dsgo.Prediction, *harness.ExecutionStats,
 	messages3b := []dsgo.Message{
 		{Role: "user", Content: "Explain benefits of streaming in two sentences."},
 	}
-	options3b := dsgo.DefaultGenerateOptions()
-	options3b.Temperature = 0.7
-	options3b.MaxTokens = 100
+	options3b := shared.GetDefaultOptions()
 
 	chunkChan, errChan := wrappedLM.Stream(ctx, messages3b, options3b)
 

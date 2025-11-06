@@ -569,9 +569,19 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 				if rf["type"] != "json_schema" {
 					t.Errorf("expected type json_schema, got %v", rf["type"])
 				}
-				schema, ok := rf["schema"].(map[string]any)
+				jsonSchema, ok := rf["json_schema"].(map[string]any)
 				if !ok {
-					t.Fatal("expected schema in response_format")
+					t.Fatal("expected json_schema in response_format")
+				}
+				if jsonSchema["name"] != "response" {
+					t.Errorf("expected name response, got %v", jsonSchema["name"])
+				}
+				if jsonSchema["strict"] != true {
+					t.Errorf("expected strict true, got %v", jsonSchema["strict"])
+				}
+				schema, ok := jsonSchema["schema"].(map[string]any)
+				if !ok {
+					t.Fatal("expected schema in json_schema")
 				}
 				if schema["type"] != "object" {
 					t.Errorf("expected schema type object, got %v", schema["type"])

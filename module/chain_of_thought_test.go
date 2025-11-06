@@ -190,3 +190,18 @@ func TestChainOfThought_ReasoningInRationale(t *testing.T) {
 		t.Errorf("Expected answer='42' in Outputs, got: %v", result.Outputs["answer"])
 	}
 }
+
+// TestChainOfThought_WithAdapter tests adapter configuration
+func TestChainOfThought_WithAdapter(t *testing.T) {
+	sig := dsgo.NewSignature("test").
+		AddInput("question", dsgo.FieldTypeString, "").
+		AddOutput("answer", dsgo.FieldTypeString, "")
+
+	lm := &MockLM{}
+	adapter := dsgo.NewChatAdapter()
+
+	cot := NewChainOfThought(sig, lm).WithAdapter(adapter)
+	if cot.Adapter != adapter {
+		t.Error("WithAdapter should set custom adapter")
+	}
+}

@@ -2093,3 +2093,456 @@ func TestTwoStepAdapter_Parse_WithFallbackChains(t *testing.T) {
 		t.Errorf("Expected fallback_used=true, got %v", outputs["__fallback_used"])
 	}
 }
+
+// TestChatAdapterPartialOutput tests parsing when LM hits token limit mid-generation
+func TestChatAdapterPartialOutput(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      string
+		signature    *Signature
+		shouldParse  bool
+		hasField     string
+		missingField string
+	}{
+		{
+			name: "gemini cutoff before summary field",
+			content: `[[ ## explanation ## ]]
+Photosynthesis is the process by which plants convert light energy into chemical energy.
+This complex process occurs at the molecular level within specialized organelles called chloroplasts.
+The process can be divided into two main stages: light-dependent and light-independent reactions.
+
+[Stream finished: length]`,
+			signature: NewSignature("Explain photosynthesis").
+				AddInput("question", FieldTypeString, "").
+				AddOutput("explanation", FieldTypeString, "").
+				AddOutput("summary", FieldTypeString, ""),
+			shouldParse:  false, // Should fail - missing summary
+			hasField:     "",
+			missingField: "summary",
+		},
+		{
+			name: "complete output with all fields",
+			content: `[[ ## explanation ## ]]
+Photosynthesis converts light to chemical energy.
+
+[[ ## summary ## ]]
+Plants use light to make glucose.`,
+			signature: NewSignature("Explain photosynthesis").
+				AddInput("question", FieldTypeString, "").
+				AddOutput("explanation", FieldTypeString, "").
+				AddOutput("summary", FieldTypeString, ""),
+			shouldParse: true,
+			hasField:    "summary",
+		},
+		{
+			name: "truncated in middle of field value",
+			content: `[[ ## story ## ]]
+The astronaut discovered an artifact on Mars. It was a perfect dodecahedron...
+
+[[ ## title ## ]]
+The Martian
+
+[Stream finished: length]`,
+			signature: NewSignature("Generate story").
+				AddInput("prompt", FieldTypeString, "").
+				AddOutput("story", FieldTypeString, "").
+				AddOutput("title", FieldTypeString, "").
+				AddOutput("genre", FieldTypeString, ""),
+			shouldParse:  false, // Missing genre
+			hasField:     "title",
+			missingField: "genre",
+		},
+		{
+			name:    "no field markers at all - empty response",
+			content: `Photosynthesis is the process...`,
+			signature: NewSignature("Explain").
+				AddInput("q", FieldTypeString, "").
+				AddOutput("explanation", FieldTypeString, ""),
+			shouldParse:  false,
+			missingField: "explanation",
+		},
+	}
+
+	adapter := NewChatAdapter()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputs, err := adapter.Parse(tt.signature, tt.content)
+
+			if tt.shouldParse {
+				if err != nil {
+					t.Errorf("expected successful parse, got error: %v", err)
+				}
+				if tt.hasField != "" {
+					if _, ok := outputs[tt.hasField]; !ok {
+						t.Errorf("expected field %q to be present", tt.hasField)
+					}
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected parse error, but got none")
+				}
+				if tt.missingField != "" && err != nil {
+					// Error should mention the missing field
+					if !containsSubstr(err.Error(), tt.missingField) {
+						t.Errorf("error should mention missing field %q, got: %v", tt.missingField, err)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestJSONAdapterEdgeCases tests JSON adapter with malformed/partial JSON
+func TestJSONAdapterEdgeCases(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      string
+		signature    *Signature
+		shouldParse  bool
+		expectRepair bool
+	}{
+		{
+			name:    "cutoff JSON - missing closing brace",
+			content: `{"explanation": "Photosynthesis converts light to chemical energy through chloroplasts`,
+			signature: NewSignature("").
+				AddOutput("explanation", FieldTypeString, ""),
+			shouldParse:  true,  // JSON repair should add closing brace and quotes
+			expectRepair: false, // Repair metadata not always added, just check it parses
+		},
+		{
+			name:    "model outputs class with prefix",
+			content: `{"sentiment": "(one of: positive)"}`,
+			signature: NewSignature("").
+				AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, ""),
+			shouldParse:  true,
+			expectRepair: false, // Valid JSON, just needs class normalization
+		},
+		{
+			name:    "model outputs partial class value",
+			content: `{"sentiment": "(one"}`,
+			signature: NewSignature("").
+				AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, ""),
+			shouldParse: true, // Valid JSON, validation will fail but parse succeeds
+		},
+		{
+			name:    "truncated in middle of JSON value",
+			content: `{"story": "The astronaut found an artifact...", "title": "The Mar`,
+			signature: NewSignature("").
+				AddOutput("story", FieldTypeString, "").
+				AddOutput("title", FieldTypeString, ""),
+			shouldParse: false,
+		},
+	}
+
+	adapter := NewJSONAdapter()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputs, err := adapter.Parse(tt.signature, tt.content)
+
+			if tt.shouldParse {
+				if err != nil {
+					t.Errorf("expected successful parse, got error: %v", err)
+				}
+				if tt.expectRepair {
+					if _, hasRepair := outputs["__json_repair"]; !hasRepair {
+						t.Errorf("expected JSON repair to be used")
+					}
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected parse error for malformed JSON, got none")
+				}
+			}
+		})
+	}
+}
+
+// TestClassNormalizationEdgeCases tests enhanced class normalization
+func TestClassNormalizationEdgeCases(t *testing.T) {
+	field := Field{
+		Name:    "sentiment",
+		Type:    FieldTypeClass,
+		Classes: []string{"positive", "negative", "neutral"},
+	}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"bare parenthesis prefix", "(one", "(one"}, // No valid class, returns original
+		{"full parenthesis wrap", "(one)", "(one)"}, // No valid class, returns original
+		{"one of prefix", "one of: positive", "positive"},
+		{"one of without colon", "one of positive", "positive"},
+		{"one prefix only", "one positive", "positive"},
+		{"answer prefix", "answer: negative", "negative"},
+		{"result prefix", "result: neutral", "neutral"},
+		{"substring match", "(positive answer)", "positive"},
+		{"substring in text", "the answer is positive", "positive"},
+		{"exact match", "negative", "negative"},
+		{"case insensitive", "POSITIVE", "positive"},
+		{"with quotes", "\"positive\"", "positive"},
+		{"with backticks", "`negative`", "negative"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeClassValue(tt.input, field)
+			if result != tt.expected {
+				t.Errorf("normalizeClassValue(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestFallbackAdapterWithPartialOutputs tests fallback when primary adapter fails
+func TestFallbackAdapterWithPartialOutputs(t *testing.T) {
+	sig := NewSignature("Test").
+		AddOutput("field1", FieldTypeString, "").
+		AddOutput("field2", FieldTypeString, "")
+
+	// Content that's valid for ChatAdapter but not JSONAdapter
+	content := `[[ ## field1 ## ]]
+Value 1
+
+[[ ## field2 ## ]]
+Value 2`
+
+	chatAdapter := NewChatAdapter()
+	jsonAdapter := NewJSONAdapter()
+	fallback := NewFallbackAdapter()
+	fallback.adapters = []Adapter{jsonAdapter, chatAdapter}
+
+	outputs, err := fallback.Parse(sig, content)
+	if err != nil {
+		t.Fatalf("fallback adapter should succeed with chat format: %v", err)
+	}
+
+	if v, ok := outputs["field1"]; !ok || v != "Value 1" {
+		t.Errorf("expected field1='Value 1', got %v", v)
+	}
+	if v, ok := outputs["field2"]; !ok || v != "Value 2" {
+		t.Errorf("expected field2='Value 2', got %v", v)
+	}
+}
+
+func containsSubstr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// Test incomplete marker handling - fixes for real test matrix failures
+func TestChatAdapter_IncompleteMarkers(t *testing.T) {
+	sig := NewSignature("Test").
+		AddOutput("reasoning", FieldTypeString, "").
+		AddOutput("answer", FieldTypeInt, "").
+		AddOutput("explanation", FieldTypeString, "")
+
+	adapter := NewChatAdapter()
+
+	tests := []struct {
+		name     string
+		content  string
+		wantAns  int
+		wantExpl string
+	}{
+		{
+			name: "incomplete marker missing closing brackets - z-ai/glm-4.6 failure",
+			content: `[[ ## reasoning ## ]]
+1. John starts with 5 apples.
+2. He gives 2 apples to Mary, so we subtract 2 from 5: 5 - 2 = 3.
+3. He then buys 3 more apples, so we add 3 to the remaining 3: 3 + 3 = 6.
+4. The final number of apples John has is 6.
+
+[[ ## answer ## ]]
+6
+
+[[ ## explanation ## ]
+1. John starts with 5 apples.
+2. He gives 2 apples to Mary, leaving him with 5 - 2 = 3 apples.
+3. He buys 3 more apples, bringing his total to 3 + 3 = 6 apples.
+4. Therefore, John now has 6 apples.`,
+			wantAns:  6,
+			wantExpl: "1. John starts with 5 apples.\n2. He gives 2 apples to Mary, leaving him with 5 - 2 = 3 apples.\n3. He buys 3 more apples, bringing his total to 3 + 3 = 6 apples.\n4. Therefore, John now has 6 apples.",
+		},
+		{
+			name: "incomplete marker with no closing brackets at all",
+			content: `[[ ## reasoning ## ]]
+Some reasoning here.
+
+[[ ## answer ##
+42
+
+[[ ## explanation ## ]]
+The answer is 42 because that's the answer to everything.`,
+			wantAns:  42,
+			wantExpl: "The answer is 42 because that's the answer to everything.",
+		},
+		{
+			name: "incomplete marker single closing bracket",
+			content: `[[ ## reasoning ## ]]
+Calculating...
+
+[[ ## answer ## ]
+99
+
+[[ ## explanation ## ]]
+The calculation yields 99.`,
+			wantAns:  99,
+			wantExpl: "The calculation yields 99.",
+		},
+		{
+			name: "DSPy style - content on same line as marker",
+			content: `[[ ## reasoning ## ]] Let me think about this carefully
+The problem requires...
+
+[[ ## answer ## 123
+
+[[ ## explanation ## ]]
+This is the explanation.`,
+			wantAns:  123,
+			wantExpl: "This is the explanation.",
+		},
+		{
+			name: "mixed incomplete markers",
+			content: `[[ ## reasoning ## ]]
+Step by step reasoning
+
+[[ ## answer ##
+77
+
+[[ ## explanation ## ]
+Partial explanation here`,
+			wantAns:  77,
+			wantExpl: "Partial explanation here",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputs, err := adapter.Parse(sig, tt.content)
+			if err != nil {
+				t.Fatalf("Parse() error = %v, should handle incomplete markers gracefully", err)
+			}
+
+			// Validate answer
+			if ans, ok := outputs["answer"].(int); !ok || ans != tt.wantAns {
+				t.Errorf("answer = %v, want %v", outputs["answer"], tt.wantAns)
+			}
+
+			// Validate explanation
+			if expl, ok := outputs["explanation"].(string); !ok || expl != tt.wantExpl {
+				t.Errorf("explanation = %q, want %q", outputs["explanation"], tt.wantExpl)
+			}
+		})
+	}
+}
+
+// Test that simulates the exact failure from test matrix
+func TestChatAdapter_RealTestMatrixFailure_GLM46_ChainOfThought(t *testing.T) {
+	sig := NewSignature("Answer a simple math question").
+		AddOutput("reasoning", FieldTypeString, "Step by step reasoning").
+		AddOutput("answer", FieldTypeInt, "Final answer").
+		AddOutput("explanation", FieldTypeString, "Explanation of the answer")
+
+	adapter := NewChatAdapter()
+
+	// This is the EXACT content that caused z-ai/glm-4.6:exacto to fail
+	content := `[[ ## reasoning ## ]]
+1. John starts with 5 apples.
+2. He gives 2 apples to Mary, so we subtract 2 from 5: 5 - 2 = 3.
+3. He then buys 3 more apples, so we add 3 to the remaining 3: 3 + 3 = 6.
+4. The final number of apples John has is 6.
+
+[[ ## answer ## ]]
+6
+
+[[ ## explanation ## ]
+1. John starts with 5 apples.
+2. He gives 2 apples to Mary, leaving him with 5 - 2 = 3 apples.
+3. He buys 3 more apples, bringing his total to 3 + 3 = 6 apples.
+4. Therefore, John now has 6 apples.`
+
+	outputs, err := adapter.Parse(sig, content)
+	if err != nil {
+		t.Fatalf("Parse() failed on real test matrix failure case: %v", err)
+	}
+
+	// Should successfully extract all fields
+	if outputs["answer"] == nil {
+		t.Error("Failed to extract answer field")
+	}
+	if outputs["explanation"] == nil {
+		t.Error("Failed to extract explanation field - this was the original failure!")
+	}
+	if outputs["reasoning"] == nil {
+		t.Error("Failed to extract reasoning field")
+	}
+
+	// Verify values
+	if ans, ok := outputs["answer"].(int); !ok || ans != 6 {
+		t.Errorf("answer = %v (type %T), want 6 (int)", outputs["answer"], outputs["answer"])
+	}
+}
+
+// Test FallbackAdapter automatic retry
+func TestFallbackAdapter_AutomaticRetry(t *testing.T) {
+	sig := NewSignature("Test").
+		AddOutput("result", FieldTypeString, "")
+
+	fallback := NewFallbackAdapter()
+
+	// Content that ChatAdapter might struggle with but JSONAdapter handles
+	content := `{"result": "success"}`
+
+	outputs, err := fallback.Parse(sig, content)
+	if err != nil {
+		t.Fatalf("FallbackAdapter should handle this via JSONAdapter: %v", err)
+	}
+
+	if outputs["result"] != "success" {
+		t.Errorf("result = %v, want 'success'", outputs["result"])
+	}
+
+	// Verify fallback was used
+	if fallbackUsed, ok := outputs["__fallback_used"].(bool); !ok || !fallbackUsed {
+		t.Log("Warning: Expected fallback to be used for JSON content")
+	}
+}
+
+// Test partial validation mode
+func TestSignature_ValidateOutputsPartial(t *testing.T) {
+	sig := NewSignature("Test").
+		AddOutput("field1", FieldTypeString, "").
+		AddOutput("field2", FieldTypeInt, "").
+		AddOutput("field3", FieldTypeString, "")
+
+	// Partial outputs - missing field3
+	outputs := map[string]any{
+		"field1": "value1",
+		"field2": 42,
+	}
+
+	diag := sig.ValidateOutputsPartial(outputs)
+
+	if len(diag.MissingFields) != 1 || diag.MissingFields[0] != "field3" {
+		t.Errorf("MissingFields = %v, want [field3]", diag.MissingFields)
+	}
+
+	// Should have set missing field to nil
+	if outputs["field3"] != nil {
+		t.Errorf("Missing field should be set to nil, got %v", outputs["field3"])
+	}
+
+	// Should have preserved parsed fields
+	if outputs["field1"] != "value1" {
+		t.Errorf("field1 should be preserved")
+	}
+	if outputs["field2"] != 42 {
+		t.Errorf("field2 should be preserved")
+	}
+}

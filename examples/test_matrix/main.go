@@ -156,7 +156,7 @@ var allModels = []string{
 	"openrouter/deepseek/deepseek-v3.1-terminus:exacto",
 	"openrouter/moonshotai/kimi-k2-0905:exacto",
 	"openrouter/google/gemini-2.0-flash-lite-001",
-	"openrouter/meta-llama/llama-3.1-8b-instruct",
+	"openrouter/meta-llama/llama-3.3-70b-instruct",
 }
 
 // All numbered examples
@@ -1057,7 +1057,6 @@ func getDefaultModel() string {
 func formatModelName(model string) string {
 	return strings.TrimPrefix(model, "openrouter/")
 }
-
 
 func formatDuration(d time.Duration) string {
 	if d < time.Minute {

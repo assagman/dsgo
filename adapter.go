@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,6 +13,14 @@ import (
 
 	"github.com/assagman/dsgo/internal/jsonutil"
 )
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
 
 // extractNumericValue extracts the first numeric value (int or float) from a string
 // This handles cases where LMs return "High" or "0.95" or "95%" for numeric fields
@@ -291,6 +300,15 @@ func (a *JSONAdapter) Parse(sig *Signature, content string) (map[string]any, err
 	// Extract JSON using unified utility
 	jsonStr, err := jsonutil.ExtractJSON(content)
 	if err != nil {
+		// VERBOSE DEBUG for parsing failures
+		if debugEnv := os.Getenv("DSGO_DEBUG_PARSE"); debugEnv == "1" || debugEnv == "true" {
+			fmt.Fprintf(os.Stderr, "\n=== JSON PARSE ERROR DEBUG ===\n")
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Content length: %d\n", len(content))
+			fmt.Fprintf(os.Stderr, "Content preview (first 500 chars):\n%s\n", truncateString(content, 500))
+			fmt.Fprintf(os.Stderr, "==============================\n\n")
+		}
+
 		// FALLBACK: If no JSON found and signature has single string field, use content as value
 		if len(sig.OutputFields) == 1 && sig.OutputFields[0].Type == FieldTypeString {
 			fieldName := sig.OutputFields[0].Name
@@ -503,14 +521,48 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 	for _, fieldName := range fieldsToExtract {
 		marker := fmt.Sprintf("[[ ## %s ## ]]", fieldName)
 		startIdx := strings.Index(content, marker)
+		markerLen := len(marker)
+
+		// CRITICAL FIX 1: Try variations with/without spaces
 		if startIdx == -1 {
-			// Try variations: with/without spaces
 			marker = fmt.Sprintf("[[## %s ##]]", fieldName)
 			startIdx = strings.Index(content, marker)
+			markerLen = len(marker)
 		}
 		if startIdx == -1 {
 			marker = fmt.Sprintf("[[##%s##]]", fieldName)
 			startIdx = strings.Index(content, marker)
+			markerLen = len(marker)
+		}
+
+		// CRITICAL FIX 2: Try incomplete markers (common LM error)
+		// Models often emit [[ ## field ## ] or [[ ## field ## instead of [[ ## field ## ]]
+		if startIdx == -1 {
+			// Try marker missing closing brackets
+			lenientMarker := fmt.Sprintf("[[ ## %s ##", fieldName)
+			startIdx = strings.Index(content, lenientMarker)
+			if startIdx >= 0 {
+				markerLen = len(lenientMarker)
+				// Check if content is on same line (DSPy style)
+				lineEnd := strings.Index(content[startIdx:], "\n")
+				if lineEnd > markerLen {
+					sameLine := strings.TrimSpace(content[startIdx+markerLen : startIdx+lineEnd])
+					if sameLine != "" && !strings.HasPrefix(sameLine, "]") {
+						// Found inline content after incomplete marker
+						outputs[fieldName] = sameLine
+						continue
+					}
+				}
+			}
+		}
+
+		// Try single closing bracket variant
+		if startIdx == -1 {
+			singleBracketMarker := fmt.Sprintf("[[ ## %s ## ]", fieldName)
+			startIdx = strings.Index(content, singleBracketMarker)
+			if startIdx >= 0 {
+				markerLen = len(singleBracketMarker)
+			}
 		}
 
 		if startIdx == -1 {
@@ -529,7 +581,7 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 		}
 
 		// Move past the marker
-		valueStart := startIdx + len(marker)
+		valueStart := startIdx + markerLen
 
 		// Find the next marker or end of string
 		valueEnd := len(content)
@@ -549,6 +601,10 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 
 		// Extract and clean the value
 		value := strings.TrimSpace(content[valueStart:valueEnd])
+
+		// Clean up artifact from incomplete markers (trailing ] characters)
+		value = strings.TrimPrefix(value, "]")
+		value = strings.TrimSpace(value)
 
 		// For class fields, extract only the first word/line to avoid explanatory text
 		field := sig.GetOutputField(fieldName)
