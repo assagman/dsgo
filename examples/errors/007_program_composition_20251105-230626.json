@@ -1,5 +1,0 @@
-{
-  "error": "program failed: module 1 failed: exceeded maximum failures (2/3): LM generation failed: request failed: context cancelled: context deadline exceeded",
-  "example": "007_program_composition",
-  "timestamp": "20251105-230626"
-}

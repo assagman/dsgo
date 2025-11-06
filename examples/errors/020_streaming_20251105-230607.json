@@ -1,5 +1,0 @@
-{
-  "error": "Q\u0026A streaming error: failed to parse output: all adapters failed to parse response:\n  - adapter 0 (*dsgo.ChatAdapter): required field 'summary' not found in response (expected marker: [[ ## summary ## ]])\n  - adapter 1 (*dsgo.JSONAdapter): no JSON object found in content\n",
-  "example": "020_streaming",
-  "timestamp": "20251105-230607"
-}
