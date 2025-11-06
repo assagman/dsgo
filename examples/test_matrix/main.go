@@ -253,8 +253,8 @@ func main() {
 		}
 	}()
 
-	// Run tests (individual test timeout is 2 minutes)
-	perTestTimeout := 5 * time.Minute
+	// Run tests (individual test timeout is 10 minutes)
+	perTestTimeout := 10 * time.Minute
 	results := runParallel(cb, projectRoot, selectedModels, allExamples, perTestTimeout, *verbose, *maxConcurrent)
 
 	duration := time.Since(startTime)

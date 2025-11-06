@@ -119,6 +119,29 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []dsgo.Message, opti
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 
+		// Check for 405 with json format unsupported - automatic fallback
+		if resp.StatusCode == http.StatusMethodNotAllowed &&
+			options != nil && options.ResponseFormat == "json" {
+			bodyStr := string(body)
+
+			// Fallback from json_schema to json_object
+			if options.ResponseSchema != nil && strings.Contains(bodyStr, "json_schema") {
+				fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support json_schema, falling back to json_object\n", o.Model)
+				fallbackOpts := *options
+				fallbackOpts.ResponseSchema = nil
+				return o.Generate(ctx, messages, &fallbackOpts)
+			}
+
+			// Fallback from json_object to plain text (adapter-based parsing)
+			if strings.Contains(bodyStr, "json_object") || strings.Contains(bodyStr, "response format") {
+				fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support JSON mode, using adapter-based parsing\n", o.Model)
+				fallbackOpts := *options
+				fallbackOpts.ResponseFormat = ""
+				fallbackOpts.ResponseSchema = nil
+				return o.Generate(ctx, messages, &fallbackOpts)
+			}
+		}
+
 		// Verbose HTTP error logging for debugging
 		fmt.Fprintf(os.Stderr, "\n=== HTTP ERROR DEBUG ===\n")
 		fmt.Fprintf(os.Stderr, "Status: %d %s\n", resp.StatusCode, resp.Status)
@@ -190,6 +213,10 @@ func (o *OpenRouter) buildRequest(messages []dsgo.Message, options *dsgo.Generat
 	req := map[string]any{
 		"model":    o.Model,
 		"messages": o.convertMessages(messages),
+	}
+
+	if options == nil {
+		return req
 	}
 
 	if options.Temperature > 0 {

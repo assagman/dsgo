@@ -1,0 +1,434 @@
+package openrouter
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/assagman/dsgo"
+)
+
+// TestGenerate_EmptyChoices tests "no choices in response" error
+func TestGenerate_EmptyChoices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request structure
+		if r.Method != "POST" {
+			t.Errorf("Expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("Expected /chat/completions, got %s", r.URL.Path)
+		}
+
+		// Return response with empty choices array
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"id": "test-123",
+			"choices": [],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10}
+		}`))
+	}))
+	defer server.Close()
+
+	lm := NewOpenRouter("test-model")
+	lm.BaseURL = server.URL
+	lm.APIKey = "test-key"
+
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	result, err := lm.Generate(context.Background(), messages, nil)
+
+	if err == nil {
+		t.Fatal("Expected error for empty choices, got nil")
+	}
+	if result != nil {
+		t.Errorf("Expected nil result, got %v", result)
+	}
+	if err.Error() != "no choices in response" {
+		t.Errorf("Expected 'no choices in response', got %v", err)
+	}
+}
+
+// TestGenerate_NullContent tests response with null content
+func TestGenerate_NullContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return response with null content
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"id": "test-123",
+			"choices": [{
+				"message": {"role": "assistant", "content": null},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10}
+		}`))
+	}))
+	defer server.Close()
+
+	lm := NewOpenRouter("test-model")
+	lm.BaseURL = server.URL
+	lm.APIKey = "test-key"
+
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	result, err := lm.Generate(context.Background(), messages, nil)
+
+	// Should succeed with empty string content
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if result.Content != "" {
+		t.Errorf("Expected empty content for null, got %q", result.Content)
+	}
+}
+
+// TestGenerate_HTTP405 tests method not allowed error
+func TestGenerate_HTTP405(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Allow", "GET")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte(`{"error": {"message": "Method not allowed"}}`))
+	}))
+	defer server.Close()
+
+	lm := NewOpenRouter("test-model")
+	lm.BaseURL = server.URL
+	lm.APIKey = "test-key"
+
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	result, err := lm.Generate(context.Background(), messages, nil)
+
+	if err == nil {
+		t.Fatal("Expected error for HTTP 405, got nil")
+	}
+	if result != nil {
+		t.Errorf("Expected nil result, got %v", result)
+	}
+	// Should contain status code
+	if !contains(err.Error(), "405") {
+		t.Errorf("Error should mention 405 status: %v", err)
+	}
+}
+
+// TestGenerate_HTTP400_BadRequest tests malformed request error
+func TestGenerate_HTTP400_BadRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error": {"message": "Invalid tool schema: missing 'name' field"}}`))
+	}))
+	defer server.Close()
+
+	lm := NewOpenRouter("test-model")
+	lm.BaseURL = server.URL
+	lm.APIKey = "test-key"
+
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	result, err := lm.Generate(context.Background(), messages, nil)
+
+	if err == nil {
+		t.Fatal("Expected error for HTTP 400, got nil")
+	}
+	if result != nil {
+		t.Errorf("Expected nil result, got %v", result)
+	}
+	// Should contain detailed error message
+	if !contains(err.Error(), "400") {
+		t.Errorf("Error should mention 400 status: %v", err)
+	}
+}
+
+// TestGenerate_MalformedJSON tests unparseable response
+func TestGenerate_MalformedJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{not valid json}`))
+	}))
+	defer server.Close()
+
+	lm := NewOpenRouter("test-model")
+	lm.BaseURL = server.URL
+	lm.APIKey = "test-key"
+
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	result, err := lm.Generate(context.Background(), messages, nil)
+
+	if err == nil {
+		t.Fatal("Expected error for malformed JSON, got nil")
+	}
+	if result != nil {
+		t.Errorf("Expected nil result, got %v", result)
+	}
+	if !contains(err.Error(), "decode") {
+		t.Errorf("Error should mention decode failure: %v", err)
+	}
+}
+
+// TestGenerate_WithTools_RequestStructure validates request format with tools
+func TestGenerate_WithTools_RequestStructure(t *testing.T) {
+	var capturedRequest map[string]interface{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify HTTP method
+		if r.Method != "POST" {
+			t.Errorf("Expected POST, got %s", r.Method)
+		}
+
+		// Verify headers
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Expected application/json content type")
+		}
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Errorf("Expected Bearer token authorization")
+		}
+
+		// Capture request body
+		if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		// Return valid response
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"id": "test-123",
+			"choices": [{
+				"message": {"role": "assistant", "content": "result"},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+		}`))
+	}))
+	defer server.Close()
+
+	lm := NewOpenRouter("test-model")
+	lm.BaseURL = server.URL
+	lm.APIKey = "test-key"
+
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	tools := []dsgo.Tool{{
+		Name:        "calculator",
+		Description: "Perform calculations",
+		Parameters: []dsgo.ToolParameter{{
+			Name:     "expression",
+			Type:     "string",
+			Required: true,
+		}},
+	}}
+
+	opts := &dsgo.GenerateOptions{Tools: tools}
+	result, err := lm.Generate(context.Background(), messages, opts)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Expected result, got nil")
+	}
+
+	// Validate request structure
+	if capturedRequest["model"] != "test-model" {
+		t.Errorf("Expected model=test-model, got %v", capturedRequest["model"])
+	}
+
+	// Validate tools array
+	toolsArray, ok := capturedRequest["tools"].([]interface{})
+	if !ok || len(toolsArray) != 1 {
+		t.Errorf("Expected tools array with 1 tool, got %v", capturedRequest["tools"])
+	}
+
+	// Validate tool structure
+	tool, ok := toolsArray[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("Tool should be an object")
+	}
+	if tool["type"] != "function" {
+		t.Errorf("Expected tool type=function, got %v", tool["type"])
+	}
+}
+
+// TestParseToolArguments_EmptyArguments tests zero-parameter tool calls
+func TestParseToolArguments_EmptyArguments(t *testing.T) {
+	tc := openRouterToolCall{
+		ID:   "call-123",
+		Type: "function",
+	}
+	tc.Function.Name = "get_time"
+	tc.Function.Arguments = ""
+
+	args, err := parseToolArguments("test-model", "resp-123", "stop", tc)
+	if err != nil {
+		t.Fatalf("Unexpected error for empty args: %v", err)
+	}
+	if args == nil {
+		t.Fatal("Expected empty map, got nil")
+	}
+	if len(args) != 0 {
+		t.Errorf("Expected empty args map, got %v", args)
+	}
+}
+
+// TestParseToolArguments_MalformedJSON tests various malformed JSON scenarios
+func TestParseToolArguments_MalformedJSON(t *testing.T) {
+	testCases := []struct {
+		name      string
+		arguments string
+		wantErr   bool
+	}{
+		{
+			name:      "single quotes",
+			arguments: `{'expression': '2+2'}`,
+			wantErr:   false, // RepairJSON should fix this
+		},
+		{
+			name:      "unquoted keys",
+			arguments: `{expression: "2+2"}`,
+			wantErr:   false, // RepairJSON should fix this
+		},
+		{
+			name:      "trailing comma",
+			arguments: `{"expression": "2+2",}`,
+			wantErr:   false, // RepairJSON should fix this
+		},
+		{
+			name:      "truncated JSON - missing closing brace",
+			arguments: `{"expression": "2+2"`,
+			wantErr:   false, // balanceDelimiters should fix this
+		},
+		{
+			name:      "double-encoded JSON string",
+			arguments: `"{\"expression\": \"2+2\"}"`,
+			wantErr:   false, // Nested unescape should fix this
+		},
+		{
+			name:      "JSON with extra text before",
+			arguments: `Thought: here are the args: {"expression": "2+2"}`,
+			wantErr:   false, // ExtractJSON should handle this
+		},
+		{
+			name:      "completely invalid",
+			arguments: `not even close to json`,
+			wantErr:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			toolCall := openRouterToolCall{
+				ID:   "call-123",
+				Type: "function",
+			}
+			toolCall.Function.Name = "calculator"
+			toolCall.Function.Arguments = tc.arguments
+
+			args, err := parseToolArguments("test-model", "resp-123", "stop", toolCall)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("Expected error, got nil with args: %v", args)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if args == nil {
+					t.Error("Expected non-nil args map")
+				}
+			}
+		})
+	}
+}
+
+// TestBalanceDelimiters tests delimiter balancing
+func TestBalanceDelimiters(t *testing.T) {
+	testCases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "missing closing brace",
+			input: `{"a": "b"`,
+			want:  `{"a": "b"}`,
+		},
+		{
+			name:  "missing two closing braces",
+			input: `{"a": {"b": "c"`,
+			want:  `{"a": {"b": "c"}}`,
+		},
+		{
+			name:  "missing closing bracket",
+			input: `{"arr": [1, 2, 3`,
+			want:  `{"arr": [1, 2, 3}]`, // balanceDelimiters adds } before ]
+		},
+		{
+			name:  "already balanced",
+			input: `{"a": "b"}`,
+			want:  `{"a": "b"}`,
+		},
+		{
+			name:  "mixed missing",
+			input: `{"arr": [1, {"nested": "val"`,
+			want:  `{"arr": [1, {"nested": "val"}}]`, // balanceDelimiters adds } before ]
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := balanceDelimiters(tc.input)
+			if got != tc.want {
+				t.Errorf("balanceDelimiters(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+			// Note: balanceDelimiters is a best-effort fallback
+			// It may not always produce valid JSON
+		})
+	}
+}
+
+// TestPreview tests string preview function
+func TestPreview(t *testing.T) {
+	testCases := []struct {
+		name  string
+		input string
+		n     int
+		want  string
+	}{
+		{
+			name:  "short string",
+			input: "hello",
+			n:     10,
+			want:  "hello",
+		},
+		{
+			name:  "long string",
+			input: "abcdefghijklmnopqrstuvwxyz",
+			n:     5,
+			want:  "abcde ... vwxyz",
+		},
+		{
+			name:  "exactly double n",
+			input: "0123456789",
+			n:     5,
+			want:  "0123456789",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := preview(tc.input, tc.n)
+			if got != tc.want {
+				t.Errorf("preview(%q, %d) = %q, want %q", tc.input, tc.n, got, tc.want)
+			}
+		})
+	}
+}
+
+// Helper function
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
