@@ -42,3 +42,6 @@ examples/*/*.exe
 # Example test artifacts
 tmp_*.log
 example_execution_results.txt
+
+# opencode
+.opencode
