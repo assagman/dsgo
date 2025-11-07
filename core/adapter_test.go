@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -2775,6 +2776,185 @@ func TestStripMarkers(t *testing.T) {
 			result := StripMarkers(tt.input)
 			if result != tt.expected {
 				t.Errorf("StripMarkers(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestStripFieldMarkersPreserveJSON tests marker stripping for JSON fields
+func TestStripFieldMarkersPreserveJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "nested array with trailing ]]",
+			input:    `[["day1", "temple"], ["day2", "food"], ["day3", "shopping"]]`,
+			expected: `[["day1", "temple"], ["day2", "food"], ["day3", "shopping"]]`,
+		},
+		{
+			name:     "deeply nested arrays",
+			input:    `[[["a", "b"]], [["c", "d"]]]`,
+			expected: `[[["a", "b"]], [["c", "d"]]]`,
+		},
+		{
+			name:     "object with nested arrays",
+			input:    `{"data": [["x", "y"]], "more": [["z"]]}`,
+			expected: `{"data": [["x", "y"]], "more": [["z"]]}`,
+		},
+		{
+			name:     "marker at start then JSON",
+			input:    `[[ ## data ## ]] [["a", "b"]]`,
+			expected: `[["a", "b"]]`,
+		},
+		{
+			name:     "marker in middle of JSON (should strip)",
+			input:    `[["a", "b"], [[ ## field ## ]] ["c", "d"]]`,
+			expected: `[["a", "b"],  ["c", "d"]]`,
+		},
+		{
+			name:     "empty nested arrays",
+			input:    `[[]]`,
+			expected: `[[]]`,
+		},
+		{
+			name:     "triple nested empty",
+			input:    `[[[]]]`,
+			expected: `[[[]]]`,
+		},
+		{
+			name:     "JSON array ending with multiple brackets",
+			input:    `{"items": [{"tags": ["a", "b"]}]}`,
+			expected: `{"items": [{"tags": ["a", "b"]}]}`,
+		},
+		{
+			name:     "partial marker at start",
+			input:    `]] [["valid", "json"]]`,
+			expected: `[["valid", "json"]]`,
+		},
+		{
+			name: "complex real-world JSON",
+			input: `[
+				{"day": 1, "activities": ["temple", "food"]},
+				{"day": 2, "activities": ["bamboo", "shopping"]}
+			]`,
+			expected: `[
+				{"day": 1, "activities": ["temple", "food"]},
+				{"day": 2, "activities": ["bamboo", "shopping"]}
+			]`,
+		},
+		{
+			name:     "marker with spaces then nested array",
+			input:    `[[  ##  field  ##  ]] [["x"]]`,
+			expected: `[["x"]]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripFieldMarkersPreserveJSON(tt.input)
+			if result != tt.expected {
+				t.Errorf("stripFieldMarkersPreserveJSON() failed\nInput:    %q\nGot:      %q\nExpected: %q",
+					tt.input, result, tt.expected)
+			}
+
+			// Verify it's still valid JSON (if it started as JSON)
+			if strings.HasPrefix(strings.TrimSpace(tt.expected), "[") ||
+				strings.HasPrefix(strings.TrimSpace(tt.expected), "{") {
+				var parsed interface{}
+				if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+					t.Errorf("Result is not valid JSON: %v\nResult: %q", err, result)
+				}
+			}
+		})
+	}
+}
+
+// TestChatAdapter_Parse_JSONField tests that ChatAdapter properly parses JSON field types
+func TestChatAdapter_Parse_JSONField(t *testing.T) {
+	adapter := &ChatAdapter{}
+
+	tests := []struct {
+		name        string
+		content     string
+		wantOutputs map[string]any
+		wantErr     bool
+	}{
+		{
+			name: "valid JSON array",
+			content: `[[ ## activities ## ]]
+["Visit temple", "Try ramen", "See bamboo forest"]`,
+			wantOutputs: map[string]any{
+				"activities": []any{"Visit temple", "Try ramen", "See bamboo forest"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid JSON object",
+			content: `[[ ## config ## ]]
+{"name": "test", "count": 5}`,
+			wantOutputs: map[string]any{
+				"config": map[string]any{"name": "test", "count": float64(5)},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid JSON - text description",
+			content: `[[ ## activities ## ]]
+1. Visit temple
+2. Try ramen`,
+			wantOutputs: map[string]any{
+				"activities": "1. Visit temple\n2. Try ramen",
+			},
+			wantErr: false, // Parse succeeds, but validation should fail later
+		},
+		{
+			name: "nested JSON array with newline",
+			content: `[[ ## data ## ]]
+
+[["day1", "temple"], ["day2", "food"], ["day3", "shopping"]]`,
+			wantOutputs: map[string]any{
+				"data": []any{
+					[]any{"day1", "temple"},
+					[]any{"day2", "food"},
+					[]any{"day3", "shopping"},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create signature with only the fields present in expected outputs
+			sig := NewSignature("Test")
+			for key := range tt.wantOutputs {
+				sig.AddOutput(key, FieldTypeJSON, key)
+			}
+
+			outputs, err := adapter.Parse(sig, tt.content)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr {
+				for key, wantValue := range tt.wantOutputs {
+					gotValue, exists := outputs[key]
+					if !exists {
+						t.Errorf("Output %q missing", key)
+						continue
+					}
+
+					// Check type matches expectations
+					wantType := fmt.Sprintf("%T", wantValue)
+					gotType := fmt.Sprintf("%T", gotValue)
+
+					if wantType != gotType {
+						t.Errorf("Output %q has type %T, want %T", key, gotValue, wantValue)
+					}
+				}
 			}
 		})
 	}

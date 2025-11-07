@@ -149,3 +149,48 @@ func TestProgram_InputMerging(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 }
+
+func TestProgram_Forward_ValidationSuccess(t *testing.T) {
+	// Module 1 produces valid JSON output
+	module1 := &MockModule{
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{
+				"activities": []interface{}{"Visit temple", "Try ramen"}, // Valid JSON array
+			}), nil
+		},
+		SignatureValue: core.NewSignature("Module1").
+			AddOutput("activities", core.FieldTypeJSON, "List of activities"),
+	}
+
+	// Module 2 consumes the validated output
+	module2 := &MockModule{
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			activities, ok := inputs["activities"]
+			if !ok {
+				t.Error("Module2 should receive activities from Module1")
+			}
+
+			// Should be a slice (JSON array)
+			if _, ok := activities.([]interface{}); !ok {
+				t.Errorf("activities should be []interface{}, got %T", activities)
+			}
+
+			return core.NewPrediction(map[string]interface{}{"result": "done"}), nil
+		},
+		SignatureValue: core.NewSignature("Module2"),
+	}
+
+	program := NewProgram("test-validation-success").
+		AddModule(module1).
+		AddModule(module2)
+
+	pred, err := program.Forward(context.Background(), map[string]interface{}{})
+
+	if err != nil {
+		t.Fatalf("Forward() should succeed with valid outputs, got error: %v", err)
+	}
+
+	if pred.Outputs["result"] != "done" {
+		t.Error("Should complete full pipeline")
+	}
+}

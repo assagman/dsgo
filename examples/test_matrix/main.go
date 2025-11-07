@@ -404,11 +404,10 @@ func classifyError(r *testResult) {
 	output := r.stdout + "\n" + r.stderr
 	lowerOut := strings.ToLower(output)
 
-	// Extract HTTP status
-	if matches := regexp.MustCompile(`\b(4\d\d|5\d\d)\b`).FindString(output); matches != "" {
-		if code := regexp.MustCompile(`\d+`).FindString(matches); code != "" {
-			_, _ = fmt.Sscanf(code, "%d", &r.httpCode)
-		}
+	// Extract HTTP status (must be preceded by "http" or "status")
+	httpRe := regexp.MustCompile(`(?i)(?:http|status)[:\s]+(4\d\d|5\d\d)`)
+	if matches := httpRe.FindStringSubmatch(output); len(matches) > 1 {
+		_, _ = fmt.Sscanf(matches[1], "%d", &r.httpCode)
 	}
 
 	// Classify error type
@@ -417,6 +416,9 @@ func classifyError(r *testResult) {
 		case strings.Contains(lowerOut, "panic"):
 			r.errorType = "PANIC"
 			r.errorMsg = extractPanic(output)
+		case strings.Contains(lowerOut, "failed to parse output") || strings.Contains(lowerOut, "no json object found"):
+			r.errorType = "PARSER_ERROR"
+			r.errorMsg = extractParserError(output)
 		case r.httpCode >= 400:
 			r.errorType = fmt.Sprintf("HTTP_%d", r.httpCode)
 			r.errorMsg = extractHTTPError(output)
@@ -438,6 +440,21 @@ func classifyError(r *testResult) {
 	if r.errorMsg == "" {
 		r.errorMsg = extractError(output)
 	}
+}
+
+func extractParserError(output string) string {
+	lines := strings.Split(output, "\n")
+	for i := len(lines) - 1; i >= 0 && len(lines)-i < 50; i-- {
+		line := strings.TrimSpace(lines[i])
+		lowerLine := strings.ToLower(line)
+		if strings.Contains(lowerLine, "failed to parse") ||
+			strings.Contains(lowerLine, "no json object") ||
+			strings.Contains(lowerLine, "adapter") ||
+			strings.Contains(lowerLine, "required field") {
+			return line
+		}
+	}
+	return "Output format parsing failed"
 }
 
 func extractHTTPError(output string) string {

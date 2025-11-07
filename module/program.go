@@ -45,6 +45,13 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 			return nil, fmt.Errorf("module %d failed: %w", i, err)
 		}
 
+		// Validate outputs against module signature to catch malformed data early
+		if sig := module.GetSignature(); sig != nil {
+			if err := sig.ValidateOutputs(prediction.Outputs); err != nil {
+				return nil, fmt.Errorf("module %d produced invalid outputs: %w", i, err)
+			}
+		}
+
 		// Accumulate outputs from all modules
 		for k, v := range prediction.Outputs {
 			finalOutputs[k] = v

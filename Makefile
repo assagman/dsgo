@@ -2,7 +2,7 @@
 
 PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts)
 
-all: clean check check-eof check-lint test
+all: clean check check-lint test
 
 all-with-examples: clean check check-eof test test-matrix-quick
 
@@ -48,7 +48,7 @@ lint:
 verify:
 	go mod verify
 
-check: verify fmt vet build
+check: verify fmt vet build check-eof
 
 check-lint: check lint
 

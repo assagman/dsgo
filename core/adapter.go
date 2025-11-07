@@ -602,15 +602,24 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 		// Extract and clean the value
 		value := strings.TrimSpace(content[valueStart:valueEnd])
 
-		// Clean up artifact from incomplete markers (trailing ] characters)
+		// Get field info early for type-specific processing
+		field := sig.GetOutputField(fieldName)
+
+		// Clean up artifacts from incomplete markers
 		value = strings.TrimPrefix(value, "]")
 		value = strings.TrimSpace(value)
 
-		// Strip field markers from value (should only be in history, not outputs)
-		value = stripFieldMarkers(value)
+		// Strip field markers from value (removes markers for clean internal data flow)
+		// For JSON fields, do this BEFORE parsing to clean up markers but preserve JSON syntax
+		if field != nil && field.Type == FieldTypeJSON {
+			// For JSON fields, use lighter stripping that preserves JSON structure
+			value = stripFieldMarkersPreserveJSON(value)
+		} else {
+			// For other fields, use full stripping
+			value = stripFieldMarkers(value)
+		}
 
 		// For class fields, extract only the first word/line to avoid explanatory text
-		field := sig.GetOutputField(fieldName)
 		if field != nil && field.Type == FieldTypeClass {
 			// Take only the first line or first word
 			lines := strings.Split(value, "\n")
@@ -628,6 +637,18 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 		if field != nil && (field.Type == FieldTypeFloat || field.Type == FieldTypeInt) {
 			// Extract first numeric value from the text
 			value = extractNumericValue(value)
+		}
+
+		// For JSON fields, attempt to parse as JSON
+		if field != nil && field.Type == FieldTypeJSON {
+			// Try to parse as JSON
+			var parsed any
+			if err := json.Unmarshal([]byte(value), &parsed); err == nil {
+				// Successfully parsed as JSON
+				outputs[fieldName] = parsed
+				continue
+			}
+			// If parsing failed, keep as string (validation will catch this later)
 		}
 
 		outputs[fieldName] = value
@@ -1122,6 +1143,28 @@ func stripFieldMarkers(s string) string {
 	for strings.HasSuffix(strings.TrimSpace(s), "]]") {
 		s = strings.TrimSuffix(strings.TrimSpace(s), "]]")
 	}
+	s = strings.TrimSpace(s)
+
+	return s
+}
+
+// stripFieldMarkersPreserveJSON strips field markers but preserves JSON array/object syntax
+// This is used for JSON fields where trailing ]] might be part of the JSON structure
+func stripFieldMarkersPreserveJSON(s string) string {
+	// Pattern 1: [[ ## any_field_name ## ]] at start of string (with flexible spacing)
+	re := regexp.MustCompile(`^\[\[\s*##\s*\w+\s*##\s*\]\]\s*`)
+	s = re.ReplaceAllString(s, "")
+
+	// Pattern 2: Strip markers in the middle of text
+	re2 := regexp.MustCompile(`\[\[\s*##\s*\w+\s*##\s*\]\]`)
+	s = re2.ReplaceAllString(s, "")
+
+	// Pattern 3: Partial markers at start (from streaming chunks)
+	re3 := regexp.MustCompile(`^(?:##\s*\]\]|\]\])\s*`)
+	s = re3.ReplaceAllString(s, "")
+
+	// For JSON fields, do NOT strip trailing ]] as it might be part of the JSON
+	// Just trim whitespace
 	s = strings.TrimSpace(s)
 
 	return s
