@@ -6,20 +6,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // MockFailingModule always fails
 type MockFailingModule struct {
-	sig         *dsgo.Signature
+	sig         *core.Signature
 	failureType string // "parse" or "http"
 }
 
-func (m *MockFailingModule) GetSignature() *dsgo.Signature {
+func (m *MockFailingModule) GetSignature() *core.Signature {
 	return m.sig
 }
 
-func (m *MockFailingModule) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (m *MockFailingModule) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	if m.failureType == "parse" {
 		return nil, errors.New("failed to parse: all adapters failed")
 	}
@@ -28,14 +28,14 @@ func (m *MockFailingModule) Forward(ctx context.Context, inputs map[string]any) 
 
 // TestBestOfN_AllAttemptsFail tests behavior when all N attempts fail
 func TestBestOfN_AllAttemptsFail(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 
 	mockModule := &MockFailingModule{
 		sig:         sig,
 		failureType: "parse",
 	}
 
-	scorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, prediction *core.Prediction) (float64, error) {
 		return 1.0, nil
 	}
 
@@ -61,14 +61,14 @@ func TestBestOfN_AllAttemptsFail(t *testing.T) {
 
 // TestBestOfN_AllAttemptsFail_HTTP tests HTTP errors
 func TestBestOfN_AllAttemptsFail_HTTP(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 
 	mockModule := &MockFailingModule{
 		sig:         sig,
 		failureType: "http",
 	}
 
-	scorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, prediction *core.Prediction) (float64, error) {
 		return 1.0, nil
 	}
 
@@ -93,24 +93,24 @@ func TestBestOfN_AllAttemptsFail_HTTP(t *testing.T) {
 
 // TestBestOfN_PartialFailures tests when some attempts fail but not all
 func TestBestOfN_PartialFailures(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 
 	attemptCount := 0
 	mockModule := &MockModule{
 		SignatureValue: sig,
-		ForwardFunc: func(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 			attemptCount++
 			// Fail first 2 attempts, succeed on 3rd
 			if attemptCount <= 2 {
 				return nil, errors.New("parse failed")
 			}
-			return &dsgo.Prediction{
+			return &core.Prediction{
 				Outputs: map[string]any{"answer": "success"},
 			}, nil
 		},
 	}
 
-	scorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, prediction *core.Prediction) (float64, error) {
 		return 1.0, nil
 	}
 
@@ -133,14 +133,14 @@ func TestBestOfN_PartialFailures(t *testing.T) {
 
 // TestBestOfN_ExceedMaxFailures tests exceeding max failures threshold
 func TestBestOfN_ExceedMaxFailures(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 
 	mockModule := &MockFailingModule{
 		sig:         sig,
 		failureType: "parse",
 	}
 
-	scorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, prediction *core.Prediction) (float64, error) {
 		return 1.0, nil
 	}
 
@@ -166,19 +166,19 @@ func TestBestOfN_ExceedMaxFailures(t *testing.T) {
 
 // TestBestOfN_ScorerFails tests when scorer function fails
 func TestBestOfN_ScorerFails(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 
 	mockModule := &MockModule{
 		SignatureValue: sig,
-		ForwardFunc: func(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
-			return &dsgo.Prediction{
+		ForwardFunc: func(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+			return &core.Prediction{
 				Outputs: map[string]any{"answer": "test"},
 			}, nil
 		},
 	}
 
 	// Scorer that always fails
-	scorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, prediction *core.Prediction) (float64, error) {
 		return 0, errors.New("scoring failed: missing confidence field")
 	}
 
@@ -201,14 +201,14 @@ func TestBestOfN_ScorerFails(t *testing.T) {
 
 // TestBestOfN_Parallel_AllAttemptsFail tests parallel execution with all failures
 func TestBestOfN_Parallel_AllAttemptsFail(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 
 	mockModule := &MockFailingModule{
 		sig:         sig,
 		failureType: "parse",
 	}
 
-	scorer := func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, prediction *core.Prediction) (float64, error) {
 		return 1.0, nil
 	}
 

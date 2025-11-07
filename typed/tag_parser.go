@@ -5,13 +5,13 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // FieldInfo contains parsed information from a struct field
 type FieldInfo struct {
 	Name         string
-	Type         dsgo.FieldType
+	Type         core.FieldType
 	Description  string
 	Optional     bool
 	Classes      []string
@@ -112,25 +112,25 @@ func parseFieldTag(fieldName string, fieldType reflect.Type, tag string) (FieldI
 }
 
 // inferFieldType maps Go types to DSGo field types
-func inferFieldType(goType reflect.Type, classes []string) dsgo.FieldType {
+func inferFieldType(goType reflect.Type, classes []string) core.FieldType {
 	// If enum is specified, it's a class type
 	if len(classes) > 0 {
-		return dsgo.FieldTypeClass
+		return core.FieldTypeClass
 	}
 
 	switch goType.Kind() {
 	case reflect.String:
-		return dsgo.FieldTypeString
+		return core.FieldTypeString
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return dsgo.FieldTypeInt
+		return core.FieldTypeInt
 	case reflect.Float32, reflect.Float64:
-		return dsgo.FieldTypeFloat
+		return core.FieldTypeFloat
 	case reflect.Bool:
-		return dsgo.FieldTypeBool
+		return core.FieldTypeBool
 	case reflect.Map, reflect.Slice, reflect.Struct:
-		return dsgo.FieldTypeJSON
+		return core.FieldTypeJSON
 	default:
-		return dsgo.FieldTypeString // Default fallback
+		return core.FieldTypeString // Default fallback
 	}
 }
 

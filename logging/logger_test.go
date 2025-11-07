@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestRequestIDGeneration(t *testing.T) {
@@ -180,7 +180,7 @@ func TestLogAPIResponse(t *testing.T) {
 	SetLogger(logger)
 
 	ctx := WithRequestID(context.Background(), "test-123")
-	usage := dsgo.Usage{
+	usage := core.Usage{
 		PromptTokens:     100,
 		CompletionTokens: 50,
 		TotalTokens:      150,

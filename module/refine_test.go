@@ -6,18 +6,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestRefine_Forward_NoFeedback(t *testing.T) {
-	sig := dsgo.NewSignature("Generate answer").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Generate answer").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"answer": "initial"}`,
 			}, nil
 		},
@@ -38,20 +38,20 @@ func TestRefine_Forward_NoFeedback(t *testing.T) {
 }
 
 func TestRefine_Forward_WithFeedback(t *testing.T) {
-	sig := dsgo.NewSignature("Generate answer").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddInput("feedback", dsgo.FieldTypeString, "Feedback").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Generate answer").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddInput("feedback", core.FieldTypeString, "Feedback").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	callCount := 0
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			callCount++
 			if callCount == 1 {
-				return &dsgo.GenerateResult{Content: `{"answer": "initial"}`}, nil
+				return &core.GenerateResult{Content: `{"answer": "initial"}`}, nil
 			}
-			return &dsgo.GenerateResult{Content: `{"answer": "refined"}`}, nil
+			return &core.GenerateResult{Content: `{"answer": "refined"}`}, nil
 		},
 	}
 
@@ -75,8 +75,8 @@ func TestRefine_Forward_WithFeedback(t *testing.T) {
 }
 
 func TestRefine_Forward_InvalidInput(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("required", dsgo.FieldTypeString, "Required")
+	sig := core.NewSignature("Test").
+		AddInput("required", core.FieldTypeString, "Required")
 
 	lm := &MockLM{}
 	refine := NewRefine(sig, lm)
@@ -88,11 +88,11 @@ func TestRefine_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestRefine_Forward_LMError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			return nil, errors.New("LM error")
 		},
 	}
@@ -108,11 +108,11 @@ func TestRefine_Forward_LMError(t *testing.T) {
 }
 
 func TestRefine_WithOptions(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	refine := NewRefine(sig, lm)
 
-	customOpts := &dsgo.GenerateOptions{Temperature: 0.8}
+	customOpts := &core.GenerateOptions{Temperature: 0.8}
 	refine.WithOptions(customOpts)
 
 	if refine.Options.Temperature != 0.8 {
@@ -121,7 +121,7 @@ func TestRefine_WithOptions(t *testing.T) {
 }
 
 func TestRefine_WithMaxIterations(t *testing.T) {
-	refine := NewRefine(dsgo.NewSignature("Test"), &MockLM{})
+	refine := NewRefine(core.NewSignature("Test"), &MockLM{})
 	refine.WithMaxIterations(5)
 
 	if refine.MaxIterations != 5 {
@@ -130,7 +130,7 @@ func TestRefine_WithMaxIterations(t *testing.T) {
 }
 
 func TestRefine_WithRefinementField(t *testing.T) {
-	refine := NewRefine(dsgo.NewSignature("Test"), &MockLM{})
+	refine := NewRefine(core.NewSignature("Test"), &MockLM{})
 	refine.WithRefinementField("custom_feedback")
 
 	if refine.RefinementField != "custom_feedback" {
@@ -139,7 +139,7 @@ func TestRefine_WithRefinementField(t *testing.T) {
 }
 
 func TestRefine_GetSignature(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	refine := NewRefine(sig, &MockLM{})
 
 	if refine.GetSignature() != sig {
@@ -148,17 +148,17 @@ func TestRefine_GetSignature(t *testing.T) {
 }
 
 func TestRefine_RefinementError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddInput("feedback", dsgo.FieldTypeString, "Feedback").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddInput("feedback", core.FieldTypeString, "Feedback").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	callCount := 0
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			callCount++
 			if callCount == 1 {
-				return &dsgo.GenerateResult{Content: `{"answer": "initial"}`}, nil
+				return &core.GenerateResult{Content: `{"answer": "initial"}`}, nil
 			}
 			return nil, errors.New("refinement failed")
 		},
@@ -180,16 +180,16 @@ func TestRefine_RefinementError(t *testing.T) {
 }
 
 func TestRefine_Forward_MaxIterations1(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddInput("feedback", dsgo.FieldTypeString, "Feedback").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddInput("feedback", core.FieldTypeString, "Feedback").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	callCount := 0
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			callCount++
-			return &dsgo.GenerateResult{Content: `{"answer": "initial"}`}, nil
+			return &core.GenerateResult{Content: `{"answer": "initial"}`}, nil
 		},
 	}
 
@@ -216,18 +216,18 @@ func TestRefine_Forward_MaxIterations1(t *testing.T) {
 func TestRefine_GeneratePrediction_WithPreviousOutput(t *testing.T) {
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, msgs []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"answer": "Refined answer", "confidence": 0.95}`,
 			}, nil
 		},
 	}
 
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "The question").
-		AddInput("feedback", dsgo.FieldTypeString, "Refinement feedback").
-		AddOutput("answer", dsgo.FieldTypeString, "The answer").
-		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "The question").
+		AddInput("feedback", core.FieldTypeString, "Refinement feedback").
+		AddOutput("answer", core.FieldTypeString, "The answer").
+		AddOutput("confidence", core.FieldTypeFloat, "Confidence score")
 
 	refine := NewRefine(sig, lm)
 
@@ -236,7 +236,7 @@ func TestRefine_GeneratePrediction_WithPreviousOutput(t *testing.T) {
 		inputs         map[string]any
 		previousOutput map[string]any
 		wantErr        bool
-		checkResult    func(*testing.T, *dsgo.Prediction)
+		checkResult    func(*testing.T, *core.Prediction)
 	}{
 		{
 			name: "with previous output",
@@ -249,7 +249,7 @@ func TestRefine_GeneratePrediction_WithPreviousOutput(t *testing.T) {
 				"confidence": 0.6,
 			},
 			wantErr: false,
-			checkResult: func(t *testing.T, pred *dsgo.Prediction) {
+			checkResult: func(t *testing.T, pred *core.Prediction) {
 				if pred == nil {
 					t.Fatal("expected prediction, got nil")
 				}
@@ -266,7 +266,7 @@ func TestRefine_GeneratePrediction_WithPreviousOutput(t *testing.T) {
 			},
 			previousOutput: nil,
 			wantErr:        false,
-			checkResult: func(t *testing.T, pred *dsgo.Prediction) {
+			checkResult: func(t *testing.T, pred *core.Prediction) {
 				if pred == nil {
 					t.Fatal("expected prediction, got nil")
 				}
@@ -282,7 +282,7 @@ func TestRefine_GeneratePrediction_WithPreviousOutput(t *testing.T) {
 				"answer": "AI is machine learning",
 			},
 			wantErr: false,
-			checkResult: func(t *testing.T, pred *dsgo.Prediction) {
+			checkResult: func(t *testing.T, pred *core.Prediction) {
 				if pred == nil {
 					t.Fatal("expected prediction, got nil")
 				}
@@ -298,7 +298,7 @@ func TestRefine_GeneratePrediction_WithPreviousOutput(t *testing.T) {
 				"confidence": 0.7,
 			},
 			wantErr: false,
-			checkResult: func(t *testing.T, pred *dsgo.Prediction) {
+			checkResult: func(t *testing.T, pred *core.Prediction) {
 				if pred == nil {
 					t.Fatal("expected prediction, got nil")
 				}
@@ -330,16 +330,16 @@ func TestRefine_GeneratePrediction_WithPreviousOutput(t *testing.T) {
 func TestRefine_GenerateRefinement_EdgeCases(t *testing.T) {
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, msgs []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"answer": "Improved answer"}`,
 			}, nil
 		},
 	}
 
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question text").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer text")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question text").
+		AddOutput("answer", core.FieldTypeString, "Answer text")
 
 	refine := NewRefine(sig, lm).WithRefinementField("feedback")
 
@@ -360,18 +360,18 @@ func TestRefine_GenerateRefinement_EdgeCases(t *testing.T) {
 func TestRefine_GeneratePrediction_WithOptionalFields(t *testing.T) {
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, msgs []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"answer": "Test answer"}`,
 			}, nil
 		},
 	}
 
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Required question").
-		AddOptionalInput("context", dsgo.FieldTypeString, "Optional context").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer").
-		AddOptionalOutput("source", dsgo.FieldTypeString, "Source")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Required question").
+		AddOptionalInput("context", core.FieldTypeString, "Optional context").
+		AddOutput("answer", core.FieldTypeString, "Answer").
+		AddOptionalOutput("source", core.FieldTypeString, "Source")
 
 	refine := NewRefine(sig, lm)
 
@@ -425,17 +425,17 @@ func TestRefine_GeneratePrediction_WithOptionalFields(t *testing.T) {
 func TestRefine_GeneratePrediction_WithClassFields(t *testing.T) {
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, msgs []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"sentiment": "positive", "answer": "Great product"}`,
 			}, nil
 		},
 	}
 
-	sig := dsgo.NewSignature("Test").
-		AddInput("text", dsgo.FieldTypeString, "Input text").
+	sig := core.NewSignature("Test").
+		AddInput("text", core.FieldTypeString, "Input text").
 		AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "Sentiment classification").
-		AddOutput("answer", dsgo.FieldTypeString, "Explanation")
+		AddOutput("answer", core.FieldTypeString, "Explanation")
 
 	refine := NewRefine(sig, lm)
 
@@ -476,18 +476,18 @@ func TestRefine_GeneratePrediction_WithClassFields(t *testing.T) {
 func TestRefine_GenerateRefinement_ComplexPrompt(t *testing.T) {
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, msgs []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"answer": "Improved answer", "confidence": 0.9}`,
 			}, nil
 		},
 	}
 
-	sig := dsgo.NewSignature("Complex Task").
-		AddInput("question", dsgo.FieldTypeString, "The question").
-		AddInput("context", dsgo.FieldTypeString, "Additional context").
-		AddOutput("answer", dsgo.FieldTypeString, "The answer").
-		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score")
+	sig := core.NewSignature("Complex Task").
+		AddInput("question", core.FieldTypeString, "The question").
+		AddInput("context", core.FieldTypeString, "Additional context").
+		AddOutput("answer", core.FieldTypeString, "The answer").
+		AddOutput("confidence", core.FieldTypeFloat, "Confidence score")
 
 	refine := NewRefine(sig, lm)
 
@@ -515,12 +515,12 @@ func TestRefine_GenerateRefinement_ComplexPrompt(t *testing.T) {
 
 // TestRefine_WithAdapter tests adapter configuration
 func TestRefine_WithAdapter(t *testing.T) {
-	sig := dsgo.NewSignature("test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("answer", dsgo.FieldTypeString, "")
+	sig := core.NewSignature("test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("answer", core.FieldTypeString, "")
 
 	lm := &MockLM{}
-	adapter := dsgo.NewChatAdapter()
+	adapter := core.NewChatAdapter()
 
 	refine := NewRefine(sig, lm).WithAdapter(adapter)
 	if refine.Adapter != adapter {
@@ -530,8 +530,8 @@ func TestRefine_WithAdapter(t *testing.T) {
 
 // TestRefine_FinishReasonHandling tests finish_reason scenarios
 func TestRefine_FinishReasonHandling(t *testing.T) {
-	sig := dsgo.NewSignature("Test signature").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test signature").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	tests := []struct {
 		name          string
@@ -565,11 +565,11 @@ func TestRefine_FinishReasonHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockLM := &MockLM{
-				GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-					return &dsgo.GenerateResult{
+				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+					return &core.GenerateResult{
 						Content:      tt.content,
 						FinishReason: tt.finishReason,
-						Usage:        dsgo.Usage{TotalTokens: 10},
+						Usage:        core.Usage{TotalTokens: 10},
 					}, nil
 				},
 			}

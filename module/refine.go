@@ -5,40 +5,40 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // Refine implements iterative refinement of predictions
 // It takes an initial prediction and refines it based on feedback or additional context
 type Refine struct {
-	Signature       *dsgo.Signature
-	LM              dsgo.LM
-	Options         *dsgo.GenerateOptions
-	Adapter         dsgo.Adapter
+	Signature       *core.Signature
+	LM              core.LM
+	Options         *core.GenerateOptions
+	Adapter         core.Adapter
 	MaxIterations   int
 	RefinementField string // Field name to use for refinement feedback
 }
 
 // NewRefine creates a new Refine module
-func NewRefine(signature *dsgo.Signature, lm dsgo.LM) *Refine {
+func NewRefine(signature *core.Signature, lm core.LM) *Refine {
 	return &Refine{
 		Signature:       signature,
 		LM:              lm,
-		Options:         dsgo.DefaultGenerateOptions(),
-		Adapter:         dsgo.NewFallbackAdapter(),
+		Options:         core.DefaultGenerateOptions(),
+		Adapter:         core.NewFallbackAdapter(),
 		MaxIterations:   3,
 		RefinementField: "feedback",
 	}
 }
 
 // WithOptions sets custom generation options
-func (r *Refine) WithOptions(options *dsgo.GenerateOptions) *Refine {
+func (r *Refine) WithOptions(options *core.GenerateOptions) *Refine {
 	r.Options = options
 	return r
 }
 
 // WithAdapter sets a custom adapter
-func (r *Refine) WithAdapter(adapter dsgo.Adapter) *Refine {
+func (r *Refine) WithAdapter(adapter core.Adapter) *Refine {
 	r.Adapter = adapter
 	return r
 }
@@ -56,12 +56,12 @@ func (r *Refine) WithRefinementField(field string) *Refine {
 }
 
 // GetSignature returns the module's signature
-func (r *Refine) GetSignature() *dsgo.Signature {
+func (r *Refine) GetSignature() *core.Signature {
 	return r.Signature
 }
 
 // Forward executes the refinement loop
-func (r *Refine) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (r *Refine) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	if err := r.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
@@ -93,9 +93,9 @@ func (r *Refine) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pred
 	return prediction, nil
 }
 
-func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, previousOutput map[string]any) (*dsgo.Prediction, error) {
+func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, previousOutput map[string]any) (*core.Prediction, error) {
 	// Build custom prompt for refinement context
-	var messages []dsgo.Message
+	var messages []core.Message
 
 	if previousOutput != nil {
 		// If we have previous output, build custom refinement prompt
@@ -133,7 +133,7 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, 
 				optional = " (optional)"
 			}
 			classInfo := ""
-			if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
+			if field.Type == core.FieldTypeClass && len(field.Classes) > 0 {
 				classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 			}
 			if field.Description != "" {
@@ -143,7 +143,7 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, 
 			}
 		}
 
-		messages = []dsgo.Message{{Role: "user", Content: prompt.String()}}
+		messages = []core.Message{{Role: "user", Content: prompt.String()}}
 	} else {
 		// Initial prediction, use adapter
 		var err error
@@ -156,7 +156,7 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, 
 	// Copy options to avoid mutation
 	options := r.Options.Copy()
 	if r.LM.SupportsJSON() {
-		if _, isJSON := r.Adapter.(*dsgo.JSONAdapter); isJSON {
+		if _, isJSON := r.Adapter.(*core.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
@@ -196,10 +196,10 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, 
 	}
 
 	// Extract adapter metadata
-	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+	adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
 	// Build Prediction object
-	prediction := dsgo.NewPrediction(outputs).
+	prediction := core.NewPrediction(outputs).
 		WithUsage(result.Usage).
 		WithModuleName("Refine").
 		WithInputs(inputs)
@@ -212,7 +212,7 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, 
 	return prediction, nil
 }
 
-func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, previousOutput map[string]any, feedback string) (*dsgo.Prediction, error) {
+func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, previousOutput map[string]any, feedback string) (*core.Prediction, error) {
 	var prompt strings.Builder
 
 	prompt.WriteString("Refine the previous output based on the following feedback:\n\n")
@@ -248,7 +248,7 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, 
 			optional = " (optional)"
 		}
 		classInfo := ""
-		if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
+		if field.Type == core.FieldTypeClass && len(field.Classes) > 0 {
 			classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 		}
 		if field.Description != "" {
@@ -258,14 +258,14 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, 
 		}
 	}
 
-	messages := []dsgo.Message{
+	messages := []core.Message{
 		{Role: "user", Content: prompt.String()},
 	}
 
 	// Copy options to avoid mutation
 	options := r.Options.Copy()
 	if r.LM.SupportsJSON() {
-		if _, isJSON := r.Adapter.(*dsgo.JSONAdapter); isJSON {
+		if _, isJSON := r.Adapter.(*core.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
@@ -305,10 +305,10 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, 
 	}
 
 	// Extract adapter metadata
-	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+	adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
 	// Build Prediction object
-	prediction := dsgo.NewPrediction(outputs).
+	prediction := core.NewPrediction(outputs).
 		WithUsage(result.Usage).
 		WithModuleName("Refine").
 		WithInputs(inputs)

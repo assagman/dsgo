@@ -7,18 +7,18 @@ import (
 
 	"strings"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestProgramOfThought_Forward_Success(t *testing.T) {
-	sig := dsgo.NewSignature("Solve math").
-		AddInput("problem", dsgo.FieldTypeString, "Problem").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Solve math").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"code": "print(2+2)", "explanation": "Add 2+2", "answer": "4"}`,
 			}, nil
 		},
@@ -43,8 +43,8 @@ func TestProgramOfThought_Forward_Success(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_InvalidInput(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("required", dsgo.FieldTypeString, "Required")
+	sig := core.NewSignature("Test").
+		AddInput("required", core.FieldTypeString, "Required")
 
 	lm := &MockLM{}
 	pot := NewProgramOfThought(sig, lm, "python")
@@ -56,11 +56,11 @@ func TestProgramOfThought_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_LMError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("problem", dsgo.FieldTypeString, "Problem")
+	sig := core.NewSignature("Test").
+		AddInput("problem", core.FieldTypeString, "Problem")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			return nil, errors.New("LM error")
 		},
 	}
@@ -76,11 +76,11 @@ func TestProgramOfThought_Forward_LMError(t *testing.T) {
 }
 
 func TestProgramOfThought_WithOptions(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	pot := NewProgramOfThought(sig, lm, "python")
 
-	customOpts := &dsgo.GenerateOptions{Temperature: 0.5}
+	customOpts := &core.GenerateOptions{Temperature: 0.5}
 	pot.WithOptions(customOpts)
 
 	if pot.Options.Temperature != 0.5 {
@@ -89,7 +89,7 @@ func TestProgramOfThought_WithOptions(t *testing.T) {
 }
 
 func TestProgramOfThought_WithAllowExecution(t *testing.T) {
-	pot := NewProgramOfThought(dsgo.NewSignature("Test"), &MockLM{}, "python")
+	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "python")
 
 	if pot.AllowExecution {
 		t.Error("Execution should be disabled by default")
@@ -103,7 +103,7 @@ func TestProgramOfThought_WithAllowExecution(t *testing.T) {
 }
 
 func TestProgramOfThought_WithExecutionTimeout(t *testing.T) {
-	pot := NewProgramOfThought(dsgo.NewSignature("Test"), &MockLM{}, "python")
+	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "python")
 	pot.WithExecutionTimeout(60)
 
 	if pot.ExecutionTimeout != 60 {
@@ -112,7 +112,7 @@ func TestProgramOfThought_WithExecutionTimeout(t *testing.T) {
 }
 
 func TestProgramOfThought_GetSignature(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
 	if pot.GetSignature() != sig {
@@ -124,7 +124,7 @@ func TestProgramOfThought_Language(t *testing.T) {
 	tests := []string{"python", "javascript", "go"}
 
 	for _, lang := range tests {
-		pot := NewProgramOfThought(dsgo.NewSignature("Test"), &MockLM{}, lang)
+		pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, lang)
 		if pot.Language != lang {
 			t.Errorf("Expected language '%s', got '%s'", lang, pot.Language)
 		}
@@ -132,7 +132,7 @@ func TestProgramOfThought_Language(t *testing.T) {
 }
 
 func TestProgramOfThought_ExecuteCode_UnsupportedLanguage(t *testing.T) {
-	pot := NewProgramOfThought(dsgo.NewSignature("Test"), &MockLM{}, "unsupported")
+	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "unsupported")
 
 	_, err := pot.executeCode(context.Background(), "some code")
 	if err == nil {
@@ -141,7 +141,7 @@ func TestProgramOfThought_ExecuteCode_UnsupportedLanguage(t *testing.T) {
 }
 
 func TestProgramOfThought_ExecuteCode_GoNotSupported(t *testing.T) {
-	pot := NewProgramOfThought(dsgo.NewSignature("Test"), &MockLM{}, "go")
+	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "go")
 
 	_, err := pot.executeCode(context.Background(), "package main")
 	if err == nil {
@@ -150,8 +150,8 @@ func TestProgramOfThought_ExecuteCode_GoNotSupported(t *testing.T) {
 }
 
 func TestProgramOfThought_BuildPrompt_NoDescription(t *testing.T) {
-	sig := dsgo.NewSignature("").
-		AddInput("problem", dsgo.FieldTypeString, "Problem")
+	sig := core.NewSignature("").
+		AddInput("problem", core.FieldTypeString, "Problem")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -169,14 +169,14 @@ func TestProgramOfThought_BuildPrompt_NoDescription(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_WithCodeExecution(t *testing.T) {
-	sig := dsgo.NewSignature("Calculate").
-		AddInput("problem", dsgo.FieldTypeString, "Problem").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Calculate").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
-				Content: `{"code": "print('2+2=4')", "answer": "4"}`,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
+				Content: `{"code": "print('2+2=4')", "answer": "4", "explanation": "Simple addition"}`,
 			}, nil
 		},
 	}
@@ -196,8 +196,8 @@ func TestProgramOfThought_Forward_WithCodeExecution(t *testing.T) {
 }
 
 func TestProgramOfThought_BuildPrompt_NoOutputFields(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("problem", dsgo.FieldTypeString, "Problem")
+	sig := core.NewSignature("Test").
+		AddInput("problem", core.FieldTypeString, "Problem")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -215,14 +215,14 @@ func TestProgramOfThought_BuildPrompt_NoOutputFields(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_WithCodeExecutionError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("problem", dsgo.FieldTypeString, "Problem").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
-				Content: `{"code": "syntax error!", "answer": "42"}`,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
+				Content: `{"code": "syntax error!", "answer": "42", "explanation": "Test explanation"}`,
 			}, nil
 		},
 	}
@@ -242,16 +242,16 @@ func TestProgramOfThought_Forward_WithCodeExecutionError(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_ForcesJSONMode(t *testing.T) {
-	sig := dsgo.NewSignature("Solve math").
-		AddInput("problem", dsgo.FieldTypeString, "Problem").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Solve math").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
-	var capturedOptions *dsgo.GenerateOptions
+	var capturedOptions *core.GenerateOptions
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			capturedOptions = options
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content: `{"code": "print(2+2)", "explanation": "Add 2+2", "answer": "4"}`,
 			}, nil
 		},
@@ -276,8 +276,8 @@ func TestProgramOfThought_Forward_ForcesJSONMode(t *testing.T) {
 }
 
 func TestProgramOfThought_ExtractTextOutputs_ShortContent(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("code", dsgo.FieldTypeString, "Code")
+	sig := core.NewSignature("Test").
+		AddOutput("code", core.FieldTypeString, "Code")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -289,8 +289,8 @@ func TestProgramOfThought_ExtractTextOutputs_ShortContent(t *testing.T) {
 }
 
 func TestProgramOfThought_ExtractTextOutputs_NoStringFields(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("count", dsgo.FieldTypeInt, "Count")
+	sig := core.NewSignature("Test").
+		AddOutput("count", core.FieldTypeInt, "Count")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -301,9 +301,9 @@ func TestProgramOfThought_ExtractTextOutputs_NoStringFields(t *testing.T) {
 }
 
 func TestProgramOfThought_ExtractTextOutputs_WithLanguageCodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("code", dsgo.FieldTypeString, "Code").
-		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
+	sig := core.NewSignature("Test").
+		AddOutput("code", core.FieldTypeString, "Code").
+		AddOutput("explanation", core.FieldTypeString, "Explanation")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -324,9 +324,9 @@ func TestProgramOfThought_ExtractTextOutputs_WithLanguageCodeBlock(t *testing.T)
 }
 
 func TestProgramOfThought_ExtractTextOutputs_GenericCodeBlock(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("code", dsgo.FieldTypeString, "Code").
-		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
+	sig := core.NewSignature("Test").
+		AddOutput("code", core.FieldTypeString, "Code").
+		AddOutput("explanation", core.FieldTypeString, "Explanation")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -343,9 +343,9 @@ func TestProgramOfThought_ExtractTextOutputs_GenericCodeBlock(t *testing.T) {
 }
 
 func TestProgramOfThought_ExtractTextOutputs_PlainCode(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("code", dsgo.FieldTypeString, "Code").
-		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
+	sig := core.NewSignature("Test").
+		AddOutput("code", core.FieldTypeString, "Code").
+		AddOutput("explanation", core.FieldTypeString, "Explanation")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -367,12 +367,12 @@ func TestProgramOfThought_ExtractTextOutputs_PlainCode(t *testing.T) {
 }
 
 func TestProgramOfThought_FillRequiredStringFields_StandardFields(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("explanation", dsgo.FieldTypeString, "Explanation").
-		AddOutput("result", dsgo.FieldTypeString, "Result").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer").
-		AddOutput("steps", dsgo.FieldTypeString, "Steps").
-		AddOutput("insights", dsgo.FieldTypeString, "Insights")
+	sig := core.NewSignature("Test").
+		AddOutput("explanation", core.FieldTypeString, "Explanation").
+		AddOutput("result", core.FieldTypeString, "Result").
+		AddOutput("answer", core.FieldTypeString, "Answer").
+		AddOutput("steps", core.FieldTypeString, "Steps").
+		AddOutput("insights", core.FieldTypeString, "Insights")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -389,8 +389,8 @@ func TestProgramOfThought_FillRequiredStringFields_StandardFields(t *testing.T) 
 }
 
 func TestProgramOfThought_FillRequiredStringFields_CustomField(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("custom_field", dsgo.FieldTypeString, "Custom")
+	sig := core.NewSignature("Test").
+		AddOutput("custom_field", core.FieldTypeString, "Custom")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -403,8 +403,8 @@ func TestProgramOfThought_FillRequiredStringFields_CustomField(t *testing.T) {
 }
 
 func TestProgramOfThought_FillRequiredStringFields_SkipsOptional(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOptionalOutput("optional_field", dsgo.FieldTypeString, "Optional")
+	sig := core.NewSignature("Test").
+		AddOptionalOutput("optional_field", core.FieldTypeString, "Optional")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -418,8 +418,8 @@ func TestProgramOfThought_FillRequiredStringFields_SkipsOptional(t *testing.T) {
 }
 
 func TestProgramOfThought_FillRequiredStringFields_SkipsExisting(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -436,9 +436,9 @@ func TestProgramOfThought_FillRequiredStringFields_SkipsExisting(t *testing.T) {
 
 // TestProgramOfThought_FinishReasonHandling tests finish_reason scenarios
 func TestProgramOfThought_FinishReasonHandling(t *testing.T) {
-	sig := dsgo.NewSignature("Test signature").
-		AddOutput("code", dsgo.FieldTypeString, "Code").
-		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
+	sig := core.NewSignature("Test signature").
+		AddOutput("code", core.FieldTypeString, "Code").
+		AddOutput("explanation", core.FieldTypeString, "Explanation")
 
 	tests := []struct {
 		name          string
@@ -472,11 +472,11 @@ func TestProgramOfThought_FinishReasonHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockLM := &MockLM{
-				GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-					return &dsgo.GenerateResult{
+				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+					return &core.GenerateResult{
 						Content:      tt.content,
 						FinishReason: tt.finishReason,
-						Usage:        dsgo.Usage{TotalTokens: 10},
+						Usage:        core.Usage{TotalTokens: 10},
 					}, nil
 				},
 			}

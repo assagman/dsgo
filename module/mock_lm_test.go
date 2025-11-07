@@ -3,21 +3,21 @@ package module
 import (
 	"context"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 type MockLM struct {
-	GenerateFunc     func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error)
+	GenerateFunc     func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error)
 	NameValue        string
 	SupportsJSONVal  bool
 	SupportsToolsVal bool
 }
 
-func (m *MockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+func (m *MockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	if m.GenerateFunc != nil {
 		return m.GenerateFunc(ctx, messages, options)
 	}
-	return &dsgo.GenerateResult{Content: "{}"}, nil
+	return &core.GenerateResult{Content: "{}"}, nil
 }
 
 func (m *MockLM) Name() string {
@@ -35,8 +35,8 @@ func (m *MockLM) SupportsTools() bool {
 	return m.SupportsToolsVal
 }
 
-func (m *MockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
-	chunkChan := make(chan dsgo.Chunk, 1)
+func (m *MockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+	chunkChan := make(chan core.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -51,7 +51,7 @@ func (m *MockLM) Stream(ctx context.Context, messages []dsgo.Message, options *d
 		}
 
 		// Send content as a single chunk
-		chunkChan <- dsgo.Chunk{
+		chunkChan <- core.Chunk{
 			Content:      result.Content,
 			FinishReason: result.FinishReason,
 			Usage:        result.Usage,

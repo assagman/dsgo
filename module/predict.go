@@ -3,64 +3,65 @@ package module
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 	"github.com/assagman/dsgo/logging"
 )
 
 // Predict is the basic prediction module
 type Predict struct {
-	Signature *dsgo.Signature
-	LM        dsgo.LM
-	Options   *dsgo.GenerateOptions
-	Adapter   dsgo.Adapter
-	History   *dsgo.History  // Optional conversation history
-	Demos     []dsgo.Example // Optional few-shot examples
+	Signature *core.Signature
+	LM        core.LM
+	Options   *core.GenerateOptions
+	Adapter   core.Adapter
+	History   *core.History  // Optional conversation history
+	Demos     []core.Example // Optional few-shot examples
 }
 
 // NewPredict creates a new Predict module
-func NewPredict(signature *dsgo.Signature, lm dsgo.LM) *Predict {
+func NewPredict(signature *core.Signature, lm core.LM) *Predict {
 	return &Predict{
 		Signature: signature,
 		LM:        lm,
-		Options:   dsgo.DefaultGenerateOptions(),
-		Adapter:   dsgo.NewFallbackAdapter(), // Use fallback adapter for robustness
+		Options:   core.DefaultGenerateOptions(),
+		Adapter:   core.NewFallbackAdapter(), // Use fallback adapter for robustness
 	}
 }
 
 // WithOptions sets custom generation options
-func (p *Predict) WithOptions(options *dsgo.GenerateOptions) *Predict {
+func (p *Predict) WithOptions(options *core.GenerateOptions) *Predict {
 	p.Options = options
 	return p
 }
 
 // WithAdapter sets a custom adapter
-func (p *Predict) WithAdapter(adapter dsgo.Adapter) *Predict {
+func (p *Predict) WithAdapter(adapter core.Adapter) *Predict {
 	p.Adapter = adapter
 	return p
 }
 
 // WithHistory sets conversation history for multi-turn interactions
-func (p *Predict) WithHistory(history *dsgo.History) *Predict {
+func (p *Predict) WithHistory(history *core.History) *Predict {
 	p.History = history
 	return p
 }
 
 // WithDemos sets few-shot examples for in-context learning
-func (p *Predict) WithDemos(demos []dsgo.Example) *Predict {
+func (p *Predict) WithDemos(demos []core.Example) *Predict {
 	p.Demos = demos
 	return p
 }
 
 // GetSignature returns the module's signature
-func (p *Predict) GetSignature() *dsgo.Signature {
+func (p *Predict) GetSignature() *core.Signature {
 	return p.Signature
 }
 
 // Forward executes the prediction
-func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	// Ensure context has a request ID
 	ctx = logging.EnsureRequestID(ctx)
 
@@ -85,7 +86,7 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 	}
 
 	// Build final message list
-	var messages []dsgo.Message
+	var messages []core.Message
 
 	// Prepend history if available
 	if p.History != nil && !p.History.IsEmpty() {
@@ -100,7 +101,7 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 	options := p.Options.Copy()
 	// Only force JSON mode for JSONAdapter (not ChatAdapter or FallbackAdapter)
 	if p.LM.SupportsJSON() {
-		if _, isJSON := p.Adapter.(*dsgo.JSONAdapter); isJSON {
+		if _, isJSON := p.Adapter.(*core.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
@@ -155,17 +156,17 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 		}
 
 		// Add assistant response
-		p.History.Add(dsgo.Message{
+		p.History.Add(core.Message{
 			Role:    "assistant",
 			Content: result.Content,
 		})
 	}
 
 	// Extract adapter metadata
-	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+	adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
 	// Build Prediction object
-	prediction := dsgo.NewPrediction(outputs).
+	prediction := core.NewPrediction(outputs).
 		WithUsage(result.Usage).
 		WithModuleName("Predict").
 		WithInputs(inputs)
@@ -180,8 +181,8 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 
 // StreamResult represents the result of a streaming prediction
 type StreamResult struct {
-	Chunks     <-chan dsgo.Chunk       // Channel for receiving streaming chunks
-	Prediction <-chan *dsgo.Prediction // Channel for receiving final prediction (sent after stream completes)
+	Chunks     <-chan core.Chunk       // Channel for receiving streaming chunks
+	Prediction <-chan *core.Prediction // Channel for receiving final prediction (sent after stream completes)
 	Errors     <-chan error            // Channel for receiving errors
 }
 
@@ -209,7 +210,7 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 	}
 
 	// Build final message list
-	var messages []dsgo.Message
+	var messages []core.Message
 
 	// Prepend history if available
 	if p.History != nil && !p.History.IsEmpty() {
@@ -224,7 +225,7 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 	options := p.Options.Copy()
 	// Only force JSON mode for JSONAdapter (not ChatAdapter or FallbackAdapter)
 	if p.LM.SupportsJSON() {
-		if _, isJSON := p.Adapter.(*dsgo.JSONAdapter); isJSON {
+		if _, isJSON := p.Adapter.(*core.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
@@ -237,8 +238,8 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 	chunkChan, errChan := p.LM.Stream(ctx, messages, options)
 
 	// Create result channels
-	outputChunks := make(chan dsgo.Chunk)
-	predictionChan := make(chan *dsgo.Prediction, 1)
+	outputChunks := make(chan core.Chunk)
+	predictionChan := make(chan *core.Prediction, 1)
 	errorChan := make(chan error, 1)
 
 	// Start goroutine to handle streaming and final parsing
@@ -253,25 +254,46 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		}()
 
 		// Use StreamingBuffer for automatic recovery
-		streamBuffer := dsgo.NewStreamingBuffer()
-		var finalUsage dsgo.Usage
+		streamBuffer := core.NewStreamingBuffer()
+		markerFilter := core.NewStreamingMarkerFilter()
+		var finalUsage core.Usage
 
 		// Forward chunks and accumulate content
 		for chunk := range chunkChan {
-			// Forward chunk to caller
-			outputChunks <- chunk
-
-			// Call user callback if provided
-			if options.StreamCallback != nil {
-				options.StreamCallback(chunk)
+			// Strip field markers from chunk content for clean user-facing output
+			// Markers are internal DSGo artifacts and should not leak through public API
+			// Set DSGO_DEBUG_MARKERS=1 to see raw output with markers (for debugging)
+			cleanChunk := chunk
+			if os.Getenv("DSGO_DEBUG_MARKERS") != "1" {
+				cleanChunk.Content = markerFilter.ProcessChunk(chunk.Content)
 			}
 
-			// Accumulate content with streaming buffer
+			// Forward clean chunk to caller
+			outputChunks <- cleanChunk
+
+			// Call user callback if provided (with clean chunk)
+			if options.StreamCallback != nil {
+				options.StreamCallback(cleanChunk)
+			}
+
+			// Accumulate original content with streaming buffer (for parsing)
 			streamBuffer.Write(chunk.Content)
 
 			// Capture final metadata
 			if chunk.Usage.TotalTokens > 0 {
 				finalUsage = chunk.Usage
+			}
+		}
+
+		// Flush any remaining marker filter buffer
+		if os.Getenv("DSGO_DEBUG_MARKERS") != "1" {
+			remaining := markerFilter.Flush()
+			if remaining != "" {
+				flushChunk := core.Chunk{Content: remaining}
+				outputChunks <- flushChunk
+				if options.StreamCallback != nil {
+					options.StreamCallback(flushChunk)
+				}
 			}
 		}
 
@@ -320,17 +342,17 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 			}
 
 			// Add assistant response
-			p.History.Add(dsgo.Message{
+			p.History.Add(core.Message{
 				Role:    "assistant",
 				Content: content,
 			})
 		}
 
 		// Extract adapter metadata
-		adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+		adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
 		// Build Prediction object
-		prediction := dsgo.NewPrediction(outputs).
+		prediction := core.NewPrediction(outputs).
 			WithUsage(finalUsage).
 			WithModuleName("Predict").
 			WithInputs(inputs)

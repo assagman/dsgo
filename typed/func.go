@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 	"github.com/assagman/dsgo/module"
 )
 
 // Func is a generic, type-safe module wrapper for DSGo modules
 // I is the input struct type, O is the output struct type
 type Func[I, O any] struct {
-	module      dsgo.Module
+	module      core.Module
 	inputType   reflect.Type
 	outputType  reflect.Type
 	description string
@@ -20,7 +20,7 @@ type Func[I, O any] struct {
 
 // NewPredict creates a new typed function module using Predict
 // The I and O types must be structs with dsgo tags
-func NewPredict[I, O any](lm dsgo.LM) (*Func[I, O], error) {
+func NewPredict[I, O any](lm core.LM) (*Func[I, O], error) {
 	sig, inputType, outputType, err := buildTypedSignature[I, O]()
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func NewPredict[I, O any](lm dsgo.LM) (*Func[I, O], error) {
 
 // NewCoT creates a new typed function module using ChainOfThought
 // The I and O types must be structs with dsgo tags
-func NewCoT[I, O any](lm dsgo.LM) (*Func[I, O], error) {
+func NewCoT[I, O any](lm core.LM) (*Func[I, O], error) {
 	sig, inputType, outputType, err := buildTypedSignature[I, O]()
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func NewCoT[I, O any](lm dsgo.LM) (*Func[I, O], error) {
 
 // NewReAct creates a new typed function module using ReAct
 // The I and O types must be structs with dsgo tags
-func NewReAct[I, O any](lm dsgo.LM, tools []dsgo.Tool) (*Func[I, O], error) {
+func NewReAct[I, O any](lm core.LM, tools []core.Tool) (*Func[I, O], error) {
 	sig, inputType, outputType, err := buildTypedSignature[I, O]()
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func NewReAct[I, O any](lm dsgo.LM, tools []dsgo.Tool) (*Func[I, O], error) {
 }
 
 // buildTypedSignature is a helper to build signature and extract types
-func buildTypedSignature[I, O any]() (*dsgo.Signature, reflect.Type, reflect.Type, error) {
+func buildTypedSignature[I, O any]() (*core.Signature, reflect.Type, reflect.Type, error) {
 	var i I
 	var o O
 
@@ -101,7 +101,7 @@ func buildTypedSignature[I, O any]() (*dsgo.Signature, reflect.Type, reflect.Typ
 }
 
 // NewPredictWithDescription creates a typed Predict function with a custom description
-func NewPredictWithDescription[I, O any](lm dsgo.LM, description string) (*Func[I, O], error) {
+func NewPredictWithDescription[I, O any](lm core.LM, description string) (*Func[I, O], error) {
 	fn, err := NewPredict[I, O](lm)
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func NewPredictWithDescription[I, O any](lm dsgo.LM, description string) (*Func[
 }
 
 // buildCombinedSignature builds a signature by combining input and output struct tags
-func buildCombinedSignature(inputType, outputType reflect.Type) (*dsgo.Signature, error) {
+func buildCombinedSignature(inputType, outputType reflect.Type) (*core.Signature, error) {
 	// Parse input fields
 	inputFields, err := ParseStructTags(inputType)
 	if err != nil {
@@ -125,12 +125,12 @@ func buildCombinedSignature(inputType, outputType reflect.Type) (*dsgo.Signature
 		return nil, fmt.Errorf("failed to parse output type: %w", err)
 	}
 
-	sig := dsgo.NewSignature("")
+	sig := core.NewSignature("")
 
 	// Add input fields (only those marked as input)
 	for _, field := range inputFields {
 		if field.IsInput {
-			sig.InputFields = append(sig.InputFields, dsgo.Field{
+			sig.InputFields = append(sig.InputFields, core.Field{
 				Name:         field.Name,
 				Type:         field.Type,
 				Description:  field.Description,
@@ -144,7 +144,7 @@ func buildCombinedSignature(inputType, outputType reflect.Type) (*dsgo.Signature
 	// Add output fields (only those marked as output)
 	for _, field := range outputFields {
 		if field.IsOutput {
-			sig.OutputFields = append(sig.OutputFields, dsgo.Field{
+			sig.OutputFields = append(sig.OutputFields, core.Field{
 				Name:         field.Name,
 				Type:         field.Type,
 				Description:  field.Description,
@@ -184,7 +184,7 @@ func (f *Func[I, O]) Run(ctx context.Context, input I) (O, error) {
 }
 
 // RunWithPrediction executes and returns both the typed output and raw prediction
-func (f *Func[I, O]) RunWithPrediction(ctx context.Context, input I) (O, *dsgo.Prediction, error) {
+func (f *Func[I, O]) RunWithPrediction(ctx context.Context, input I) (O, *core.Prediction, error) {
 	var zero O
 
 	// Convert input struct to map
@@ -210,7 +210,7 @@ func (f *Func[I, O]) RunWithPrediction(ctx context.Context, input I) (O, *dsgo.P
 
 // WithOptions sets custom generation options
 // Works with all module types (Predict, ChainOfThought, ReAct, etc.)
-func (f *Func[I, O]) WithOptions(options *dsgo.GenerateOptions) *Func[I, O] {
+func (f *Func[I, O]) WithOptions(options *core.GenerateOptions) *Func[I, O] {
 	switch m := f.module.(type) {
 	case *module.Predict:
 		m.WithOptions(options)
@@ -224,7 +224,7 @@ func (f *Func[I, O]) WithOptions(options *dsgo.GenerateOptions) *Func[I, O] {
 
 // WithAdapter sets a custom adapter
 // Works with all module types (Predict, ChainOfThought, ReAct, etc.)
-func (f *Func[I, O]) WithAdapter(adapter dsgo.Adapter) *Func[I, O] {
+func (f *Func[I, O]) WithAdapter(adapter core.Adapter) *Func[I, O] {
 	switch m := f.module.(type) {
 	case *module.Predict:
 		m.WithAdapter(adapter)
@@ -238,7 +238,7 @@ func (f *Func[I, O]) WithAdapter(adapter dsgo.Adapter) *Func[I, O] {
 
 // WithHistory sets conversation history
 // Works with all module types (Predict, ChainOfThought, ReAct, etc.)
-func (f *Func[I, O]) WithHistory(history *dsgo.History) *Func[I, O] {
+func (f *Func[I, O]) WithHistory(history *core.History) *Func[I, O] {
 	switch m := f.module.(type) {
 	case *module.Predict:
 		m.WithHistory(history)
@@ -252,7 +252,7 @@ func (f *Func[I, O]) WithHistory(history *dsgo.History) *Func[I, O] {
 
 // WithDemos sets few-shot examples (using map-based examples)
 // Works with all module types (Predict, ChainOfThought, ReAct, etc.)
-func (f *Func[I, O]) WithDemos(demos []dsgo.Example) *Func[I, O] {
+func (f *Func[I, O]) WithDemos(demos []core.Example) *Func[I, O] {
 	switch m := f.module.(type) {
 	case *module.Predict:
 		m.WithDemos(demos)
@@ -288,7 +288,7 @@ func (f *Func[I, O]) WithDemosTyped(inputs []I, outputs []O) (*Func[I, O], error
 		return nil, fmt.Errorf("inputs and outputs must have the same length")
 	}
 
-	demos := make([]dsgo.Example, len(inputs))
+	demos := make([]core.Example, len(inputs))
 	for i := range inputs {
 		inputMap, err := StructToMap(inputs[i])
 		if err != nil {
@@ -298,7 +298,7 @@ func (f *Func[I, O]) WithDemosTyped(inputs []I, outputs []O) (*Func[I, O], error
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert output %d: %w", i, err)
 		}
-		demos[i] = dsgo.Example{
+		demos[i] = core.Example{
 			Inputs:  inputMap,
 			Outputs: outputMap,
 		}
@@ -311,11 +311,11 @@ func (f *Func[I, O]) WithDemosTyped(inputs []I, outputs []O) (*Func[I, O], error
 }
 
 // GetSignature returns the underlying signature
-func (f *Func[I, O]) GetSignature() *dsgo.Signature {
+func (f *Func[I, O]) GetSignature() *core.Signature {
 	return f.module.GetSignature()
 }
 
 // Forward implements the Module interface for compatibility
-func (f *Func[I, O]) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (f *Func[I, O]) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	return f.module.Forward(ctx, inputs)
 }

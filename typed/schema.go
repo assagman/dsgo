@@ -4,20 +4,20 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // StructToSignature converts a struct type with dsgo tags to a Signature
-func StructToSignature(structType reflect.Type, description string) (*dsgo.Signature, error) {
+func StructToSignature(structType reflect.Type, description string) (*core.Signature, error) {
 	fields, err := ParseStructTags(structType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse struct tags: %w", err)
 	}
 
-	sig := dsgo.NewSignature(description)
+	sig := core.NewSignature(description)
 
 	for _, field := range fields {
-		f := dsgo.Field{
+		f := core.Field{
 			Name:         field.Name,
 			Type:         field.Type,
 			Description:  field.Description,

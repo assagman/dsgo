@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,131 +19,107 @@ import (
 	"time"
 )
 
-// ANSI color codes
-const (
-	colorReset  = "\033[0m"
-	colorRed    = "\033[31m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorBlue   = "\033[34m"
-	colorPurple = "\033[35m"
-	colorCyan   = "\033[36m"
-	colorGray   = "\033[90m"
-	colorBold   = "\033[1m"
+// Demonstrates: Comprehensive test matrix for all examples across multiple models
+// Story: Automated testing with circuit breaker, parallel execution, and detailed error reporting
+
+// ANSI colors
+var (
+	cReset  = "\033[0m"
+	cRed    = "\033[31m"
+	cGreen  = "\033[32m"
+	cYellow = "\033[33m"
+	cCyan   = "\033[36m"
+	cGray   = "\033[90m"
+	cBold   = "\033[1m"
 )
 
-type TestResult struct {
-	Example     string
-	Model       string
-	Success     bool
-	Error       error
-	Stdout      string
-	Stderr      string
-	Combined    string
-	Duration    time.Duration
-	ExitCode    int
-	Signal      string
-	ErrorType   string
-	ErrorDetail string
-	HTTPStatus  int
-	StackTrace  string
-	StartTime   time.Time
-	EndTime     time.Time
-	ArtifactDir string
-	Cancelled   bool
+type testResult struct {
+	example   string
+	model     string
+	success   bool
+	exitCode  int
+	signal    string
+	errorType string
+	errorMsg  string
+	httpCode  int
+	duration  time.Duration
+	cancelled bool
+	artifact  string
+	stdout    string
+	stderr    string
 }
 
-type TestArtifact struct {
-	Example     string    `json:"example"`
-	Model       string    `json:"model"`
-	Success     bool      `json:"success"`
-	ExitCode    int       `json:"exit_code"`
-	Signal      string    `json:"signal,omitempty"`
-	ErrorType   string    `json:"error_type,omitempty"`
-	ErrorDetail string    `json:"error_detail,omitempty"`
-	HTTPStatus  int       `json:"http_status,omitempty"`
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
-	Duration    string    `json:"duration"`
-	Cancelled   bool      `json:"cancelled"`
+type artifact struct {
+	Example   string `json:"example"`
+	Model     string `json:"model"`
+	Success   bool   `json:"success"`
+	ExitCode  int    `json:"exit_code"`
+	Signal    string `json:"signal,omitempty"`
+	ErrorType string `json:"error_type,omitempty"`
+	ErrorMsg  string `json:"error_msg,omitempty"`
+	HTTPCode  int    `json:"http_code,omitempty"`
+	Duration  string `json:"duration"`
+	Cancelled bool   `json:"cancelled"`
 }
 
-type ModelStats struct {
-	Model   string
-	Total   int
-	Passed  int
-	Failed  int
-	Results []TestResult
+type modelStats struct {
+	model  string
+	total  int
+	passed int
+	failed int
 }
 
-type CircuitBreaker struct {
-	ctx              context.Context
-	cancel           context.CancelFunc
-	totalTests       int
-	totalFailed      int64
-	overallThreshold float64
-	mu               sync.Mutex
-	tripped          bool
-	tripReason       string
+type breaker struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	total   int
+	failed  int64
+	limit   float64
+	mu      sync.Mutex
+	tripped bool
+	reason  string
 }
 
-func newCircuitBreaker(totalTests int) *CircuitBreaker {
+func newBreaker(total int) *breaker {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &CircuitBreaker{
-		ctx:              ctx,
-		cancel:           cancel,
-		totalTests:       totalTests,
-		overallThreshold: 0.15, // 15% max failure rate
-	}
+	return &breaker{ctx: ctx, cancel: cancel, total: total, limit: 0.15}
 }
 
-func (cb *CircuitBreaker) recordResult(result TestResult) {
-	if result.Success || result.Cancelled {
+func (b *breaker) record(r testResult) {
+	if r.success || r.cancelled {
 		return
 	}
-
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-
-	if cb.tripped {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.tripped {
 		return
 	}
-
-	atomic.AddInt64(&cb.totalFailed, 1)
-	totalFailed := atomic.LoadInt64(&cb.totalFailed)
-	maxTotalFailures := int64(float64(cb.totalTests) * cb.overallThreshold)
-
-	if totalFailed > maxTotalFailures {
-		reason := fmt.Sprintf("%.1f%% failure rate exceeds %.1f%% threshold (%d/%d failed)",
-			float64(totalFailed)/float64(cb.totalTests)*100,
-			cb.overallThreshold*100,
-			totalFailed,
-			cb.totalTests)
-		cb.trip(reason)
+	atomic.AddInt64(&b.failed, 1)
+	failed := atomic.LoadInt64(&b.failed)
+	max := int64(float64(b.total) * b.limit)
+	if failed > max {
+		b.trip(fmt.Sprintf("%.1f%% failure rate exceeds %.1f%% (%d/%d)",
+			float64(failed)/float64(b.total)*100, b.limit*100, failed, b.total))
 	}
 }
 
-func (cb *CircuitBreaker) trip(reason string) {
-	if cb.tripped {
+func (b *breaker) trip(reason string) {
+	if b.tripped {
 		return
 	}
-
-	cb.tripped = true
-	cb.tripReason = reason
-	fmt.Fprintf(os.Stderr, "\n%s🚨 CIRCUIT BREAKER TRIPPED 🚨%s\n", colorRed+colorBold, colorReset)
-	fmt.Fprintf(os.Stderr, "%sReason: %s%s\n\n", colorRed, reason, colorReset)
-
-	// Immediately cancel all running tests
-	cb.cancel()
+	b.tripped = true
+	b.reason = reason
+	fmt.Fprintf(os.Stderr, "\n%s🚨 CIRCUIT BREAKER%s\n%s%s%s\n\n", cRed+cBold, cReset, cRed, reason, cReset)
+	b.cancel()
 }
 
-func (cb *CircuitBreaker) isTripped() bool {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	return cb.tripped
+func (b *breaker) isTripped() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.tripped
 }
 
-// All supported models
+// Available models
 var allModels = []string{
 	"openrouter/google/gemini-2.5-flash",
 	"openrouter/google/gemini-2.5-pro",
@@ -159,51 +134,28 @@ var allModels = []string{
 	"openrouter/meta-llama/llama-3.3-70b-instruct",
 }
 
-// All numbered examples
+// Test examples
 var allExamples = []string{
-	"examples/001_predict",
-	"examples/002_chain_of_thought",
-	"examples/003_react",
-	"examples/004_refine",
-	"examples/005_best_of_n",
-	"examples/006_program_of_thought",
-	"examples/007_program_composition",
-	"examples/008_chat_predict",
-	"examples/009_chat_cot",
-	"examples/010_typed_signatures",
-	"examples/011_history_prediction",
-	"examples/012_math_solver",
-	"examples/013_sentiment",
-	"examples/014_adapter_fallback",
-	"examples/015_fewshot",
-	"examples/016_history",
-	"examples/017_tools",
-	"examples/018_adapters",
-	"examples/019_retry_resilience",
-	"examples/020_streaming",
-	"examples/021_best_of_n_parallel",
-	"examples/022_caching",
-	"examples/023_global_config",
-	"examples/024_lm_factory",
-	"examples/025_logging_tracing",
-	"examples/026_observability",
-	"examples/027_research_assistant",
-	"examples/028_code_reviewer",
+	"examples/01-hello-chat",
+	"examples/02-agent-tools-react",
+	"examples/03-quality-refine-bestof",
+	"examples/04-structured-programs",
+	"examples/05-resilience-observability",
 }
 
 func main() {
 	numModels := flag.Int("n", 1, "Number of models: 1=default, N=random N, 0=all")
-	verbose := flag.Bool("v", false, "Verbose output (show each test)")
-	timeout := flag.Duration("timeout", 20*time.Minute, "Total timeout for all tests (hard stop)")
-	maxConcurrent := flag.Int("c", 20, "Max concurrent executions (use 1 for sequential)")
-	noColor := flag.Bool("no-color", false, "Disable colored output")
+	verbose := flag.Bool("v", false, "Verbose output")
+	timeout := flag.Duration("timeout", 20*time.Minute, "Total timeout")
+	maxConcurrent := flag.Int("c", 20, "Max concurrent tests")
+	noColor := flag.Bool("no-color", false, "Disable colors")
 	flag.Parse()
 
 	if *noColor {
-		disableColors()
+		cReset, cRed, cGreen, cYellow, cCyan, cGray, cBold = "", "", "", "", "", "", ""
 	}
 
-	projectRoot, err := os.Getwd()
+	root, err := os.Getwd()
 	if err != nil {
 		fatal("Failed to get working directory: %v", err)
 	}
@@ -218,117 +170,99 @@ func main() {
 		selectedModels = []string{getDefaultModel()}
 		printHeader("Testing Default Model", 1)
 	default:
-		selectedModels = selectRandomModels(allModels, *numModels)
+		selectedModels = selectRandom(allModels, *numModels)
 		printHeader(fmt.Sprintf("Testing %d Random Models", *numModels), *numModels)
 	}
 
-	printInfo("Examples", fmt.Sprintf("%d", len(allExamples)))
-	printInfo("Total Tests", fmt.Sprintf("%d", len(selectedModels)*len(allExamples)))
-	printInfo("Max Concurrent", fmt.Sprintf("%d", *maxConcurrent))
-	printInfo("Timeout", timeout.String()+" (total, hard stop)")
+	totalTests := len(selectedModels) * len(allExamples)
+	printInfo("Examples", len(allExamples))
+	printInfo("Total Tests", totalTests)
+	printInfo("Max Concurrent", *maxConcurrent)
+	printInfo("Timeout", timeout.String())
 	fmt.Println()
 
-	// Print all selected models
-	fmt.Printf("%sModels:%s\n", colorBold, colorReset)
-	for i, model := range selectedModels {
-		fmt.Printf("  %d. %s\n", i+1, formatModelName(model))
+	// Print models
+	fmt.Printf("%sModels:%s\n", cBold, cReset)
+	for i, m := range selectedModels {
+		fmt.Printf("  %d. %s\n", i+1, shortModel(m))
 	}
 	fmt.Println()
 
-	startTime := time.Now()
+	start := time.Now()
 
-	// Create circuit breaker with total timeout
-	totalTests := len(selectedModels) * len(allExamples)
-	cb := newCircuitBreaker(totalTests)
+	// Circuit breaker with timeout
+	cb := newBreaker(totalTests)
+	timeoutCtx, cancel := context.WithTimeout(cb.ctx, *timeout)
+	defer cancel()
 
-	// Add total timeout wrapper
-	totalTimeoutCtx, totalTimeoutCancel := context.WithTimeout(cb.ctx, *timeout)
-	defer totalTimeoutCancel()
-
-	// Monitor total timeout
 	go func() {
-		<-totalTimeoutCtx.Done()
-		if totalTimeoutCtx.Err() == context.DeadlineExceeded {
-			cb.trip(fmt.Sprintf("Total timeout of %v exceeded - hard stop all tests", *timeout))
+		<-timeoutCtx.Done()
+		if timeoutCtx.Err() == context.DeadlineExceeded {
+			cb.trip(fmt.Sprintf("Total timeout %v exceeded", *timeout))
 		}
 	}()
 
-	// Run tests (individual test timeout is 10 minutes)
-	perTestTimeout := 10 * time.Minute
-	results := runParallel(cb, projectRoot, selectedModels, allExamples, perTestTimeout, *verbose, *maxConcurrent)
-
-	duration := time.Since(startTime)
+	// Run tests
+	results := runTests(cb, root, selectedModels, allExamples, 10*time.Minute, *verbose, *maxConcurrent)
 
 	// Print results
-	printResults(results, selectedModels, duration, cb.isTripped())
+	printResults(results, selectedModels, time.Since(start), cb.isTripped())
 
-	// Generate error summary
-	failedResults := getFailedResults(results)
-	if len(failedResults) > 0 {
-		if err := saveErrorSummary(failedResults); err != nil {
-			printWarning("Failed to save error summary: %v", err)
-		} else {
-			fmt.Printf("\n%s📊 Error summary saved to: %stest_matrix_logs/ERROR_SUMMARY.md%s\n",
-				colorCyan, colorBold, colorReset)
+	// Save error summary
+	if failed := getFailed(results); len(failed) > 0 {
+		if err := saveErrors(failed); err == nil {
+			fmt.Printf("\n%s📊 Error summary: %stest_matrix_logs/ERROR_SUMMARY.md%s\n", cCyan, cBold, cReset)
 		}
 	}
 
-	// Exit with appropriate code
+	// Exit
 	if cb.isTripped() {
 		os.Exit(2)
 	}
-
-	passed := countPassed(results)
-	if passed < len(results)-countCancelled(results) {
+	if countPassed(results) < len(results)-countCancelled(results) {
 		os.Exit(1)
 	}
 }
 
-func runParallel(cb *CircuitBreaker, projectRoot string, models, examples []string, timeout time.Duration, verbose bool, maxConcurrent int) []TestResult {
-	var results []TestResult
+func runTests(cb *breaker, root string, models, examples []string, timeout time.Duration, verbose bool, maxC int) []testResult {
+	var results []testResult
 	var mu sync.Mutex
 
 	type job struct {
-		model   string
-		example string
+		model, example string
 	}
 
 	jobs := make(chan job, len(models)*len(examples))
-	resultsCh := make(chan TestResult, maxConcurrent)
-
-	totalTests := int64(len(models) * len(examples))
+	resultsCh := make(chan testResult, maxC)
+	total := int64(len(models) * len(examples))
 	completed := int64(0)
-	running := int64(0)
 
 	// Collector
-	var collectorWg sync.WaitGroup
-	collectorWg.Add(1)
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		defer collectorWg.Done()
-		for result := range resultsCh {
+		defer wg.Done()
+		for r := range resultsCh {
 			mu.Lock()
-			results = append(results, result)
+			results = append(results, r)
 			mu.Unlock()
-
-			cb.recordResult(result)
+			cb.record(r)
 			current := atomic.AddInt64(&completed, 1)
-			atomic.AddInt64(&running, -1)
-
-			printTestResult(result, current, totalTests)
+			printTestResult(r, current, total)
 		}
 	}()
 
-	// Enqueue jobs - iterate examples first, then models
-	for _, example := range examples {
-		for _, model := range models {
-			jobs <- job{model: model, example: example}
+	// Enqueue
+	for _, ex := range examples {
+		for _, m := range models {
+			jobs <- job{m, ex}
 		}
 	}
 	close(jobs)
 
-	// Worker pool
+	// Workers
 	var workerWg sync.WaitGroup
-	for i := 0; i < maxConcurrent; i++ {
+	for i := 0; i < maxC; i++ {
 		workerWg.Add(1)
 		go func() {
 			defer workerWg.Done()
@@ -340,9 +274,7 @@ func runParallel(cb *CircuitBreaker, projectRoot string, models, examples []stri
 					if !ok {
 						return
 					}
-					atomic.AddInt64(&running, 1)
-					result := runTest(cb.ctx, projectRoot, j.example, j.model, timeout)
-					resultsCh <- result
+					resultsCh <- runTest(cb.ctx, root, j.example, j.model, timeout)
 				}
 			}
 		}()
@@ -350,357 +282,179 @@ func runParallel(cb *CircuitBreaker, projectRoot string, models, examples []stri
 
 	workerWg.Wait()
 	close(resultsCh)
-	collectorWg.Wait()
-
+	wg.Wait()
 	return results
 }
 
-func runTest(ctx context.Context, projectRoot, examplePath, model string, timeout time.Duration) TestResult {
-	startTime := time.Now()
-	result := TestResult{
-		Example:   filepath.Base(examplePath),
-		Model:     model,
-		StartTime: startTime,
-	}
+func runTest(ctx context.Context, root, exPath, model string, timeout time.Duration) testResult {
+	start := time.Now()
+	exName := filepath.Base(exPath)
 
-	// Create test context with timeout
+	// Create artifact dir
+	ts := start.Format("20060102_150405")
+	artifactDir := filepath.Join("test_matrix_logs", ts, sanitize(shortModel(model)), exName)
+	_ = os.MkdirAll(artifactDir, 0755)
+
+	// Test context
 	testCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Build command
-	mainPath := filepath.Join(examplePath, "main.go")
-	cmd := exec.CommandContext(testCtx, "go", "run", mainPath)
-	cmd.Dir = projectRoot
+	cmd := exec.CommandContext(testCtx, "go", "run", filepath.Join(exPath, "main.go"))
+	cmd.Dir = root
 
-	// Set environment
+	// Environment
 	env := os.Environ()
-	env = append(env, "EXAMPLES_DEFAULT_MODEL="+model)
-	// Always enable debug mode for maximum verbosity in artifacts
-	env = append(env, "DSGO_DEBUG_PARSE=1")
+	env = append(env,
+		"EXAMPLES_DEFAULT_MODEL="+model,
+		"DSGO_DEBUG_PARSE=1",
+		"DSGO_SAVE_RAW_RESPONSES=true",
+		"DSGO_ARTIFACT_DIR="+artifactDir,
+	)
 	cmd.Env = env
 
-	// Setup process group for clean killing
 	setupProcessGroup(cmd)
 
 	// Capture output
-	var stdoutBuf, stderrBuf strings.Builder
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	// Start command
+	// Run
+	result := testResult{
+		example:  exName,
+		model:    model,
+		artifact: artifactDir,
+		duration: 0,
+	}
+
 	err := cmd.Start()
 	if err != nil {
-		result.EndTime = time.Now()
-		result.Duration = result.EndTime.Sub(result.StartTime)
-		result.Error = fmt.Errorf("failed to start: %w", err)
-		result.ErrorType = "START_FAILURE"
-		result.ErrorDetail = err.Error()
+		result.duration = time.Since(start)
+		result.errorType = "START_FAILURE"
+		result.errorMsg = err.Error()
 		return result
 	}
 
-	// Monitor for cancellation to kill process group immediately
 	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
+	go func() { done <- cmd.Wait() }()
 
 	select {
 	case <-testCtx.Done():
-		// Kill process group immediately
 		killProcessGroup(cmd)
-		<-done // Wait for Wait() to finish
+		<-done
+		result.stdout = stdout.String()
+		result.stderr = stderr.String()
+		result.duration = time.Since(start)
 
-		result.EndTime = time.Now()
-		result.Duration = result.EndTime.Sub(result.StartTime)
-		result.Stdout = stdoutBuf.String()
-		result.Stderr = stderrBuf.String()
-		result.Combined = result.Stdout + "\n" + result.Stderr
-
-		// Check if parent context was cancelled (circuit breaker)
 		if ctx.Err() == context.Canceled {
-			result.Cancelled = true
-			result.ErrorType = "CIRCUIT_BREAKER_CANCEL"
-			result.ErrorDetail = "Test cancelled by circuit breaker"
+			result.cancelled = true
+			result.errorType = "CIRCUIT_BREAKER"
+			result.errorMsg = "Cancelled by circuit breaker"
 		} else {
-			result.ErrorType = "TIMEOUT"
-			result.ErrorDetail = fmt.Sprintf("Test exceeded %v timeout", timeout)
+			result.errorType = "TIMEOUT"
+			result.errorMsg = fmt.Sprintf("Exceeded %v", timeout)
 		}
-
 		classifyError(&result)
 		saveArtifact(&result)
 		return result
 
 	case err := <-done:
-		result.EndTime = time.Now()
-		result.Duration = result.EndTime.Sub(result.StartTime)
-		result.Stdout = stdoutBuf.String()
-		result.Stderr = stderrBuf.String()
-		result.Combined = result.Stdout + "\n" + result.Stderr
+		result.stdout = stdout.String()
+		result.stderr = stderr.String()
+		result.duration = time.Since(start)
 
-		// Extract exit code and signal
 		if err == nil {
-			result.Success = true
-			result.ExitCode = 0
+			result.success = true
 		} else {
-			result.Error = err
 			if exitErr, ok := err.(*exec.ExitError); ok {
-				result.ExitCode = exitErr.ExitCode()
-				if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
-					if status.Signaled() {
-						result.Signal = status.Signal().String()
-						result.ErrorType = "SIGNALED"
-					}
+				result.exitCode = exitErr.ExitCode()
+				if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+					result.signal = status.Signal().String()
+					result.errorType = "SIGNALED"
 				}
 			} else {
-				result.ExitCode = -1
+				result.exitCode = -1
 			}
-		}
-
-		// Classify error if not successful
-		if !result.Success {
 			classifyError(&result)
 		}
-
 		saveArtifact(&result)
 		return result
 	}
 }
 
-// setupProcessGroup sets up process group for clean killing
 func setupProcessGroup(cmd *exec.Cmd) {
 	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setpgid: true,
-		}
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}
 }
 
-// killProcessGroup kills the entire process group
 func killProcessGroup(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
 	}
-
-	if runtime.GOOS == "windows" {
-		// Windows: just kill the process (limited)
-		_ = cmd.Process.Kill()
-	} else {
-		// Unix: kill process group
+	if runtime.GOOS != "windows" {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	} else {
+		_ = cmd.Process.Kill()
 	}
 }
 
-// classifyError performs comprehensive error classification
-func classifyError(result *TestResult) {
-	output := strings.ToLower(result.Combined)
+func classifyError(r *testResult) {
+	output := r.stdout + "\n" + r.stderr
+	lowerOut := strings.ToLower(output)
 
-	// Extract stack trace
-	result.StackTrace = extractStackTrace(result.Combined)
-
-	// Already classified as cancelled or timeout
-	if result.ErrorType != "" && (result.ErrorType == "CIRCUIT_BREAKER_CANCEL" || result.ErrorType == "TIMEOUT") {
-		return
-	}
-
-	// Check for signals
-	if result.Signal != "" {
-		result.ErrorType = "SIGNAL_" + strings.ToUpper(result.Signal)
-		result.ErrorDetail = fmt.Sprintf("Process killed by signal %s", result.Signal)
-		return
-	}
-
-	// Extract HTTP status code
-	httpStatus := extractHTTPStatus(result.Combined)
-	if httpStatus > 0 {
-		result.HTTPStatus = httpStatus
-	}
-
-	// Categorize by error patterns (order matters)
-	switch {
-	case strings.Contains(output, "panic:"):
-		result.ErrorType = "PANIC"
-		result.ErrorDetail = extractPanicMessage(result.Combined)
-
-	case httpStatus == 400:
-		result.ErrorType = "HTTP_400_BAD_REQUEST"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 401:
-		result.ErrorType = "HTTP_401_UNAUTHORIZED"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 403:
-		result.ErrorType = "HTTP_403_FORBIDDEN"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 404:
-		result.ErrorType = "HTTP_404_NOT_FOUND"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 408:
-		result.ErrorType = "HTTP_408_REQUEST_TIMEOUT"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 409:
-		result.ErrorType = "HTTP_409_CONFLICT"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 422:
-		result.ErrorType = "HTTP_422_UNPROCESSABLE"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 429:
-		result.ErrorType = "HTTP_429_RATE_LIMITED"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 500:
-		result.ErrorType = "HTTP_500_INTERNAL_ERROR"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 502:
-		result.ErrorType = "HTTP_502_BAD_GATEWAY"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 503:
-		result.ErrorType = "HTTP_503_UNAVAILABLE"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus == 504:
-		result.ErrorType = "HTTP_504_GATEWAY_TIMEOUT"
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus >= 400 && httpStatus < 500:
-		result.ErrorType = fmt.Sprintf("HTTP_%d_CLIENT_ERROR", httpStatus)
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case httpStatus >= 500 && httpStatus < 600:
-		result.ErrorType = fmt.Sprintf("HTTP_%d_SERVER_ERROR", httpStatus)
-		result.ErrorDetail = extractHTTPError(result.Combined)
-
-	case strings.Contains(output, "no such host") || strings.Contains(output, "nxdomain"):
-		result.ErrorType = "DNS_ERROR"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "x509:") || strings.Contains(output, "tls") || strings.Contains(output, "handshake"):
-		result.ErrorType = "TLS_ERROR"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "connection refused"):
-		result.ErrorType = "CONNECTION_REFUSED"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "connection reset") || strings.Contains(output, "econnreset"):
-		result.ErrorType = "CONNECTION_RESET"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "unexpected eof") || strings.Contains(output, "eof while reading"):
-		result.ErrorType = "UNEXPECTED_EOF"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "stream error") || strings.Contains(output, "protocol_error"):
-		result.ErrorType = "HTTP2_ERROR"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "timeout") || strings.Contains(output, "deadline exceeded"):
-		result.ErrorType = "TIMEOUT"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "context canceled"):
-		result.ErrorType = "CONTEXT_CANCELED"
-		result.ErrorDetail = "Context was cancelled"
-
-	case strings.Contains(output, "json_schema") || strings.Contains(output, "not supported"):
-		result.ErrorType = "UNSUPPORTED_FEATURE"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "failed to parse") ||
-		strings.Contains(output, "all adapters failed") ||
-		(strings.Contains(output, "invalid") && strings.Contains(output, "json")) ||
-		strings.Contains(output, "unexpected end of json"):
-		result.ErrorType = "PARSE_ERROR"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "missing required") ||
-		strings.Contains(output, "validation") ||
-		strings.Contains(output, "invalid output") ||
-		strings.Contains(output, "invalid class value"):
-		result.ErrorType = "VALIDATION_ERROR"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case strings.Contains(output, "api key") || strings.Contains(output, "unauthorized"):
-		result.ErrorType = "AUTH_ERROR"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	case result.ExitCode == 2:
-		result.ErrorType = "EXIT_CODE_2"
-		result.ErrorDetail = fmt.Sprintf("Process exited with code 2: %s", extractErrorLine(result.Combined))
-
-	case result.ExitCode == 130:
-		result.ErrorType = "SIGINT"
-		result.ErrorDetail = "Process interrupted (SIGINT)"
-
-	case result.ExitCode == 137:
-		result.ErrorType = "SIGKILL_OR_OOM"
-		result.ErrorDetail = "Process killed (SIGKILL or OOM)"
-
-	case result.ExitCode == 143:
-		result.ErrorType = "SIGTERM"
-		result.ErrorDetail = "Process terminated (SIGTERM)"
-
-	case result.ExitCode > 0:
-		result.ErrorType = fmt.Sprintf("EXIT_CODE_%d", result.ExitCode)
-		result.ErrorDetail = extractErrorLine(result.Combined)
-
-	default:
-		result.ErrorType = "UNKNOWN_ERROR"
-		result.ErrorDetail = extractErrorLine(result.Combined)
-	}
-
-	// Ensure we have an error detail
-	if result.ErrorDetail == "" {
-		result.ErrorDetail = extractErrorLine(result.Combined)
-	}
-}
-
-// extractHTTPStatus extracts HTTP status code from output
-func extractHTTPStatus(output string) int {
-	patterns := []string{
-		`HTTP/\d\.\d\s+(\d{3})`,
-		`status(?:\s*code)?:\s*(\d{3})`,
-		`"status":\s*(\d{3})`,
-		`status\s+(\d{3})`,
-		`\b(\d{3})\s+[A-Z][a-z]+\s+[A-Z][a-z]+`, // "429 Too Many"
-	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		if matches := re.FindStringSubmatch(output); len(matches) > 1 {
-			if code, err := strconv.Atoi(matches[1]); err == nil && code >= 100 && code < 600 {
-				return code
-			}
+	// Extract HTTP status
+	if matches := regexp.MustCompile(`\b(4\d\d|5\d\d)\b`).FindString(output); matches != "" {
+		if code := regexp.MustCompile(`\d+`).FindString(matches); code != "" {
+			_, _ = fmt.Sscanf(code, "%d", &r.httpCode)
 		}
 	}
-	return 0
+
+	// Classify error type
+	if r.errorType == "" {
+		switch {
+		case strings.Contains(lowerOut, "panic"):
+			r.errorType = "PANIC"
+			r.errorMsg = extractPanic(output)
+		case r.httpCode >= 400:
+			r.errorType = fmt.Sprintf("HTTP_%d", r.httpCode)
+			r.errorMsg = extractHTTPError(output)
+		case strings.Contains(lowerOut, "timeout"):
+			r.errorType = "TIMEOUT"
+			r.errorMsg = extractError(output)
+		case strings.Contains(lowerOut, "rate limit"):
+			r.errorType = "RATE_LIMIT"
+			r.errorMsg = extractError(output)
+		case strings.Contains(lowerOut, "api key"):
+			r.errorType = "API_KEY"
+			r.errorMsg = extractError(output)
+		default:
+			r.errorType = "UNKNOWN"
+			r.errorMsg = extractError(output)
+		}
+	}
+
+	if r.errorMsg == "" {
+		r.errorMsg = extractError(output)
+	}
 }
 
-// extractHTTPError extracts HTTP error message
 func extractHTTPError(output string) string {
 	lines := strings.Split(output, "\n")
 	for i := len(lines) - 1; i >= 0 && len(lines)-i < 30; i-- {
 		line := strings.TrimSpace(lines[i])
-		lowerLine := strings.ToLower(line)
-		if strings.Contains(lowerLine, "error") || strings.Contains(lowerLine, "status") ||
-			strings.Contains(lowerLine, "failed") || regexp.MustCompile(`\b\d{3}\b`).MatchString(line) {
+		if strings.Contains(strings.ToLower(line), "error") ||
+			strings.Contains(strings.ToLower(line), "status") ||
+			regexp.MustCompile(`\b\d{3}\b`).MatchString(line) {
 			return line
 		}
 	}
-	return extractErrorLine(output)
+	return extractError(output)
 }
 
-// extractPanicMessage extracts panic message
-func extractPanicMessage(output string) string {
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+func extractPanic(output string) string {
+	for _, line := range strings.Split(output, "\n") {
 		if strings.Contains(line, "panic:") {
 			return strings.TrimSpace(line)
 		}
@@ -708,12 +462,10 @@ func extractPanicMessage(output string) string {
 	return "panic (message not found)"
 }
 
-// extractErrorLine extracts the most relevant error line
-func extractErrorLine(output string) string {
+func extractError(output string) string {
 	if output == "" {
 		return "unknown error"
 	}
-
 	lines := strings.Split(output, "\n")
 	for i := len(lines) - 1; i >= 0 && len(lines)-i < 30; i-- {
 		line := strings.TrimSpace(lines[i])
@@ -728,114 +480,50 @@ func extractErrorLine(output string) string {
 			return line
 		}
 	}
-
-	// Return last non-empty line
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line != "" && !strings.HasPrefix(line, "exit status") {
 			return line
 		}
 	}
-
 	return "unknown error"
 }
 
-// extractStackTrace extracts stack trace from output
-func extractStackTrace(output string) string {
-	if output == "" {
-		return ""
-	}
-
-	lines := strings.Split(output, "\n")
-	var stackTrace []string
-	inStack := false
-
-	for _, line := range lines {
-		if strings.Contains(line, "panic:") || strings.Contains(line, "goroutine") {
-			inStack = true
-		}
-
-		if inStack {
-			if strings.HasPrefix(line, "\t") ||
-				strings.Contains(line, ".go:") ||
-				strings.Contains(line, "goroutine") ||
-				strings.Contains(line, "panic:") {
-				stackTrace = append(stackTrace, line)
-			} else if len(stackTrace) > 0 && line == "" {
-				break
-			}
-		}
-	}
-
-	if len(stackTrace) > 0 {
-		return strings.Join(stackTrace, "\n")
-	}
-
-	return ""
-}
-
-// saveArtifact saves test artifacts to disk
-func saveArtifact(result *TestResult) {
-	// Create artifact directory
-	timestamp := result.StartTime.Format("20060102_150405")
-	modelName := sanitizeFilename(formatModelName(result.Model))
-	artifactDir := filepath.Join("test_matrix_logs", modelName, result.Example, timestamp)
-
-	result.ArtifactDir = artifactDir
-
-	if err := os.MkdirAll(artifactDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create artifact dir: %v\n", err)
+func saveArtifact(r *testResult) {
+	if r.artifact == "" {
 		return
 	}
 
-	// Save metadata
-	metadata := TestArtifact{
-		Example:     result.Example,
-		Model:       result.Model,
-		Success:     result.Success,
-		ExitCode:    result.ExitCode,
-		Signal:      result.Signal,
-		ErrorType:   result.ErrorType,
-		ErrorDetail: result.ErrorDetail,
-		HTTPStatus:  result.HTTPStatus,
-		StartTime:   result.StartTime,
-		EndTime:     result.EndTime,
-		Duration:    result.Duration.String(),
-		Cancelled:   result.Cancelled,
+	meta := artifact{
+		Example:   r.example,
+		Model:     r.model,
+		Success:   r.success,
+		ExitCode:  r.exitCode,
+		Signal:    r.signal,
+		ErrorType: r.errorType,
+		ErrorMsg:  r.errorMsg,
+		HTTPCode:  r.httpCode,
+		Duration:  r.duration.String(),
+		Cancelled: r.cancelled,
 	}
 
-	metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
-	if err == nil {
-		_ = os.WriteFile(filepath.Join(artifactDir, "metadata.json"), metadataJSON, 0644)
+	if data, err := json.MarshalIndent(meta, "", "  "); err == nil {
+		_ = os.WriteFile(filepath.Join(r.artifact, "metadata.json"), data, 0644)
 	}
-
-	// Save stdout
-	if result.Stdout != "" {
-		_ = os.WriteFile(filepath.Join(artifactDir, "stdout.log"), []byte(result.Stdout), 0644)
+	if r.stdout != "" {
+		_ = os.WriteFile(filepath.Join(r.artifact, "stdout.log"), []byte(r.stdout), 0644)
 	}
-
-	// Save stderr
-	if result.Stderr != "" {
-		_ = os.WriteFile(filepath.Join(artifactDir, "stderr.log"), []byte(result.Stderr), 0644)
-	}
-
-	// Save combined
-	if result.Combined != "" {
-		_ = os.WriteFile(filepath.Join(artifactDir, "combined.log"), []byte(result.Combined), 0644)
-	}
-
-	// Save stack trace if present
-	if result.StackTrace != "" {
-		_ = os.WriteFile(filepath.Join(artifactDir, "stacktrace.log"), []byte(result.StackTrace), 0644)
+	if r.stderr != "" {
+		_ = os.WriteFile(filepath.Join(r.artifact, "stderr.log"), []byte(r.stderr), 0644)
 	}
 }
 
-func printResults(results []TestResult, models []string, duration time.Duration, circuitTripped bool) {
+func printResults(results []testResult, models []string, duration time.Duration, tripped bool) {
 	fmt.Println()
-	printSeparator("=")
-	fmt.Printf("%s%s TEST RESULTS %s%s\n", colorBold, colorCyan, colorReset, colorBold)
-	printSeparator("=")
-	fmt.Print(colorReset)
+	printSep("=")
+	fmt.Printf("%s%s TEST RESULTS %s%s\n", cBold, cCyan, cReset, cBold)
+	printSep("=")
+	fmt.Print(cReset)
 
 	passed := countPassed(results)
 	failed := countFailed(results)
@@ -843,201 +531,154 @@ func printResults(results []TestResult, models []string, duration time.Duration,
 	total := len(results)
 
 	fmt.Println()
-	printStat("Total Tests", total)
+	printStat("Total", total)
 	printStat("✅ Passed", passed)
 	if failed > 0 {
-		fmt.Printf("  %s❌ Failed%s      %d (%.1f%%)\n", colorRed, colorReset, failed, float64(failed)/float64(total)*100)
+		fmt.Printf("  %s❌ Failed%s      %d (%.1f%%)\n", cRed, cReset, failed, float64(failed)/float64(total)*100)
 	}
 	if cancelled > 0 {
 		printStat("🚫 Cancelled", cancelled)
 	}
-	printStat("⏱️  Duration", formatDuration(duration))
+	printStat("⏱️  Duration", fmtDuration(duration))
 
 	// Model scores
 	fmt.Println()
-	printSeparator("-")
-	fmt.Printf("%s MODEL SCORES %s\n", colorBold, colorReset)
-	printSeparator("-")
+	printSep("-")
+	fmt.Printf("%s MODEL SCORES %s\n", cBold, cReset)
+	printSep("-")
 
-	modelStats := calculateModelStats(results, models)
-	sort.Slice(modelStats, func(i, j int) bool {
-		scoreI := float64(modelStats[i].Passed) / float64(modelStats[i].Total)
-		scoreJ := float64(modelStats[j].Passed) / float64(modelStats[j].Total)
-		return scoreI > scoreJ
+	stats := calcStats(results, models)
+	sort.Slice(stats, func(i, j int) bool {
+		return float64(stats[i].passed)/float64(stats[i].total) > float64(stats[j].passed)/float64(stats[j].total)
 	})
 
-	for _, stats := range modelStats {
-		successRate := float64(stats.Passed) / float64(stats.Total) * 100
-		statusIcon := "✅"
-		statusColor := colorGreen
-		if stats.Failed > 0 {
-			statusIcon = "❌"
-			statusColor = colorRed
+	for _, s := range stats {
+		rate := float64(s.passed) / float64(s.total) * 100
+		icon, color := "✅", cGreen
+		if s.failed > 0 {
+			icon, color = "❌", cRed
 		}
-
 		fmt.Printf("  %s %s%-50s%s %s%3d/%d%s (%.1f%%)\n",
-			statusIcon,
-			statusColor, formatModelName(stats.Model), colorReset,
-			colorBold, stats.Passed, stats.Total, colorReset,
-			successRate)
+			icon, color, shortModel(s.model), cReset, cBold, s.passed, s.total, cReset, rate)
 	}
 
-	// Error type breakdown
+	// Error breakdown
 	if failed > 0 {
 		fmt.Println()
-		printSeparator("-")
-		fmt.Printf("%s ERROR TYPE BREAKDOWN %s\n", colorBold, colorReset)
-		printSeparator("-")
+		printSep("-")
+		fmt.Printf("%s ERROR TYPES %s\n", cBold, cReset)
+		printSep("-")
 
-		errorTypes := make(map[string]int)
+		errTypes := make(map[string]int)
 		for _, r := range results {
-			if !r.Success && !r.Cancelled {
-				errorTypes[r.ErrorType]++
+			if !r.success && !r.cancelled {
+				errTypes[r.errorType]++
 			}
 		}
 
-		type errorCount struct {
+		type ec struct {
 			typ   string
 			count int
 		}
-		var counts []errorCount
-		for typ, count := range errorTypes {
-			counts = append(counts, errorCount{typ, count})
+		var counts []ec
+		for t, c := range errTypes {
+			counts = append(counts, ec{t, c})
 		}
-		sort.Slice(counts, func(i, j int) bool {
-			return counts[i].count > counts[j].count
-		})
+		sort.Slice(counts, func(i, j int) bool { return counts[i].count > counts[j].count })
 
-		for _, ec := range counts {
-			fmt.Printf("  %s%-40s%s %d\n", colorYellow, ec.typ, colorReset, ec.count)
+		for _, e := range counts {
+			fmt.Printf("  %s%-40s%s %d\n", cYellow, e.typ, cReset, e.count)
 		}
 	}
 
 	fmt.Println()
-	printSeparator("=")
+	printSep("=")
 }
 
-func calculateModelStats(results []TestResult, models []string) []ModelStats {
-	statsMap := make(map[string]*ModelStats)
-	for _, model := range models {
-		statsMap[model] = &ModelStats{
-			Model:   model,
-			Results: []TestResult{},
-		}
+func calcStats(results []testResult, models []string) []modelStats {
+	statsMap := make(map[string]*modelStats)
+	for _, m := range models {
+		statsMap[m] = &modelStats{model: m}
 	}
 
 	for _, r := range results {
-		if stats, ok := statsMap[r.Model]; ok {
-			stats.Total++
-			if r.Success {
-				stats.Passed++
-			} else if !r.Cancelled {
-				stats.Failed++
+		if s, ok := statsMap[r.model]; ok {
+			s.total++
+			if r.success {
+				s.passed++
+			} else if !r.cancelled {
+				s.failed++
 			}
-			stats.Results = append(stats.Results, r)
 		}
 	}
 
-	var statsList []ModelStats
-	for _, stats := range statsMap {
-		statsList = append(statsList, *stats)
+	var list []modelStats
+	for _, s := range statsMap {
+		list = append(list, *s)
 	}
-	return statsList
+	return list
 }
 
-func saveErrorSummary(failedResults []TestResult) error {
-	summaryPath := "test_matrix_logs/ERROR_SUMMARY.md"
+func saveErrors(failed []testResult) error {
+	path := "test_matrix_logs/ERROR_SUMMARY.md"
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
 
-	if err := os.MkdirAll(filepath.Dir(summaryPath), 0755); err != nil {
-		return err
-	}
-
-	f, err := os.Create(summaryPath)
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
 
-	// Header
 	_, _ = fmt.Fprintf(f, "# Test Matrix Error Summary\n\n")
 	_, _ = fmt.Fprintf(f, "Generated: %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
-	_, _ = fmt.Fprintf(f, "Total Failures: %d\n\n", len(failedResults))
+	_, _ = fmt.Fprintf(f, "Total Failures: %d\n\n", len(failed))
 
-	// Error type breakdown
-	_, _ = fmt.Fprintf(f, "## Error Type Breakdown\n\n")
-	errorTypes := make(map[string]int)
-	for _, r := range failedResults {
-		errorTypes[r.ErrorType]++
+	// Error types
+	_, _ = fmt.Fprintf(f, "## Error Types\n\n")
+	errTypes := make(map[string]int)
+	for _, r := range failed {
+		errTypes[r.errorType]++
 	}
-
-	type errorCount struct {
+	type ec struct {
 		typ   string
 		count int
 	}
-	var counts []errorCount
-	for typ, count := range errorTypes {
-		counts = append(counts, errorCount{typ, count})
+	var counts []ec
+	for t, c := range errTypes {
+		counts = append(counts, ec{t, c})
 	}
-	sort.Slice(counts, func(i, j int) bool {
-		return counts[i].count > counts[j].count
-	})
-
-	for _, ec := range counts {
-		_, _ = fmt.Fprintf(f, "- **%s**: %d failures\n", ec.typ, ec.count)
+	sort.Slice(counts, func(i, j int) bool { return counts[i].count > counts[j].count })
+	for _, e := range counts {
+		_, _ = fmt.Fprintf(f, "- **%s**: %d\n", e.typ, e.count)
 	}
 	_, _ = fmt.Fprintf(f, "\n")
 
-	// Model breakdown
-	_, _ = fmt.Fprintf(f, "## Failures by Model\n\n")
-	modelFailures := make(map[string][]TestResult)
-	for _, r := range failedResults {
-		modelFailures[r.Model] = append(modelFailures[r.Model], r)
-	}
-
-	for model, failures := range modelFailures {
-		_, _ = fmt.Fprintf(f, "### %s (%d failures)\n\n", formatModelName(model), len(failures))
-		for _, r := range failures {
-			_, _ = fmt.Fprintf(f, "- **%s** (%s): %s\n", r.Example, r.ErrorType, r.ErrorDetail)
-			if r.ArtifactDir != "" {
-				_, _ = fmt.Fprintf(f, "  - Artifacts: `%s`\n", r.ArtifactDir)
-			}
+	// Details
+	_, _ = fmt.Fprintf(f, "## Failed Tests\n\n")
+	for i, r := range failed {
+		_, _ = fmt.Fprintf(f, "### %d. %s [%s]\n\n", i+1, r.example, shortModel(r.model))
+		_, _ = fmt.Fprintf(f, "- **Type**: %s\n", r.errorType)
+		_, _ = fmt.Fprintf(f, "- **Error**: %s\n", r.errorMsg)
+		if r.httpCode > 0 {
+			_, _ = fmt.Fprintf(f, "- **HTTP**: %d\n", r.httpCode)
 		}
-		_, _ = fmt.Fprintf(f, "\n")
-	}
-
-	// Detailed failures
-	_, _ = fmt.Fprintf(f, "## Detailed Failure List\n\n")
-	for i, r := range failedResults {
-		_, _ = fmt.Fprintf(f, "### %d. %s [%s]\n\n", i+1, r.Example, formatModelName(r.Model))
-		_, _ = fmt.Fprintf(f, "- **Error Type**: %s\n", r.ErrorType)
-		_, _ = fmt.Fprintf(f, "- **Error**: %s\n", r.ErrorDetail)
-		if r.HTTPStatus > 0 {
-			_, _ = fmt.Fprintf(f, "- **HTTP Status**: %d\n", r.HTTPStatus)
+		if r.signal != "" {
+			_, _ = fmt.Fprintf(f, "- **Signal**: %s\n", r.signal)
 		}
-		if r.Signal != "" {
-			_, _ = fmt.Fprintf(f, "- **Signal**: %s\n", r.Signal)
+		_, _ = fmt.Fprintf(f, "- **Duration**: %s\n", r.duration)
+		if r.artifact != "" {
+			_, _ = fmt.Fprintf(f, "- **Artifacts**: `%s`\n", r.artifact)
 		}
-		_, _ = fmt.Fprintf(f, "- **Duration**: %s\n", r.Duration)
-		_, _ = fmt.Fprintf(f, "- **Exit Code**: %d\n", r.ExitCode)
-		if r.ArtifactDir != "" {
-			_, _ = fmt.Fprintf(f, "- **Artifacts**: `%s`\n", r.ArtifactDir)
-		}
-
-		if r.StackTrace != "" {
-			_, _ = fmt.Fprintf(f, "\n**Stack Trace:**\n```\n%s\n```\n", r.StackTrace)
-		}
-
 		_, _ = fmt.Fprintf(f, "\n---\n\n")
 	}
 
 	return nil
 }
 
-func selectRandomModels(models []string, n int) []string {
+func selectRandom(models []string, n int) []string {
 	if n >= len(models) {
 		return models
 	}
-
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	perm := r.Perm(len(models))
 	selected := make([]string, n)
@@ -1048,17 +689,17 @@ func selectRandomModels(models []string, n int) []string {
 }
 
 func getDefaultModel() string {
-	if model := os.Getenv("EXAMPLES_DEFAULT_MODEL"); model != "" {
-		return model
+	if m := os.Getenv("EXAMPLES_DEFAULT_MODEL"); m != "" {
+		return m
 	}
 	return "openrouter/google/gemini-2.5-flash"
 }
 
-func formatModelName(model string) string {
+func shortModel(model string) string {
 	return strings.TrimPrefix(model, "openrouter/")
 }
 
-func formatDuration(d time.Duration) string {
+func fmtDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%.1fs", d.Seconds())
 	}
@@ -1068,120 +709,98 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
-func countPassed(results []TestResult) int {
+func sanitize(s string) string {
+	return strings.NewReplacer("/", "_", ":", "_", " ", "_").Replace(s)
+}
+
+func countPassed(results []testResult) int {
 	count := 0
 	for _, r := range results {
-		if r.Success {
+		if r.success {
 			count++
 		}
 	}
 	return count
 }
 
-func countFailed(results []TestResult) int {
+func countFailed(results []testResult) int {
 	count := 0
 	for _, r := range results {
-		if !r.Success && !r.Cancelled {
+		if !r.success && !r.cancelled {
 			count++
 		}
 	}
 	return count
 }
 
-func countCancelled(results []TestResult) int {
+func countCancelled(results []testResult) int {
 	count := 0
 	for _, r := range results {
-		if r.Cancelled {
+		if r.cancelled {
 			count++
 		}
 	}
 	return count
 }
 
-func getFailedResults(results []TestResult) []TestResult {
-	var failed []TestResult
+func getFailed(results []testResult) []testResult {
+	var failed []testResult
 	for _, r := range results {
-		if !r.Success && !r.Cancelled {
+		if !r.success && !r.cancelled {
 			failed = append(failed, r)
 		}
 	}
 	return failed
 }
 
-func sanitizeFilename(s string) string {
-	s = strings.ReplaceAll(s, "/", "_")
-	s = strings.ReplaceAll(s, ":", "_")
-	s = strings.ReplaceAll(s, " ", "_")
-	return s
-}
-
 // Printing utilities
-
 func printHeader(title string, count int) {
 	fmt.Println()
-	printSeparator("=")
-	fmt.Printf("%s%s %s (%d) %s%s\n", colorBold, colorCyan, title, count, colorReset, colorBold)
-	printSeparator("=")
-	fmt.Print(colorReset)
+	printSep("=")
+	fmt.Printf("%s%s %s (%d) %s%s\n", cBold, cCyan, title, count, cReset, cBold)
+	printSep("=")
+	fmt.Print(cReset)
 	fmt.Println()
 }
 
-func printInfo(label, value string) {
-	fmt.Printf("  %s%-15s%s %s\n", colorGray, label+":", colorReset, value)
+func printInfo(label string, value interface{}) {
+	fmt.Printf("  %s%-15s%s %v\n", cGray, label+":", cReset, value)
 }
 
 func printStat(label string, value interface{}) {
-	fmt.Printf("  %s%-15s%s %v\n", colorBold, label+":", colorReset, value)
+	fmt.Printf("  %s%-15s%s %v\n", cBold, label+":", cReset, value)
 }
 
-func printWarning(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "%s⚠️  %s%s\n", colorYellow, fmt.Sprintf(format, args...), colorReset)
-}
-
-func printTestResult(result TestResult, current, total int64) {
-	icon := "✅"
-	statusColor := colorGreen
-	status := "PASS"
-
-	if result.Cancelled {
-		icon = "🚫"
-		statusColor = colorGray
-		status = "CNCL"
-	} else if !result.Success {
-		icon = "❌"
-		statusColor = colorRed
-		status = "FAIL"
+func printTestResult(r testResult, current, total int64) {
+	icon, color, status := "✅", cGreen, "PASS"
+	if r.cancelled {
+		icon, color, status = "🚫", cGray, "CNCL"
+	} else if !r.success {
+		icon, color, status = "❌", cRed, "FAIL"
 	}
 
-	percent := float64(current) / float64(total) * 100
-	modelName := formatModelName(result.Model)
-
+	pct := float64(current) / float64(total) * 100
 	fmt.Printf("[%s%4d/%d %.1f%%%s] %s %s%-4s%s %s%-20s%s %s%-40s%s %.2fs\n",
-		colorGray, current, total, percent, colorReset,
+		cGray, current, total, pct, cReset,
 		icon,
-		statusColor, status, colorReset,
-		colorBold, result.Example, colorReset,
-		colorGray, modelName, colorReset,
-		result.Duration.Seconds())
+		color, status, cReset,
+		cBold, r.example, cReset,
+		cGray, shortModel(r.model), cReset,
+		r.duration.Seconds())
 
-	if !result.Success && !result.Cancelled {
-		fmt.Printf("       %s↳ [%s] %s%s\n", colorRed, result.ErrorType, result.ErrorDetail, colorReset)
-		if result.ArtifactDir != "" {
-			fmt.Printf("       %s↳ Artifacts: %s%s\n", colorGray, result.ArtifactDir, colorReset)
+	if !r.success && !r.cancelled {
+		fmt.Printf("       %s↳ [%s] %s%s\n", cRed, r.errorType, r.errorMsg, cReset)
+		if r.artifact != "" {
+			fmt.Printf("       %s↳ %s%s\n", cGray, r.artifact, cReset)
 		}
 	}
 }
 
-func printSeparator(char string) {
+func printSep(char string) {
 	fmt.Println(strings.Repeat(char, 80))
 }
 
 func fatal(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "%sError: %s%s\n", colorRed, fmt.Sprintf(format, args...), colorReset)
+	fmt.Fprintf(os.Stderr, "%sError: %s%s\n", cRed, fmt.Sprintf(format, args...), cReset)
 	os.Exit(1)
-}
-
-func disableColors() {
-	// Implementation would set all color constants to empty strings
-	// For simplicity, using global flag approach
 }

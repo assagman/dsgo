@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestParseStructTags(t *testing.T) {
@@ -159,38 +159,38 @@ func TestInferFieldType(t *testing.T) {
 		name    string
 		goType  reflect.Type
 		classes []string
-		want    dsgo.FieldType
+		want    core.FieldType
 	}{
 		{
 			name:   "string",
 			goType: reflect.TypeOf(""),
-			want:   dsgo.FieldTypeString,
+			want:   core.FieldTypeString,
 		},
 		{
 			name:   "int",
 			goType: reflect.TypeOf(0),
-			want:   dsgo.FieldTypeInt,
+			want:   core.FieldTypeInt,
 		},
 		{
 			name:   "float64",
 			goType: reflect.TypeOf(0.0),
-			want:   dsgo.FieldTypeFloat,
+			want:   core.FieldTypeFloat,
 		},
 		{
 			name:   "bool",
 			goType: reflect.TypeOf(true),
-			want:   dsgo.FieldTypeBool,
+			want:   core.FieldTypeBool,
 		},
 		{
 			name:   "map",
 			goType: reflect.TypeOf(map[string]any{}),
-			want:   dsgo.FieldTypeJSON,
+			want:   core.FieldTypeJSON,
 		},
 		{
 			name:    "string with enum becomes class",
 			goType:  reflect.TypeOf(""),
 			classes: []string{"a", "b"},
-			want:    dsgo.FieldTypeClass,
+			want:    core.FieldTypeClass,
 		},
 	}
 
@@ -342,13 +342,13 @@ func TestInferFieldType_AllIntTypes(t *testing.T) {
 	tests := []struct {
 		name   string
 		goType reflect.Type
-		want   dsgo.FieldType
+		want   core.FieldType
 	}{
-		{"int", reflect.TypeOf(int(0)), dsgo.FieldTypeInt},
-		{"int8", reflect.TypeOf(int8(0)), dsgo.FieldTypeInt},
-		{"int16", reflect.TypeOf(int16(0)), dsgo.FieldTypeInt},
-		{"int32", reflect.TypeOf(int32(0)), dsgo.FieldTypeInt},
-		{"int64", reflect.TypeOf(int64(0)), dsgo.FieldTypeInt},
+		{"int", reflect.TypeOf(int(0)), core.FieldTypeInt},
+		{"int8", reflect.TypeOf(int8(0)), core.FieldTypeInt},
+		{"int16", reflect.TypeOf(int16(0)), core.FieldTypeInt},
+		{"int32", reflect.TypeOf(int32(0)), core.FieldTypeInt},
+		{"int64", reflect.TypeOf(int64(0)), core.FieldTypeInt},
 	}
 
 	for _, tt := range tests {
@@ -365,10 +365,10 @@ func TestInferFieldType_AllFloatTypes(t *testing.T) {
 	tests := []struct {
 		name   string
 		goType reflect.Type
-		want   dsgo.FieldType
+		want   core.FieldType
 	}{
-		{"float32", reflect.TypeOf(float32(0)), dsgo.FieldTypeFloat},
-		{"float64", reflect.TypeOf(float64(0)), dsgo.FieldTypeFloat},
+		{"float32", reflect.TypeOf(float32(0)), core.FieldTypeFloat},
+		{"float64", reflect.TypeOf(float64(0)), core.FieldTypeFloat},
 	}
 
 	for _, tt := range tests {
@@ -384,7 +384,7 @@ func TestInferFieldType_AllFloatTypes(t *testing.T) {
 func TestInferFieldType_SliceType(t *testing.T) {
 	sliceType := reflect.TypeOf([]string{})
 	got := inferFieldType(sliceType, nil)
-	if got != dsgo.FieldTypeJSON {
+	if got != core.FieldTypeJSON {
 		t.Errorf("inferFieldType(slice) = %v, want JSON", got)
 	}
 }
@@ -395,7 +395,7 @@ func TestInferFieldType_StructType(t *testing.T) {
 	}
 	structType := reflect.TypeOf(TestStruct{})
 	got := inferFieldType(structType, nil)
-	if got != dsgo.FieldTypeJSON {
+	if got != core.FieldTypeJSON {
 		t.Errorf("inferFieldType(struct) = %v, want JSON", got)
 	}
 }
@@ -404,7 +404,7 @@ func TestInferFieldType_DefaultFallback(t *testing.T) {
 	// Use an unusual type that should fall back to string
 	ptrType := reflect.TypeOf((*int)(nil))
 	got := inferFieldType(ptrType, nil)
-	if got != dsgo.FieldTypeString {
+	if got != core.FieldTypeString {
 		t.Errorf("inferFieldType(unusual type) = %v, want String (fallback)", got)
 	}
 }
@@ -515,7 +515,7 @@ func TestParseFieldTag_EnumWithSingleValue(t *testing.T) {
 	if info.Classes[0] != "onlyvalue" {
 		t.Errorf("Classes[0] = %s, want 'onlyvalue'", info.Classes[0])
 	}
-	if info.Type != dsgo.FieldTypeClass {
+	if info.Type != core.FieldTypeClass {
 		t.Errorf("Type = %v, want FieldTypeClass", info.Type)
 	}
 }

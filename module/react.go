@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 const (
@@ -17,25 +17,25 @@ const (
 
 // ReAct implements the Reasoning and Acting pattern
 type ReAct struct {
-	Signature     *dsgo.Signature
-	LM            dsgo.LM
-	Tools         []dsgo.Tool
-	Options       *dsgo.GenerateOptions
-	Adapter       dsgo.Adapter
-	History       *dsgo.History  // Optional conversation history
-	Demos         []dsgo.Example // Optional few-shot examples
+	Signature     *core.Signature
+	LM            core.LM
+	Tools         []core.Tool
+	Options       *core.GenerateOptions
+	Adapter       core.Adapter
+	History       *core.History  // Optional conversation history
+	Demos         []core.Example // Optional few-shot examples
 	MaxIterations int
 	Verbose       bool
 }
 
 // NewReAct creates a new ReAct module
-func NewReAct(signature *dsgo.Signature, lm dsgo.LM, tools []dsgo.Tool) *ReAct {
+func NewReAct(signature *core.Signature, lm core.LM, tools []core.Tool) *ReAct {
 	r := &ReAct{
 		Signature:     signature,
 		LM:            lm,
 		Tools:         tools,
-		Options:       dsgo.DefaultGenerateOptions(),
-		Adapter:       dsgo.NewFallbackAdapter(),
+		Options:       core.DefaultGenerateOptions(),
+		Adapter:       core.NewFallbackAdapter(),
 		MaxIterations: MaxReActIterations,
 		Verbose:       false,
 	}
@@ -50,25 +50,25 @@ func NewReAct(signature *dsgo.Signature, lm dsgo.LM, tools []dsgo.Tool) *ReAct {
 }
 
 // WithOptions sets custom generation options
-func (r *ReAct) WithOptions(options *dsgo.GenerateOptions) *ReAct {
+func (r *ReAct) WithOptions(options *core.GenerateOptions) *ReAct {
 	r.Options = options
 	return r
 }
 
 // WithAdapter sets a custom adapter
-func (r *ReAct) WithAdapter(adapter dsgo.Adapter) *ReAct {
+func (r *ReAct) WithAdapter(adapter core.Adapter) *ReAct {
 	r.Adapter = adapter
 	return r
 }
 
 // WithHistory sets conversation history for multi-turn interactions
-func (r *ReAct) WithHistory(history *dsgo.History) *ReAct {
+func (r *ReAct) WithHistory(history *core.History) *ReAct {
 	r.History = history
 	return r
 }
 
 // WithDemos sets few-shot examples for in-context learning
-func (r *ReAct) WithDemos(demos []dsgo.Example) *ReAct {
+func (r *ReAct) WithDemos(demos []core.Example) *ReAct {
 	r.Demos = demos
 	return r
 }
@@ -86,12 +86,12 @@ func (r *ReAct) WithVerbose(verbose bool) *ReAct {
 }
 
 // GetSignature returns the module's signature
-func (r *ReAct) GetSignature() *dsgo.Signature {
+func (r *ReAct) GetSignature() *core.Signature {
 	return r.Signature
 }
 
 // Forward executes the ReAct loop
-func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	if err := r.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
@@ -103,12 +103,12 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 	}
 
 	// Build initial message list
-	var messages []dsgo.Message
+	var messages []core.Message
 
 	// Add system prompt for ReAct pattern
 	systemPrompt := r.buildSystemPrompt()
 	if systemPrompt != "" {
-		messages = append(messages, dsgo.Message{Role: "system", Content: systemPrompt})
+		messages = append(messages, core.Message{Role: "system", Content: systemPrompt})
 	}
 
 	// Prepend history if available
@@ -148,7 +148,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 
 			// Inject user message to prompt for final answer
 			finalPrompt := r.buildFinalAnswerPrompt()
-			messages = append(messages, dsgo.Message{
+			messages = append(messages, core.Message{
 				Role:    "user",
 				Content: finalPrompt,
 			})
@@ -170,7 +170,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 
 		// Enable JSON mode when tools are not used (for final answer)
 		if r.LM.SupportsJSON() && len(options.Tools) == 0 {
-			if _, isJSON := r.Adapter.(*dsgo.JSONAdapter); isJSON {
+			if _, isJSON := r.Adapter.(*core.JSONAdapter); isJSON {
 				options.ResponseFormat = "json"
 				// Auto-generate JSON schema from signature for structured outputs
 				if options.ResponseSchema == nil {
@@ -187,7 +187,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 		// If no tool calls, this should be the final answer
 		if len(result.ToolCalls) == 0 {
 			if r.Verbose {
-				fmt.Printf("Thought: %s\n", result.Content)
+				fmt.Printf("Thought: %s\n", core.StripMarkers(result.Content))
 				fmt.Println("Action: None (Final Answer)")
 			}
 
@@ -202,11 +202,11 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 					if r.Verbose {
 						fmt.Println("⚠️  Parsing failed and tools available - requesting tool use")
 					}
-					messages = append(messages, dsgo.Message{
+					messages = append(messages, core.Message{
 						Role:    "assistant",
 						Content: result.Content,
 					})
-					messages = append(messages, dsgo.Message{
+					messages = append(messages, core.Message{
 						Role:    "user",
 						Content: "Please use the available tools to gather the information needed, then provide a complete answer in the requested format. Do not include any meta-commentary or explanations - just the answer.",
 					})
@@ -242,7 +242,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 			outputs = coerceBasicTypes(r.Signature, outputs)
 
 			// Apply output normalization
-			outputs = dsgo.NormalizeOutputKeys(r.Signature, outputs)
+			outputs = core.NormalizeOutputKeys(r.Signature, outputs)
 
 			// Use partial validation to allow missing optional fields
 			if err := r.Signature.ValidateOutputs(outputs); err != nil {
@@ -254,7 +254,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 			}
 
 			// Extract adapter metadata
-			adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+			adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
 			// Extract rationale if present
 			rationale := ""
@@ -276,14 +276,14 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 				}
 
 				// Add assistant response
-				r.History.Add(dsgo.Message{
+				r.History.Add(core.Message{
 					Role:    "assistant",
 					Content: result.Content,
 				})
 			}
 
 			// Build Prediction object
-			prediction := dsgo.NewPrediction(outputs).
+			prediction := core.NewPrediction(outputs).
 				WithRationale(rationale).
 				WithUsage(result.Usage).
 				WithModuleName("ReAct").
@@ -298,14 +298,14 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 		}
 
 		// Add assistant's response with tool calls
-		messages = append(messages, dsgo.Message{
+		messages = append(messages, core.Message{
 			Role:      "assistant",
 			Content:   result.Content,
 			ToolCalls: result.ToolCalls,
 		})
 
 		if r.Verbose {
-			fmt.Printf("Thought: %s\n", result.Content)
+			fmt.Printf("Thought: %s\n", core.StripMarkers(result.Content))
 		}
 
 		// Execute tool calls and add observations
@@ -331,7 +331,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 				if err := r.Signature.ValidateOutputs(outputs); err != nil {
 					// If finish tool args don't match signature, continue and let model try again
 					observation := fmt.Sprintf("Error: finish tool arguments don't match required outputs: %v", err)
-					messages = append(messages, dsgo.Message{
+					messages = append(messages, core.Message{
 						Role:    "tool",
 						Content: observation,
 						ToolID:  toolCall.ID,
@@ -344,7 +344,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 				}
 
 				// Build prediction and return
-				prediction := dsgo.NewPrediction(outputs).
+				prediction := core.NewPrediction(outputs).
 					WithUsage(result.Usage).
 					WithModuleName("ReAct").
 					WithInputs(inputs)
@@ -355,7 +355,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 			tool := r.findTool(toolCall.Name)
 			if tool == nil {
 				observation := fmt.Sprintf("Error: Tool '%s' not found", toolCall.Name)
-				messages = append(messages, dsgo.Message{
+				messages = append(messages, core.Message{
 					Role:    "tool",
 					Content: observation,
 					ToolID:  toolCall.ID,
@@ -370,7 +370,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 			result, err := tool.Execute(ctx, toolCall.Arguments)
 			if err != nil {
 				observation := fmt.Sprintf("Error executing tool: %v", err)
-				messages = append(messages, dsgo.Message{
+				messages = append(messages, core.Message{
 					Role:    "tool",
 					Content: observation,
 					ToolID:  toolCall.ID,
@@ -383,7 +383,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 			}
 
 			observation := fmt.Sprintf("%v", result)
-			messages = append(messages, dsgo.Message{
+			messages = append(messages, core.Message{
 				Role:    "tool",
 				Content: observation,
 				ToolID:  toolCall.ID,
@@ -400,7 +400,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Predi
 				fmt.Println("\n⚠️  Stagnation detected - activating final mode")
 			}
 			finalMode = true
-			messages = append(messages, dsgo.Message{
+			messages = append(messages, core.Message{
 				Role:    "user",
 				Content: "You've received the same observation twice. Please provide your final answer now as a JSON object with all required fields. Do not call any more tools.",
 			})
@@ -449,7 +449,7 @@ func (r *ReAct) buildFinalAnswerPrompt() string {
 			optional = " (optional)"
 		}
 		classInfo := ""
-		if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
+		if field.Type == core.FieldTypeClass && len(field.Classes) > 0 {
 			classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 		}
 		if field.Description != "" {
@@ -468,7 +468,7 @@ func (r *ReAct) buildFinalAnswerPrompt() string {
 	return prompt.String()
 }
 
-func (r *ReAct) findTool(name string) *dsgo.Tool {
+func (r *ReAct) findTool(name string) *core.Tool {
 	for i := range r.Tools {
 		if r.Tools[i].Name == name {
 			return &r.Tools[i]
@@ -479,7 +479,7 @@ func (r *ReAct) findTool(name string) *dsgo.Tool {
 
 // extractTextOutputs attempts to extract output fields from raw text when structured parsing fails
 // This is a last-resort fallback for less capable models that don't follow JSON/Chat formats
-func (r *ReAct) extractTextOutputs(content string, messages []dsgo.Message) map[string]any {
+func (r *ReAct) extractTextOutputs(content string, messages []core.Message) map[string]any {
 	outputs := make(map[string]any)
 	content = strings.TrimSpace(content)
 
@@ -492,9 +492,9 @@ func (r *ReAct) extractTextOutputs(content string, messages []dsgo.Message) map[
 	}
 
 	// Only attempt extraction for string fields
-	var stringFields []dsgo.Field
+	var stringFields []core.Field
 	for _, field := range r.Signature.OutputFields {
-		if field.Type == dsgo.FieldTypeString {
+		if field.Type == core.FieldTypeString {
 			stringFields = append(stringFields, field)
 		}
 	}
@@ -541,7 +541,7 @@ func (r *ReAct) extractTextOutputs(content string, messages []dsgo.Message) map[
 
 // synthesizeAnswerFromHistory extracts and summarizes observations from the message history
 // Used as a fallback when the model produces empty content in final mode
-func (r *ReAct) synthesizeAnswerFromHistory(messages []dsgo.Message) string {
+func (r *ReAct) synthesizeAnswerFromHistory(messages []core.Message) string {
 	var observations []string
 
 	// Extract tool observations from message history
@@ -579,8 +579,8 @@ func (r *ReAct) synthesizeAnswerFromHistory(messages []dsgo.Message) string {
 
 // buildFinishTool creates a synthetic "finish" tool that allows models to explicitly
 // conclude the ReAct loop by providing final outputs matching the signature
-func buildFinishTool(signature *dsgo.Signature) *dsgo.Tool {
-	tool := dsgo.NewTool(
+func buildFinishTool(signature *core.Signature) *core.Tool {
+	tool := core.NewTool(
 		"finish",
 		"Call this tool when you have gathered enough information and are ready to provide the final answer. Use the tool arguments to provide your complete answer.",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -599,14 +599,14 @@ func buildFinishTool(signature *dsgo.Signature) *dsgo.Tool {
 		// Determine parameter type
 		paramType := "string"
 		switch field.Type {
-		case dsgo.FieldTypeInt:
+		case core.FieldTypeInt:
 			paramType = "number"
-		case dsgo.FieldTypeBool:
+		case core.FieldTypeBool:
 			paramType = "boolean"
 		}
 
 		// Add class information to description
-		if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
+		if field.Type == core.FieldTypeClass && len(field.Classes) > 0 {
 			description = fmt.Sprintf("%s (one of: %s)", description, strings.Join(field.Classes, ", "))
 		}
 
@@ -640,7 +640,7 @@ func stripToJSON(content string) string {
 
 // coerceBasicTypes handles type mismatches in parsed outputs
 // Converts: string numbers to ints, string bools to bools, etc.
-func coerceBasicTypes(signature *dsgo.Signature, outputs map[string]any) map[string]any {
+func coerceBasicTypes(signature *core.Signature, outputs map[string]any) map[string]any {
 	coerced := make(map[string]any)
 
 	for key, value := range outputs {
@@ -651,7 +651,7 @@ func coerceBasicTypes(signature *dsgo.Signature, outputs map[string]any) map[str
 		}
 
 		switch field.Type {
-		case dsgo.FieldTypeInt:
+		case core.FieldTypeInt:
 			// Try to convert string to int
 			if strVal, ok := value.(string); ok {
 				// Extract first number from string (e.g., "5 years" -> 5)
@@ -670,7 +670,7 @@ func coerceBasicTypes(signature *dsgo.Signature, outputs map[string]any) map[str
 			}
 			coerced[key] = value
 
-		case dsgo.FieldTypeBool:
+		case core.FieldTypeBool:
 			// Try to convert string to bool
 			if strVal, ok := value.(string); ok {
 				strVal = strings.ToLower(strings.TrimSpace(strVal))
@@ -685,7 +685,7 @@ func coerceBasicTypes(signature *dsgo.Signature, outputs map[string]any) map[str
 			}
 			coerced[key] = value
 
-		case dsgo.FieldTypeString:
+		case core.FieldTypeString:
 			// Convert any type to string if needed
 			if value != nil {
 				coerced[key] = fmt.Sprintf("%v", value)
@@ -708,7 +708,7 @@ func coerceBasicTypes(signature *dsgo.Signature, outputs map[string]any) map[str
 //
 // This phase uses a temporary adapter WITH reasoning enabled, mimicking
 // ChainOfThought behavior during extraction.
-func (r *ReAct) runExtract(ctx context.Context, messages []dsgo.Message, inputs map[string]any) (*dsgo.Prediction, error) {
+func (r *ReAct) runExtract(ctx context.Context, messages []core.Message, inputs map[string]any) (*core.Prediction, error) {
 	if r.Verbose {
 		fmt.Println("\n=== Running Post-Loop Extraction (with reasoning) ===")
 	}
@@ -717,9 +717,9 @@ func (r *ReAct) runExtract(ctx context.Context, messages []dsgo.Message, inputs 
 	extractPrompt := r.buildExtractionPrompt()
 
 	// Append extraction request to message history
-	extractMessages := make([]dsgo.Message, len(messages))
+	extractMessages := make([]core.Message, len(messages))
 	copy(extractMessages, messages)
-	extractMessages = append(extractMessages, dsgo.Message{
+	extractMessages = append(extractMessages, core.Message{
 		Role:    "user",
 		Content: extractPrompt,
 	})
@@ -750,7 +750,7 @@ func (r *ReAct) runExtract(ctx context.Context, messages []dsgo.Message, inputs 
 	cleanedContent := stripToJSON(result.Content)
 
 	// Create temporary adapter WITH reasoning for extraction phase
-	extractAdapter := dsgo.NewFallbackAdapter().WithReasoning(true)
+	extractAdapter := core.NewFallbackAdapter().WithReasoning(true)
 
 	// Try adapter parsing first (with reasoning)
 	outputs, err := extractAdapter.Parse(r.Signature, cleanedContent)
@@ -787,16 +787,16 @@ func (r *ReAct) runExtract(ctx context.Context, messages []dsgo.Message, inputs 
 	outputs = coerceBasicTypes(r.Signature, outputs)
 
 	// Apply output normalization
-	outputs = dsgo.NormalizeOutputKeys(r.Signature, outputs)
+	outputs = core.NormalizeOutputKeys(r.Signature, outputs)
 
 	// Use partial validation (allow missing optional fields)
 	diagnostics := r.Signature.ValidateOutputsPartial(outputs)
 
 	// Extract adapter metadata
-	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+	adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
 	// Build prediction with diagnostics and rationale
-	pred := &dsgo.Prediction{
+	pred := &core.Prediction{
 		Outputs:          outputs,
 		Usage:            result.Usage,
 		AdapterUsed:      adapterUsed,
@@ -836,7 +836,7 @@ func (r *ReAct) buildExtractionPrompt() string {
 			optional = " (optional)"
 		}
 		classInfo := ""
-		if field.Type == dsgo.FieldTypeClass && len(field.Classes) > 0 {
+		if field.Type == core.FieldTypeClass && len(field.Classes) > 0 {
 			classInfo = fmt.Sprintf(" [one of: %s]", strings.Join(field.Classes, ", "))
 		}
 		if field.Description != "" {

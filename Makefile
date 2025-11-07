@@ -1,16 +1,16 @@
-.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks test-matrix test-matrix-quick test-matrix-sample
+.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks test-matrix test-matrix-quick test-matrix-sample fmt-fix check-lint all-with-examples help
 
 PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts)
 
-all: check check-eof check-lint test
+all: clean check check-eof check-lint test
 
 all-with-examples: clean check check-eof test test-matrix-quick
 
 test:
 	@echo "Running comprehensive tests (race detector + coverage)..."
-	@go test -v -race -coverpkg=github.com/assagman/dsgo,./internal/...,./module/...,./providers/...,./logging/... -coverprofile=coverage.txt $(PACKAGES)
-	@echo "\nTest coverage summary:"
-	@go tool cover -func=coverage.txt | grep total
+	@go test -race -covermode=atomic -coverpkg=./... -coverprofile=coverage.out $(PACKAGES) || exit 1
+	@printf "\nCoverage: "
+	@go tool cover -func=coverage.out | grep total | awk '{print $$3}'
 
 # Quick test: single model (default)
 test-matrix-quick:
@@ -42,7 +42,7 @@ vet:
 	go vet $(PACKAGES)
 
 lint:
-	@which golangci-lint > /dev/null || (echo "golangci-lint not installed. Run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest" && exit 1)
+	@command -v golangci-lint >/dev/null || (echo "golangci-lint not installed. Run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest" && exit 1)
 	golangci-lint run --timeout=5m
 
 verify:
@@ -56,9 +56,34 @@ check-eof:
 	./scripts/check-eof.sh
 
 clean:
-	rm -f coverage.txt coverage.out
+	rm -f coverage.out
 	rm -rf test_matrix_logs test_examples_logs
 	go clean -testcache
 
 install-hooks:
 	./scripts/install-hooks.sh
+
+help:
+	@printf "DSGo Makefile - Available targets:\n\n"
+	@printf "Testing:\n"
+	@printf "  make test                - Run all tests with race detector and coverage\n"
+	@printf "  make test-matrix-quick   - Test examples with 1 model (fast)\n"
+	@printf "  make test-matrix-sample N=3 - Test examples with N random models\n"
+	@printf "  make test-matrix         - Test examples with all models (comprehensive)\n\n"
+	@printf "Code Quality:\n"
+	@printf "  make fmt                 - Check code formatting\n"
+	@printf "  make fmt-fix             - Auto-fix code formatting\n"
+	@printf "  make vet                 - Run go vet\n"
+	@printf "  make lint                - Run golangci-lint\n"
+	@printf "  make check               - Run verify, fmt, vet, and build\n"
+	@printf "  make check-lint          - Run check + lint\n"
+	@printf "  make check-eof           - Check files end with newline\n\n"
+	@printf "Build:\n"
+	@printf "  make build               - Build all packages\n"
+	@printf "  make verify              - Verify go.mod dependencies\n\n"
+	@printf "Maintenance:\n"
+	@printf "  make clean               - Remove coverage files and test cache\n"
+	@printf "  make install-hooks       - Install git pre-commit hooks\n\n"
+	@printf "Common Workflows:\n"
+	@printf "  make all                 - Clean, check, lint, and test\n"
+	@printf "  make all-with-examples   - Above + test examples\n"

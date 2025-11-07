@@ -1,5 +1,0 @@
-{
-  "error": "program failed: module 1 failed: exceeded maximum failures (2/3): output validation failed: field confidence expected float-like (float32/float64/int), got string",
-  "example": "007_program_composition",
-  "timestamp": "20251105-174856"
-}

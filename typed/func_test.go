@@ -6,26 +6,26 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // Mock LM for testing
 type mockLM struct {
-	generateFunc func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error)
+	generateFunc func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error)
 }
 
-func (m *mockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+func (m *mockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	if m.generateFunc != nil {
 		return m.generateFunc(ctx, messages, options)
 	}
-	return &dsgo.GenerateResult{
+	return &core.GenerateResult{
 		Content:  "mocked response",
 		Metadata: make(map[string]any),
 	}, nil
 }
 
-func (m *mockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
-	chunks := make(chan dsgo.Chunk)
+func (m *mockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+	chunks := make(chan core.Chunk)
 	errs := make(chan error)
 	close(chunks)
 	close(errs)
@@ -120,8 +120,8 @@ func TestFunc_Run(t *testing.T) {
 
 	// Create custom mock that returns specific output
 	lm := &mockLM{
-		generateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content:  `{"Result": "mocked result"}`,
 				Metadata: make(map[string]any),
 			}, nil
@@ -153,8 +153,8 @@ func TestFunc_RunWithPrediction(t *testing.T) {
 	}
 
 	lm := &mockLM{
-		generateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content:  `{"Result": "test result"}`,
 				Metadata: map[string]any{"test": "metadata"},
 			}, nil
@@ -256,7 +256,7 @@ func TestFunc_WithOptions_Coverage(t *testing.T) {
 		t.Fatalf("NewFunc() error = %v", err)
 	}
 
-	opts := &dsgo.GenerateOptions{Temperature: 0.5, MaxTokens: 100}
+	opts := &core.GenerateOptions{Temperature: 0.5, MaxTokens: 100}
 	result := fn.WithOptions(opts)
 	if result != fn {
 		t.Error("WithOptions should return the same function")
@@ -277,7 +277,7 @@ func TestFunc_WithAdapter_Coverage(t *testing.T) {
 		t.Fatalf("NewFunc() error = %v", err)
 	}
 
-	adapter := dsgo.NewJSONAdapter()
+	adapter := core.NewJSONAdapter()
 	result := fn.WithAdapter(adapter)
 	if result != fn {
 		t.Error("WithAdapter should return the same function")
@@ -298,7 +298,7 @@ func TestFunc_WithHistory_Coverage(t *testing.T) {
 		t.Fatalf("NewFunc() error = %v", err)
 	}
 
-	history := dsgo.NewHistory()
+	history := core.NewHistory()
 	result := fn.WithHistory(history)
 	if result != fn {
 		t.Error("WithHistory should return the same function")
@@ -319,7 +319,7 @@ func TestFunc_WithDemos_Coverage(t *testing.T) {
 		t.Fatalf("NewFunc() error = %v", err)
 	}
 
-	demos := []dsgo.Example{
+	demos := []core.Example{
 		{
 			Inputs:  map[string]any{"Text": "example"},
 			Outputs: map[string]any{"Result": "output"},
@@ -340,8 +340,8 @@ func TestFunc_Forward_Coverage(t *testing.T) {
 	}
 
 	lm := &mockLM{
-		generateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content:  `{"Result": "test"}`,
 				Metadata: make(map[string]any),
 			}, nil
@@ -376,7 +376,7 @@ func TestFunc_Run_ModuleError(t *testing.T) {
 	}
 
 	lm := &mockLM{
-		generateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			return nil, fmt.Errorf("module failed")
 		},
 	}
@@ -401,7 +401,7 @@ func TestFunc_RunWithPrediction_ModuleError(t *testing.T) {
 	}
 
 	lm := &mockLM{
-		generateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			return nil, fmt.Errorf("module failed")
 		},
 	}
@@ -578,8 +578,8 @@ func TestRun_StructToMapError(t *testing.T) {
 	}
 
 	lm := &mockLM{
-		generateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content:  `{"Result": "test"}`,
 				Metadata: make(map[string]any),
 			}, nil
@@ -607,9 +607,9 @@ func TestRun_MapToStructError(t *testing.T) {
 	}
 
 	lm := &mockLM{
-		generateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			// Return incompatible data that will cause MapToStruct to fail
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content:  `{"Result": 123}`, // Number instead of string
 				Metadata: make(map[string]any),
 			}, nil
@@ -636,8 +636,8 @@ func TestRunWithPrediction_MapToStructError(t *testing.T) {
 	}
 
 	lm := &mockLM{
-		generateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content:  `{"Result": "test"}`,
 				Metadata: make(map[string]any),
 			}, nil
@@ -718,4 +718,82 @@ func TestWithDemosTyped_EmptyList(t *testing.T) {
 	if fn2 == nil {
 		t.Error("WithDemosTyped() returned nil")
 	}
+}
+
+// TestNewCoT tests the NewCoT constructor
+func TestNewCoT(t *testing.T) {
+	type Input struct {
+		Question string `dsgo:"input,desc=The question to answer"`
+	}
+	type Output struct {
+		Answer string `dsgo:"output,desc=The answer"`
+	}
+
+	lm := &mockLM{}
+	fn, err := NewCoT[Input, Output](lm)
+	if err != nil {
+		t.Fatalf("NewCoT() error = %v", err)
+	}
+
+	if fn == nil {
+		t.Fatal("NewCoT() returned nil")
+	}
+
+	// Verify it's a ChainOfThought module
+	sig := fn.GetSignature()
+	if sig == nil {
+		t.Fatal("GetSignature() returned nil")
+	}
+
+	if len(sig.InputFields) != 1 {
+		t.Errorf("expected 1 input field, got %d", len(sig.InputFields))
+	}
+
+	if len(sig.OutputFields) != 1 {
+		t.Errorf("expected 1 output field, got %d", len(sig.OutputFields))
+	}
+}
+
+// TestNewReAct tests the NewReAct constructor
+func TestNewReAct(t *testing.T) {
+	type Input struct {
+		Query string `dsgo:"input,desc=The query"`
+	}
+	type Output struct {
+		Result string `dsgo:"output,desc=The result"`
+	}
+
+	lm := &mockLM{}
+	tools := []core.Tool{
+		*core.NewTool("calculator", "Simple calculator", func(ctx context.Context, args map[string]any) (any, error) {
+			return "42", nil
+		}),
+	}
+
+	fn, err := NewReAct[Input, Output](lm, tools)
+	if err != nil {
+		t.Fatalf("NewReAct() error = %v", err)
+	}
+
+	if fn == nil {
+		t.Fatal("NewReAct() returned nil")
+	}
+
+	// Verify it has input/output fields
+	sig := fn.GetSignature()
+	if sig == nil {
+		t.Fatal("GetSignature() returned nil")
+	}
+
+	if len(sig.InputFields) != 1 {
+		t.Errorf("expected 1 input field, got %d", len(sig.InputFields))
+	}
+
+	if len(sig.OutputFields) != 1 {
+		t.Errorf("expected 1 output field, got %d", len(sig.OutputFields))
+	}
+
+	// Test WithMaxIterations on ReAct
+	fn.WithMaxIterations(5)
+	fn.WithVerbose(true)
 }

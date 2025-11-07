@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestNewOpenAI(t *testing.T) {
@@ -105,10 +105,10 @@ func TestOpenAI_Generate_Success(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	messages := []dsgo.Message{
+	messages := []core.Message{
 		{Role: "user", Content: "Hello"},
 	}
-	options := dsgo.DefaultGenerateOptions()
+	options := core.DefaultGenerateOptions()
 
 	result, err := lm.Generate(context.Background(), messages, options)
 	if err != nil {
@@ -177,13 +177,13 @@ func TestOpenAI_Generate_WithTools(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	messages := []dsgo.Message{{Role: "user", Content: "What's the weather?"}}
-	options := dsgo.DefaultGenerateOptions()
+	messages := []core.Message{{Role: "user", Content: "What's the weather?"}}
+	options := core.DefaultGenerateOptions()
 	weatherFunc := func(ctx context.Context, args map[string]any) (any, error) {
 		return "sunny", nil
 	}
-	options.Tools = []dsgo.Tool{
-		*dsgo.NewTool("get_weather", "Get weather", weatherFunc),
+	options.Tools = []core.Tool{
+		*core.NewTool("get_weather", "Get weather", weatherFunc),
 	}
 
 	result, err := lm.Generate(context.Background(), messages, options)
@@ -212,7 +212,7 @@ func TestOpenAI_Generate_ErrorResponse(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -237,7 +237,7 @@ func TestOpenAI_Generate_NoChoices(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 	if err == nil || err.Error() != "no choices in response" {
 		t.Fatalf("expected 'no choices in response' error, got %v", err)
 	}
@@ -248,14 +248,14 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		messages []dsgo.Message
-		options  *dsgo.GenerateOptions
+		messages []core.Message
+		options  *core.GenerateOptions
 		check    func(t *testing.T, req map[string]any)
 	}{
 		{
 			name:     "basic request",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options:  dsgo.DefaultGenerateOptions(),
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options:  core.DefaultGenerateOptions(),
 			check: func(t *testing.T, req map[string]any) {
 				if req["model"] != "gpt-4" {
 					t.Errorf("expected model gpt-4, got %v", req["model"])
@@ -264,8 +264,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with temperature",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				Temperature: 0.7,
 			},
 			check: func(t *testing.T, req map[string]any) {
@@ -276,8 +276,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with max tokens",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				MaxTokens: 100,
 			},
 			check: func(t *testing.T, req map[string]any) {
@@ -288,8 +288,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with json format (no schema)",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				ResponseFormat: "json",
 			},
 			check: func(t *testing.T, req map[string]any) {
@@ -301,8 +301,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with json format and schema",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				ResponseFormat: "json",
 				ResponseSchema: map[string]any{
 					"type": "object",
@@ -341,8 +341,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with stop sequences",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				Stop: []string{"END", "STOP"},
 			},
 			check: func(t *testing.T, req map[string]any) {
@@ -354,8 +354,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with penalties",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				FrequencyPenalty: 0.5,
 				PresencePenalty:  0.3,
 			},
@@ -370,8 +370,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with TopP exactly 1.0 (should be omitted)",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				TopP: 1.0,
 			},
 			check: func(t *testing.T, req map[string]any) {
@@ -382,8 +382,8 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with TopP non-default (should be included)",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				TopP: 0.7,
 			},
 			check: func(t *testing.T, req map[string]any) {
@@ -407,12 +407,12 @@ func TestOpenAI_ConvertMessages(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		messages []dsgo.Message
+		messages []core.Message
 		check    func(t *testing.T, converted []map[string]any)
 	}{
 		{
 			name: "basic message",
-			messages: []dsgo.Message{
+			messages: []core.Message{
 				{Role: "user", Content: "Hello"},
 			},
 			check: func(t *testing.T, converted []map[string]any) {
@@ -429,7 +429,7 @@ func TestOpenAI_ConvertMessages(t *testing.T) {
 		},
 		{
 			name: "tool response",
-			messages: []dsgo.Message{
+			messages: []core.Message{
 				{Role: "tool", Content: "result", ToolID: "call_123"},
 			},
 			check: func(t *testing.T, converted []map[string]any) {
@@ -440,11 +440,11 @@ func TestOpenAI_ConvertMessages(t *testing.T) {
 		},
 		{
 			name: "assistant with tool calls",
-			messages: []dsgo.Message{
+			messages: []core.Message{
 				{
 					Role:    "assistant",
 					Content: "Let me check",
-					ToolCalls: []dsgo.ToolCall{
+					ToolCalls: []core.ToolCall{
 						{
 							ID:        "call_123",
 							Name:      "search",
@@ -475,7 +475,7 @@ func TestOpenAI_ConvertMessages(t *testing.T) {
 
 func TestOpenAI_ConvertTool(t *testing.T) {
 	lm := &OpenAI{}
-	tool := dsgo.NewTool("test_tool", "A test tool", nil)
+	tool := core.NewTool("test_tool", "A test tool", nil)
 	tool.AddParameter("param1", "string", "First param", true)
 	tool.AddEnumParameter("param2", "Second param", []string{"a", "b"}, false)
 
@@ -592,11 +592,11 @@ func TestOpenAI_Generate_WithToolChoice(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	options := dsgo.DefaultGenerateOptions()
-	options.Tools = []dsgo.Tool{*dsgo.NewTool("specific_tool", "desc", nil)}
+	options := core.DefaultGenerateOptions()
+	options.Tools = []core.Tool{*core.NewTool("specific_tool", "desc", nil)}
 	options.ToolChoice = "specific_tool"
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, options)
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, options)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -633,11 +633,11 @@ func TestOpenAI_Generate_ToolChoiceNone(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	options := dsgo.DefaultGenerateOptions()
-	options.Tools = []dsgo.Tool{*dsgo.NewTool("tool", "desc", nil)}
+	options := core.DefaultGenerateOptions()
+	options.Tools = []core.Tool{*core.NewTool("tool", "desc", nil)}
 	options.ToolChoice = "none"
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, options)
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, options)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -645,12 +645,12 @@ func TestOpenAI_Generate_ToolChoiceNone(t *testing.T) {
 
 // fakeCache is a simple in-memory cache for testing
 type fakeCache struct {
-	data   map[string]*dsgo.GenerateResult
+	data   map[string]*core.GenerateResult
 	setKey string
-	setVal *dsgo.GenerateResult
+	setVal *core.GenerateResult
 }
 
-func (f *fakeCache) Get(key string) (*dsgo.GenerateResult, bool) {
+func (f *fakeCache) Get(key string) (*core.GenerateResult, bool) {
 	if f.data == nil {
 		return nil, false
 	}
@@ -658,14 +658,14 @@ func (f *fakeCache) Get(key string) (*dsgo.GenerateResult, bool) {
 	return val, ok
 }
 
-func (f *fakeCache) Set(key string, result *dsgo.GenerateResult) {
+func (f *fakeCache) Set(key string, result *core.GenerateResult) {
 	f.setKey = key
 	f.setVal = result
 }
 
 func (f *fakeCache) Clear() {
 	if f.data != nil {
-		f.data = make(map[string]*dsgo.GenerateResult)
+		f.data = make(map[string]*core.GenerateResult)
 	}
 }
 
@@ -676,8 +676,8 @@ func (f *fakeCache) Size() int {
 	return len(f.data)
 }
 
-func (f *fakeCache) Stats() dsgo.CacheStats {
-	return dsgo.CacheStats{
+func (f *fakeCache) Stats() core.CacheStats {
+	return core.CacheStats{
 		Hits:   0,
 		Misses: 0,
 		Size:   f.Size(),
@@ -685,22 +685,22 @@ func (f *fakeCache) Stats() dsgo.CacheStats {
 }
 
 func TestOpenAI_Generate_CacheHit(t *testing.T) {
-	cachedResult := &dsgo.GenerateResult{
+	cachedResult := &core.GenerateResult{
 		Content:      "cached response",
 		FinishReason: "stop",
-		Usage: dsgo.Usage{
+		Usage: core.Usage{
 			PromptTokens:     5,
 			CompletionTokens: 3,
 			TotalTokens:      8,
 		},
 	}
 
-	messages := []dsgo.Message{{Role: "user", Content: "test"}}
-	options := dsgo.DefaultGenerateOptions()
-	cacheKey := dsgo.GenerateCacheKey("gpt-4", messages, options)
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	options := core.DefaultGenerateOptions()
+	cacheKey := core.GenerateCacheKey("gpt-4", messages, options)
 
 	cache := &fakeCache{
-		data: map[string]*dsgo.GenerateResult{
+		data: map[string]*core.GenerateResult{
 			cacheKey: cachedResult,
 		},
 	}
@@ -742,10 +742,10 @@ func TestOpenAI_Generate_CacheSet(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cache := &fakeCache{data: map[string]*dsgo.GenerateResult{}}
-	messages := []dsgo.Message{{Role: "user", Content: "test"}}
-	options := dsgo.DefaultGenerateOptions()
-	expectedKey := dsgo.GenerateCacheKey("gpt-4", messages, options)
+	cache := &fakeCache{data: map[string]*core.GenerateResult{}}
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	options := core.DefaultGenerateOptions()
+	expectedKey := core.GenerateCacheKey("gpt-4", messages, options)
 
 	lm := &OpenAI{
 		APIKey:  "test-key",
@@ -785,7 +785,7 @@ func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 	if err == nil {
 		t.Fatal("expected error for invalid JSON response")
 	}
@@ -838,7 +838,7 @@ func TestOpenAI_Generate_ParseResponseError(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 	if err == nil {
 		t.Fatal("expected error for invalid tool arguments")
 	}
@@ -888,9 +888,9 @@ func TestOpenAI_Stream_HappyPath(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	chunkChan, errChan := lm.Stream(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 
-	var chunks []dsgo.Chunk
+	var chunks []core.Chunk
 	var streamErr error
 	done := false
 
@@ -919,7 +919,7 @@ func TestOpenAI_Stream_HappyPath(t *testing.T) {
 	}
 
 	var fullContent string
-	var lastChunk dsgo.Chunk
+	var lastChunk core.Chunk
 	for _, chunk := range chunks {
 		fullContent += chunk.Content
 		lastChunk = chunk
@@ -953,7 +953,7 @@ func TestOpenAI_Stream_NonOKStatus(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	chunkChan, errChan := lm.Stream(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 
 	var streamErr error
 	done := false
@@ -996,7 +996,7 @@ func TestOpenAI_Stream_InvalidJSONChunk(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	chunkChan, errChan := lm.Stream(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 
 	var streamErr error
 	done := false
@@ -1042,9 +1042,9 @@ func TestOpenAI_Stream_SkipsNonDataLines(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	chunkChan, errChan := lm.Stream(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 
-	var chunks []dsgo.Chunk
+	var chunks []core.Chunk
 	var streamErr error
 	done := false
 
@@ -1074,5 +1074,28 @@ func TestOpenAI_Stream_SkipsNonDataLines(t *testing.T) {
 
 	if chunks[0].Content != "OK" {
 		t.Errorf("expected content 'OK', got %s", chunks[0].Content)
+	}
+}
+
+// TestOpenAI_InitRegistration tests that OpenAI provider is registered
+// This verifies the init() function properly registers the provider
+func TestOpenAI_InitRegistration(t *testing.T) {
+	// Create an LM instance directly (init() has already run)
+	lm := NewOpenAI("gpt-4-test")
+
+	if lm == nil {
+		t.Fatal("NewOpenAI returned nil")
+	}
+
+	if lm.Model != "gpt-4-test" {
+		t.Errorf("expected model gpt-4-test, got %s", lm.Model)
+	}
+
+	if lm.BaseURL != DefaultBaseURL {
+		t.Errorf("expected BaseURL %s, got %s", DefaultBaseURL, lm.BaseURL)
+	}
+
+	if lm.Client == nil {
+		t.Error("expected Client to be initialized")
 	}
 }

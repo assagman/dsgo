@@ -9,18 +9,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestPredict_Forward_Success(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"answer": "42"}`,
 			}, nil
 		},
@@ -41,8 +41,8 @@ func TestPredict_Forward_Success(t *testing.T) {
 }
 
 func TestPredict_Forward_InvalidInput(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("required", dsgo.FieldTypeString, "Required")
+	sig := core.NewSignature("Test").
+		AddInput("required", core.FieldTypeString, "Required")
 
 	lm := &MockLM{}
 	p := NewPredict(sig, lm)
@@ -54,11 +54,11 @@ func TestPredict_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestPredict_Forward_LMError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			return nil, errors.New("LM error")
 		},
 	}
@@ -75,14 +75,14 @@ func TestPredict_Forward_LMError(t *testing.T) {
 
 func TestPredict_Forward_ParseError(t *testing.T) {
 	// Use multiple fields so JSONAdapter can't fall back to plain text
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer").
-		AddOutput("confidence", dsgo.FieldTypeString, "Confidence level")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer").
+		AddOutput("confidence", core.FieldTypeString, "Confidence level")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `invalid json without structure`,
 			}, nil
 		},
@@ -99,13 +99,13 @@ func TestPredict_Forward_ParseError(t *testing.T) {
 }
 
 func TestPredict_Forward_ValidationError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"wrong_field": "value"}`,
 			}, nil
 		},
@@ -122,11 +122,11 @@ func TestPredict_Forward_ValidationError(t *testing.T) {
 }
 
 func TestPredict_WithOptions(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	p := NewPredict(sig, lm)
 
-	customOpts := &dsgo.GenerateOptions{Temperature: 0.5}
+	customOpts := &core.GenerateOptions{Temperature: 0.5}
 	p.WithOptions(customOpts)
 
 	if p.Options.Temperature != 0.5 {
@@ -135,7 +135,7 @@ func TestPredict_WithOptions(t *testing.T) {
 }
 
 func TestPredict_GetSignature(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	p := NewPredict(sig, lm)
 
@@ -145,22 +145,22 @@ func TestPredict_GetSignature(t *testing.T) {
 }
 
 func TestPredict_JSONSupport(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			if options.ResponseFormat != "json" {
 				t.Error("ResponseFormat should be 'json' when LM supports JSON and using JSONAdapter")
 			}
-			return &dsgo.GenerateResult{Content: `{"answer": "ok"}`}, nil
+			return &core.GenerateResult{Content: `{"answer": "ok"}`}, nil
 		},
 	}
 
 	// Use JSONAdapter explicitly to trigger JSON mode
-	p := NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter())
+	p := NewPredict(sig, lm).WithAdapter(core.NewJSONAdapter())
 	_, err := p.Forward(context.Background(), map[string]interface{}{
 		"question": "test",
 	})
@@ -172,20 +172,20 @@ func TestPredict_JSONSupport(t *testing.T) {
 
 func TestPredict_JSONSchemaAutoGeneration(t *testing.T) {
 	// Create a signature with multiple output fields of different types
-	sig := dsgo.NewSignature("Classification and analysis").
-		AddInput("text", dsgo.FieldTypeString, "Text to analyze").
-		AddOutput("sentiment", dsgo.FieldTypeString, "Sentiment classification").
-		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score").
-		AddOutput("word_count", dsgo.FieldTypeInt, "Number of words").
+	sig := core.NewSignature("Classification and analysis").
+		AddInput("text", core.FieldTypeString, "Text to analyze").
+		AddOutput("sentiment", core.FieldTypeString, "Sentiment classification").
+		AddOutput("confidence", core.FieldTypeFloat, "Confidence score").
+		AddOutput("word_count", core.FieldTypeInt, "Number of words").
 		AddClassOutput("category", []string{"business", "technology", "sports"}, "Content category")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			// Verify ResponseSchema was auto-generated
 			if options.ResponseSchema == nil {
 				t.Error("ResponseSchema should be auto-generated when using JSONAdapter with JSON-capable LM")
-				return &dsgo.GenerateResult{Content: `{}`}, nil
+				return &core.GenerateResult{Content: `{}`}, nil
 			}
 
 			// Verify schema structure
@@ -244,14 +244,14 @@ func TestPredict_JSONSchemaAutoGeneration(t *testing.T) {
 			}
 
 			// Return mock response
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content: `{"sentiment": "positive", "confidence": 0.95, "word_count": 42, "category": "technology"}`,
 			}, nil
 		},
 	}
 
 	// Use JSONAdapter explicitly to trigger schema generation
-	p := NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter())
+	p := NewPredict(sig, lm).WithAdapter(core.NewJSONAdapter())
 	outputs, err := p.Forward(context.Background(), map[string]interface{}{
 		"text": "This is a great technology article!",
 	})
@@ -276,17 +276,17 @@ func TestPredict_JSONSchemaAutoGeneration(t *testing.T) {
 }
 
 func TestPredict_JSONSchemaWithOptionalFields(t *testing.T) {
-	sig := dsgo.NewSignature("Optional fields test").
-		AddInput("query", dsgo.FieldTypeString, "Query").
-		AddOutput("required_field", dsgo.FieldTypeString, "Required").
-		AddOptionalOutput("optional_field", dsgo.FieldTypeString, "Optional")
+	sig := core.NewSignature("Optional fields test").
+		AddInput("query", core.FieldTypeString, "Query").
+		AddOutput("required_field", core.FieldTypeString, "Required").
+		AddOptionalOutput("optional_field", core.FieldTypeString, "Optional")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			if options.ResponseSchema == nil {
 				t.Error("ResponseSchema should be auto-generated")
-				return &dsgo.GenerateResult{Content: `{}`}, nil
+				return &core.GenerateResult{Content: `{}`}, nil
 			}
 
 			schema := options.ResponseSchema
@@ -303,13 +303,13 @@ func TestPredict_JSONSchemaWithOptionalFields(t *testing.T) {
 				t.Errorf("Expected required_field to be required, got %v", required[0])
 			}
 
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content: `{"required_field": "value"}`,
 			}, nil
 		},
 	}
 
-	p := NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter())
+	p := NewPredict(sig, lm).WithAdapter(core.NewJSONAdapter())
 	_, err := p.Forward(context.Background(), map[string]interface{}{
 		"query": "test",
 	})
@@ -320,13 +320,13 @@ func TestPredict_JSONSchemaWithOptionalFields(t *testing.T) {
 }
 
 func TestPredict_JSONSchemaNotGeneratedWithChatAdapter(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			// When using ChatAdapter, ResponseFormat should NOT be "json" even if LM supports it
 			if options.ResponseFormat == "json" {
 				t.Error("ResponseFormat should not be 'json' when using ChatAdapter")
@@ -335,12 +335,12 @@ func TestPredict_JSONSchemaNotGeneratedWithChatAdapter(t *testing.T) {
 				t.Error("ResponseSchema should not be set when using ChatAdapter")
 			}
 			// ChatAdapter expects markers
-			return &dsgo.GenerateResult{Content: `[[ ## answer ## ]]\n42`}, nil
+			return &core.GenerateResult{Content: `[[ ## answer ## ]]\n42`}, nil
 		},
 	}
 
 	// Use ChatAdapter explicitly - should NOT trigger JSON mode
-	p := NewPredict(sig, lm).WithAdapter(dsgo.NewChatAdapter())
+	p := NewPredict(sig, lm).WithAdapter(core.NewChatAdapter())
 	_, err := p.Forward(context.Background(), map[string]interface{}{
 		"question": "What is the answer?",
 	})
@@ -351,9 +351,9 @@ func TestPredict_JSONSchemaNotGeneratedWithChatAdapter(t *testing.T) {
 }
 
 func TestPredict_CustomSchemaOverridesAutoGeneration(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("text", dsgo.FieldTypeString, "Text").
-		AddOutput("result", dsgo.FieldTypeString, "Result")
+	sig := core.NewSignature("Test").
+		AddInput("text", core.FieldTypeString, "Text").
+		AddOutput("result", core.FieldTypeString, "Result")
 
 	customSchema := map[string]any{
 		"type": "object",
@@ -364,10 +364,10 @@ func TestPredict_CustomSchemaOverridesAutoGeneration(t *testing.T) {
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			if options.ResponseSchema == nil {
 				t.Error("ResponseSchema should be present")
-				return &dsgo.GenerateResult{Content: `{}`}, nil
+				return &core.GenerateResult{Content: `{}`}, nil
 			}
 
 			// Verify custom schema is used, not auto-generated
@@ -382,14 +382,14 @@ func TestPredict_CustomSchemaOverridesAutoGeneration(t *testing.T) {
 				t.Error("Auto-generated schema should not be used when custom schema is provided")
 			}
 
-			return &dsgo.GenerateResult{Content: `{"custom_field": "value"}`}, nil
+			return &core.GenerateResult{Content: `{"custom_field": "value"}`}, nil
 		},
 	}
 
-	opts := dsgo.DefaultGenerateOptions()
+	opts := core.DefaultGenerateOptions()
 	opts.ResponseSchema = customSchema
 
-	p := NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter()).WithOptions(opts)
+	p := NewPredict(sig, lm).WithAdapter(core.NewJSONAdapter()).WithOptions(opts)
 	_, err := p.Forward(context.Background(), map[string]interface{}{
 		"text": "test",
 	})
@@ -407,13 +407,13 @@ func TestPredict_ConcurrentForward(t *testing.T) {
 	var callCount int
 	var mu sync.Mutex
 
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, msgs []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
 			mu.Lock()
 			callCount++
 			count := callCount
@@ -424,7 +424,7 @@ func TestPredict_ConcurrentForward(t *testing.T) {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:
-				return &dsgo.GenerateResult{Content: fmt.Sprintf(`{"answer": "response-%d"}`, count)}, nil
+				return &core.GenerateResult{Content: fmt.Sprintf(`{"answer": "response-%d"}`, count)}, nil
 			}
 		},
 	}
@@ -459,13 +459,13 @@ func TestPredict_ConcurrentForward(t *testing.T) {
 // TestPredict_ContextTimeout tests that context timeout is properly handled
 // during Forward() execution and LM Generate() calls
 func TestPredict_ContextTimeout(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, msgs []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, msgs []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
 			// Check if context is already cancelled
 			select {
 			case <-ctx.Done():
@@ -498,16 +498,16 @@ func TestPredict_ContextTimeout(t *testing.T) {
 
 // TestPredict_Stream_Success tests successful streaming
 func TestPredict_Stream_Success(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("answer", dsgo.FieldTypeString, "")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("answer", core.FieldTypeString, "")
 
 	mockLM := &mockStreamingLM{
-		chunks: []dsgo.Chunk{
+		chunks: []core.Chunk{
 			{Content: "answer: ", FinishReason: ""},
 			{Content: "Hello ", FinishReason: ""},
 			{Content: "World", FinishReason: ""},
-			{Content: "", FinishReason: "stop", Usage: dsgo.Usage{TotalTokens: 10}},
+			{Content: "", FinishReason: "stop", Usage: core.Usage{TotalTokens: 10}},
 		},
 	}
 
@@ -536,7 +536,7 @@ func TestPredict_Stream_Success(t *testing.T) {
 	}
 
 	// Get final prediction
-	var prediction *dsgo.Prediction
+	var prediction *core.Prediction
 	select {
 	case prediction = <-result.Prediction:
 	case <-time.After(1 * time.Second):
@@ -559,20 +559,20 @@ func TestPredict_Stream_Success(t *testing.T) {
 
 // TestPredict_Stream_WithCallback tests streaming with callback
 func TestPredict_Stream_WithCallback(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("answer", dsgo.FieldTypeString, "")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("answer", core.FieldTypeString, "")
 
 	mockLM := &mockStreamingLM{
-		chunks: []dsgo.Chunk{
+		chunks: []core.Chunk{
 			{Content: "answer: test", FinishReason: ""},
 			{Content: "", FinishReason: "stop"},
 		},
 	}
 
 	var callbackCalls int
-	options := dsgo.DefaultGenerateOptions()
-	options.StreamCallback = func(chunk dsgo.Chunk) {
+	options := core.DefaultGenerateOptions()
+	options.StreamCallback = func(chunk core.Chunk) {
 		callbackCalls++
 	}
 
@@ -611,12 +611,12 @@ func TestPredict_Stream_WithCallback(t *testing.T) {
 
 // TestPredict_Stream_ValidationError tests streaming with validation errors
 func TestPredict_Stream_ValidationError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("count", dsgo.FieldTypeInt, "")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("count", core.FieldTypeInt, "")
 
 	mockLM := &mockStreamingLM{
-		chunks: []dsgo.Chunk{
+		chunks: []core.Chunk{
 			{Content: "count: not_a_number", FinishReason: ""},
 			{Content: "", FinishReason: "stop"},
 		},
@@ -651,13 +651,13 @@ func TestPredict_Stream_ValidationError(t *testing.T) {
 
 // TestPredict_Stream_PartialValidation tests streaming with partial validation
 func TestPredict_Stream_PartialValidation(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("answer", dsgo.FieldTypeString, "").
-		AddOutput("confidence", dsgo.FieldTypeFloat, "")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("answer", core.FieldTypeString, "").
+		AddOutput("confidence", core.FieldTypeFloat, "")
 
 	mockLM := &mockStreamingLM{
-		chunks: []dsgo.Chunk{
+		chunks: []core.Chunk{
 			{Content: "answer: Yes", FinishReason: ""}, // Missing confidence
 			{Content: "", FinishReason: "stop"},
 		},
@@ -698,9 +698,9 @@ func TestPredict_Stream_PartialValidation(t *testing.T) {
 
 // TestPredict_Stream_InvalidInput tests streaming with invalid input
 func TestPredict_Stream_InvalidInput(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("answer", dsgo.FieldTypeString, "")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("answer", core.FieldTypeString, "")
 
 	mockLM := &mockStreamingLM{}
 	predict := NewPredict(sig, mockLM)
@@ -715,9 +715,9 @@ func TestPredict_Stream_InvalidInput(t *testing.T) {
 
 // TestPredict_Stream_LMError tests streaming with LM error
 func TestPredict_Stream_LMError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("answer", dsgo.FieldTypeString, "")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("answer", core.FieldTypeString, "")
 
 	mockLM := &mockStreamingLM{
 		streamErr: true,
@@ -749,16 +749,16 @@ func TestPredict_Stream_LMError(t *testing.T) {
 
 // mockStreamingLM is a mock LM for streaming tests
 type mockStreamingLM struct {
-	chunks    []dsgo.Chunk
+	chunks    []core.Chunk
 	streamErr bool
 }
 
-func (m *mockStreamingLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	return &dsgo.GenerateResult{Content: "answer: test"}, nil
+func (m *mockStreamingLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+	return &core.GenerateResult{Content: "answer: test"}, nil
 }
 
-func (m *mockStreamingLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
-	chunkChan := make(chan dsgo.Chunk)
+func (m *mockStreamingLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+	chunkChan := make(chan core.Chunk)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -766,7 +766,7 @@ func (m *mockStreamingLM) Stream(ctx context.Context, messages []dsgo.Message, o
 		defer close(errChan)
 
 		if m.streamErr {
-			errChan <- dsgo.ErrLMGeneration
+			errChan <- core.ErrLMGeneration
 			return
 		}
 
@@ -784,15 +784,15 @@ func (m *mockStreamingLM) SupportsTools() bool { return false }
 
 // TestPredict_Stream_WithJSONSchemaAutoGen tests streaming with auto-generated JSON schema
 func TestPredict_Stream_WithJSONSchemaAutoGen(t *testing.T) {
-	sig := dsgo.NewSignature("Classification").
-		AddInput("text", dsgo.FieldTypeString, "Text to classify").
-		AddOutput("category", dsgo.FieldTypeString, "Category").
-		AddOutput("score", dsgo.FieldTypeFloat, "Confidence score")
+	sig := core.NewSignature("Classification").
+		AddInput("text", core.FieldTypeString, "Text to classify").
+		AddOutput("category", core.FieldTypeString, "Category").
+		AddOutput("score", core.FieldTypeFloat, "Confidence score")
 
 	schemaVerified := false
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			// Verify schema was auto-generated for streaming too
 			if options.ResponseSchema != nil {
 				schemaVerified = true
@@ -805,13 +805,13 @@ func TestPredict_Stream_WithJSONSchemaAutoGen(t *testing.T) {
 					}
 				}
 			}
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content: `{"category": "tech", "score": 0.95}`,
 			}, nil
 		},
 	}
 
-	predict := NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter())
+	predict := NewPredict(sig, lm).WithAdapter(core.NewJSONAdapter())
 	result, err := predict.Stream(context.Background(), map[string]any{
 		"text": "AI article",
 	})
@@ -836,13 +836,13 @@ func TestPredict_Stream_WithJSONSchemaAutoGen(t *testing.T) {
 
 // TestPredict_Stream_ParseError tests streaming with parse error
 func TestPredict_Stream_ParseError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("field1", dsgo.FieldTypeString, "").
-		AddOutput("field2", dsgo.FieldTypeString, "")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("field1", core.FieldTypeString, "").
+		AddOutput("field2", core.FieldTypeString, "")
 
 	mockLM := &mockStreamingLM{
-		chunks: []dsgo.Chunk{
+		chunks: []core.Chunk{
 			{Content: "invalid unparseable content", FinishReason: ""},
 			{Content: "", FinishReason: "stop"},
 		},
@@ -876,16 +876,16 @@ func TestPredict_Stream_ParseError(t *testing.T) {
 
 // TestPredict_Stream_WithHistory tests streaming with conversation history
 func TestPredict_Stream_WithHistory(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("answer", dsgo.FieldTypeString, "")
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("answer", core.FieldTypeString, "")
 
-	history := dsgo.NewHistory()
-	history.Add(dsgo.Message{Role: "user", Content: "Previous question"})
-	history.Add(dsgo.Message{Role: "assistant", Content: "Previous answer"})
+	history := core.NewHistory()
+	history.Add(core.Message{Role: "user", Content: "Previous question"})
+	history.Add(core.Message{Role: "assistant", Content: "Previous answer"})
 
 	mockLM := &mockStreamingLM{
-		chunks: []dsgo.Chunk{
+		chunks: []core.Chunk{
 			{Content: "answer: Current answer", FinishReason: ""},
 			{Content: "", FinishReason: "stop"},
 		},
@@ -920,7 +920,7 @@ type MockLMForFallback struct {
 	ResponseFormat string // "chat", "json", or "invalid"
 }
 
-func (m *MockLMForFallback) Generate(ctx context.Context, messages []dsgo.Message, opts *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+func (m *MockLMForFallback) Generate(ctx context.Context, messages []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
 	// Simulate different response formats based on configuration
 	var content string
 
@@ -942,9 +942,9 @@ positive
 		content = "The sentiment is positive with high confidence"
 	}
 
-	return &dsgo.GenerateResult{
+	return &core.GenerateResult{
 		Content: content,
-		Usage: dsgo.Usage{
+		Usage: core.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 5,
 			TotalTokens:      15,
@@ -964,8 +964,8 @@ func (m *MockLMForFallback) SupportsTools() bool {
 	return false
 }
 
-func (m *MockLMForFallback) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
-	chunkChan := make(chan dsgo.Chunk, 1)
+func (m *MockLMForFallback) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+	chunkChan := make(chan core.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -978,7 +978,7 @@ func (m *MockLMForFallback) Stream(ctx context.Context, messages []dsgo.Message,
 			return
 		}
 
-		chunkChan <- dsgo.Chunk{
+		chunkChan <- core.Chunk{
 			Content:      result.Content,
 			FinishReason: result.FinishReason,
 			Usage:        result.Usage,
@@ -990,10 +990,10 @@ func (m *MockLMForFallback) Stream(ctx context.Context, messages []dsgo.Message,
 
 // TestFallbackAdapter_Integration tests the fallback mechanism with a mock LM
 func TestFallbackAdapter_Integration(t *testing.T) {
-	sig := dsgo.NewSignature("Analyze sentiment").
-		AddInput("text", dsgo.FieldTypeString, "Text to analyze").
-		AddOutput("sentiment", dsgo.FieldTypeString, "Sentiment classification").
-		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence score")
+	sig := core.NewSignature("Analyze sentiment").
+		AddInput("text", core.FieldTypeString, "Text to analyze").
+		AddOutput("sentiment", core.FieldTypeString, "Sentiment classification").
+		AddOutput("confidence", core.FieldTypeFloat, "Confidence score")
 
 	tests := []struct {
 		name           string
@@ -1028,7 +1028,7 @@ func TestFallbackAdapter_Integration(t *testing.T) {
 
 			// Create Predict module with FallbackAdapter
 			predict := NewPredict(sig, mockLM).
-				WithAdapter(dsgo.NewFallbackAdapter())
+				WithAdapter(core.NewFallbackAdapter())
 
 			// Execute prediction
 			inputs := map[string]any{
@@ -1057,7 +1057,7 @@ func TestFallbackAdapter_Integration(t *testing.T) {
 				}
 
 				// Verify which adapter was used
-				fallbackAdapter, ok := predict.Adapter.(*dsgo.FallbackAdapter)
+				fallbackAdapter, ok := predict.Adapter.(*core.FallbackAdapter)
 				if !ok {
 					t.Fatal("Expected FallbackAdapter")
 				}
@@ -1076,17 +1076,17 @@ func TestFallbackAdapter_Integration(t *testing.T) {
 
 // TestChatAdapter_Integration tests ChatAdapter with a mock LM
 func TestChatAdapter_Integration(t *testing.T) {
-	sig := dsgo.NewSignature("Analyze sentiment").
-		AddInput("text", dsgo.FieldTypeString, "Text to analyze").
-		AddOutput("sentiment", dsgo.FieldTypeString, "Sentiment").
-		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence")
+	sig := core.NewSignature("Analyze sentiment").
+		AddInput("text", core.FieldTypeString, "Text to analyze").
+		AddOutput("sentiment", core.FieldTypeString, "Sentiment").
+		AddOutput("confidence", core.FieldTypeFloat, "Confidence")
 
 	// Mock LM that returns field marker format
 	mockLM := &MockLMForFallback{ResponseFormat: "chat"}
 
 	// Create Predict module with ChatAdapter
 	predict := NewPredict(sig, mockLM).
-		WithAdapter(dsgo.NewChatAdapter())
+		WithAdapter(core.NewChatAdapter())
 
 	inputs := map[string]any{
 		"text": "This product is amazing!",
@@ -1110,13 +1110,13 @@ func TestChatAdapter_Integration(t *testing.T) {
 
 // TestFallbackAdapter_WithDemos tests fallback with few-shot examples
 func TestFallbackAdapter_WithDemos(t *testing.T) {
-	sig := dsgo.NewSignature("Analyze sentiment").
-		AddInput("text", dsgo.FieldTypeString, "").
-		AddOutput("sentiment", dsgo.FieldTypeString, "").
-		AddOutput("confidence", dsgo.FieldTypeFloat, "")
+	sig := core.NewSignature("Analyze sentiment").
+		AddInput("text", core.FieldTypeString, "").
+		AddOutput("sentiment", core.FieldTypeString, "").
+		AddOutput("confidence", core.FieldTypeFloat, "")
 
-	demos := []dsgo.Example{
-		*dsgo.NewExample(
+	demos := []core.Example{
+		*core.NewExample(
 			map[string]any{"text": "Hello world"},
 			map[string]any{"sentiment": "positive", "confidence": 0.9},
 		),
@@ -1125,7 +1125,7 @@ func TestFallbackAdapter_WithDemos(t *testing.T) {
 	mockLM := &MockLMForFallback{ResponseFormat: "json"}
 
 	predict := NewPredict(sig, mockLM).
-		WithAdapter(dsgo.NewFallbackAdapter()).
+		WithAdapter(core.NewFallbackAdapter()).
 		WithDemos(demos)
 
 	inputs := map[string]any{
@@ -1151,19 +1151,19 @@ func TestFallbackAdapter_WithDemos(t *testing.T) {
 
 // TestPredict_WithHistory tests multi-turn conversation
 func TestPredict_WithHistory(t *testing.T) {
-	sig := dsgo.NewSignature("Answer questions").
-		AddInput("question", dsgo.FieldTypeString, "Question").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Answer questions").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
-	history := dsgo.NewHistory()
+	history := core.NewHistory()
 	history.AddSystemMessage("You are a helpful assistant.")
 
-	var capturedMessages []dsgo.Message
+	var capturedMessages []core.Message
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			capturedMessages = messages
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content: `{"answer": "Paris"}`,
 			}, nil
 		},
@@ -1194,9 +1194,9 @@ func TestPredict_WithHistory(t *testing.T) {
 
 	// Second turn - history should include previous conversation
 	capturedMessages = nil
-	lm.GenerateFunc = func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	lm.GenerateFunc = func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 		capturedMessages = messages
-		return &dsgo.GenerateResult{
+		return &core.GenerateResult{
 			Content: `{"answer": "About 2.2 million"}`,
 		}, nil
 	}
@@ -1221,27 +1221,27 @@ func TestPredict_WithHistory(t *testing.T) {
 
 // TestPredict_WithDemos tests few-shot learning
 func TestPredict_WithDemos(t *testing.T) {
-	sig := dsgo.NewSignature("Classify sentiment").
-		AddInput("text", dsgo.FieldTypeString, "Text to classify").
-		AddOutput("sentiment", dsgo.FieldTypeString, "positive or negative")
+	sig := core.NewSignature("Classify sentiment").
+		AddInput("text", core.FieldTypeString, "Text to classify").
+		AddOutput("sentiment", core.FieldTypeString, "positive or negative")
 
-	demos := []dsgo.Example{
-		*dsgo.NewExample(
+	demos := []core.Example{
+		*core.NewExample(
 			map[string]any{"text": "I love this product!"},
 			map[string]any{"sentiment": "positive"},
 		),
-		*dsgo.NewExample(
+		*core.NewExample(
 			map[string]any{"text": "This is terrible."},
 			map[string]any{"sentiment": "negative"},
 		),
 	}
 
-	var capturedMessages []dsgo.Message
+	var capturedMessages []core.Message
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			capturedMessages = messages
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content: `{"sentiment": "positive"}`,
 			}, nil
 		},
@@ -1273,26 +1273,26 @@ func TestPredict_WithDemos(t *testing.T) {
 
 // TestPredict_WithHistoryAndDemos tests both features together
 func TestPredict_WithHistoryAndDemos(t *testing.T) {
-	sig := dsgo.NewSignature("Classify").
-		AddInput("text", dsgo.FieldTypeString, "Text").
-		AddOutput("category", dsgo.FieldTypeString, "Category")
+	sig := core.NewSignature("Classify").
+		AddInput("text", core.FieldTypeString, "Text").
+		AddOutput("category", core.FieldTypeString, "Category")
 
-	history := dsgo.NewHistory()
+	history := core.NewHistory()
 	history.AddSystemMessage("You are a classifier.")
 
-	demos := []dsgo.Example{
-		*dsgo.NewExample(
+	demos := []core.Example{
+		*core.NewExample(
 			map[string]any{"text": "apple"},
 			map[string]any{"category": "fruit"},
 		),
 	}
 
-	var capturedMessages []dsgo.Message
+	var capturedMessages []core.Message
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			capturedMessages = messages
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content: `{"category": "fruit"}`,
 			}, nil
 		},
@@ -1321,16 +1321,16 @@ func TestPredict_WithHistoryAndDemos(t *testing.T) {
 
 // TestChainOfThought_WithHistory tests multi-turn reasoning
 func TestChainOfThought_WithHistory(t *testing.T) {
-	sig := dsgo.NewSignature("Solve problems").
-		AddInput("problem", dsgo.FieldTypeString, "Problem").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Solve problems").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
-	history := dsgo.NewHistory()
+	history := core.NewHistory()
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"reasoning": "2+2 equals 4", "answer": "4"}`,
 			}, nil
 		},
@@ -1371,23 +1371,23 @@ func TestChainOfThought_WithHistory(t *testing.T) {
 
 // TestChainOfThought_WithDemos tests few-shot reasoning
 func TestChainOfThought_WithDemos(t *testing.T) {
-	sig := dsgo.NewSignature("Solve math problems").
-		AddInput("problem", dsgo.FieldTypeString, "Problem").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Solve math problems").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
-	demos := []dsgo.Example{
-		*dsgo.NewExample(
+	demos := []core.Example{
+		*core.NewExample(
 			map[string]any{"problem": "1+1"},
 			map[string]any{"answer": "2"},
 		),
 	}
 
-	var capturedMessages []dsgo.Message
+	var capturedMessages []core.Message
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			capturedMessages = messages
-			return &dsgo.GenerateResult{
+			return &core.GenerateResult{
 				Content: `{"reasoning": "Adding 2+2", "answer": "4"}`,
 			}, nil
 		},
@@ -1418,15 +1418,15 @@ func TestChainOfThought_WithDemos(t *testing.T) {
 // TestPredict_HistoryNotUpdatedOnError ensures history isn't corrupted on errors
 func TestPredict_HistoryNotUpdatedOnError(t *testing.T) {
 	// Use multiple fields to prevent JSONAdapter fallback
-	sig := dsgo.NewSignature("Test").
-		AddInput("input", dsgo.FieldTypeString, "Input").
-		AddOutput("output", dsgo.FieldTypeString, "Output").
-		AddOutput("status", dsgo.FieldTypeString, "Status")
+	sig := core.NewSignature("Test").
+		AddInput("input", core.FieldTypeString, "Input").
+		AddOutput("output", core.FieldTypeString, "Output").
+		AddOutput("status", core.FieldTypeString, "Status")
 
-	history := dsgo.NewHistory()
+	history := core.NewHistory()
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `invalid json without structure`,
 			}, nil
 		},
@@ -1450,14 +1450,14 @@ func TestPredict_HistoryNotUpdatedOnError(t *testing.T) {
 
 // TestPredict_FinishReasonHandling tests all finish_reason scenarios
 func TestPredict_FinishReasonHandling(t *testing.T) {
-	sig := dsgo.NewSignature("Test signature").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test signature").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	tests := []struct {
 		name          string
 		finishReason  string
 		content       string
-		toolCalls     []dsgo.ToolCall
+		toolCalls     []core.ToolCall
 		expectError   bool
 		errorContains string
 	}{
@@ -1492,7 +1492,7 @@ func TestPredict_FinishReasonHandling(t *testing.T) {
 			name:          "finish_reason=tool_calls (error - not supported)",
 			finishReason:  "tool_calls",
 			content:       "",
-			toolCalls:     []dsgo.ToolCall{{ID: "1", Name: "test_tool"}},
+			toolCalls:     []core.ToolCall{{ID: "1", Name: "test_tool"}},
 			expectError:   true,
 			errorContains: "finish_reason=tool_calls) but Predict module doesn't support tool loops",
 		},
@@ -1501,12 +1501,12 @@ func TestPredict_FinishReasonHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockLM := &MockLM{
-				GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-					return &dsgo.GenerateResult{
+				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+					return &core.GenerateResult{
 						Content:      tt.content,
 						FinishReason: tt.finishReason,
 						ToolCalls:    tt.toolCalls,
-						Usage:        dsgo.Usage{TotalTokens: 10},
+						Usage:        core.Usage{TotalTokens: 10},
 					}, nil
 				},
 			}

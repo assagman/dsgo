@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 type contextKey string
@@ -145,7 +145,7 @@ func LogAPIRequest(ctx context.Context, model string, promptLength int) {
 }
 
 // LogAPIResponse logs the end of an API request
-func LogAPIResponse(ctx context.Context, model string, statusCode int, duration time.Duration, usage dsgo.Usage) {
+func LogAPIResponse(ctx context.Context, model string, statusCode int, duration time.Duration, usage core.Usage) {
 	globalLogger.Info(ctx, "API request completed", map[string]any{
 		"model":             model,
 		"status_code":       statusCode,

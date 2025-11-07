@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // TestGenerate_EmptyChoices tests "no choices in response" error
@@ -35,7 +35,7 @@ func TestGenerate_EmptyChoices(t *testing.T) {
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
-	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	messages := []core.Message{{Role: "user", Content: "test"}}
 	result, err := lm.Generate(context.Background(), messages, nil)
 
 	if err == nil {
@@ -69,7 +69,7 @@ func TestGenerate_NullContent(t *testing.T) {
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
-	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	messages := []core.Message{{Role: "user", Content: "test"}}
 	result, err := lm.Generate(context.Background(), messages, nil)
 
 	// Should succeed with empty string content
@@ -94,7 +94,7 @@ func TestGenerate_HTTP405(t *testing.T) {
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
-	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	messages := []core.Message{{Role: "user", Content: "test"}}
 	result, err := lm.Generate(context.Background(), messages, nil)
 
 	if err == nil {
@@ -121,7 +121,7 @@ func TestGenerate_HTTP400_BadRequest(t *testing.T) {
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
-	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	messages := []core.Message{{Role: "user", Content: "test"}}
 	result, err := lm.Generate(context.Background(), messages, nil)
 
 	if err == nil {
@@ -148,7 +148,7 @@ func TestGenerate_MalformedJSON(t *testing.T) {
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
-	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	messages := []core.Message{{Role: "user", Content: "test"}}
 	result, err := lm.Generate(context.Background(), messages, nil)
 
 	if err == nil {
@@ -202,18 +202,18 @@ func TestGenerate_WithTools_RequestStructure(t *testing.T) {
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
-	messages := []dsgo.Message{{Role: "user", Content: "test"}}
-	tools := []dsgo.Tool{{
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	tools := []core.Tool{{
 		Name:        "calculator",
 		Description: "Perform calculations",
-		Parameters: []dsgo.ToolParameter{{
+		Parameters: []core.ToolParameter{{
 			Name:     "expression",
 			Type:     "string",
 			Required: true,
 		}},
 	}}
 
-	opts := &dsgo.GenerateOptions{Tools: tools}
+	opts := &core.GenerateOptions{Tools: tools}
 	result, err := lm.Generate(context.Background(), messages, opts)
 
 	if err != nil {

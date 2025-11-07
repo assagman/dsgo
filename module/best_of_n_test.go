@@ -6,43 +6,43 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 type MockModule struct {
-	ForwardFunc    func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error)
-	SignatureValue *dsgo.Signature
+	ForwardFunc    func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error)
+	SignatureValue *core.Signature
 	CallCount      int
 	mu             sync.Mutex
 }
 
-func (m *MockModule) Forward(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+func (m *MockModule) Forward(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 	m.mu.Lock()
 	m.CallCount++
 	m.mu.Unlock()
 	if m.ForwardFunc != nil {
 		return m.ForwardFunc(ctx, inputs)
 	}
-	return dsgo.NewPrediction(map[string]interface{}{"result": "test"}), nil
+	return core.NewPrediction(map[string]interface{}{"result": "test"}), nil
 }
 
-func (m *MockModule) GetSignature() *dsgo.Signature {
+func (m *MockModule) GetSignature() *core.Signature {
 	if m.SignatureValue != nil {
 		return m.SignatureValue
 	}
-	return dsgo.NewSignature("Mock")
+	return core.NewSignature("Mock")
 }
 
 func TestBestOfN_Forward_Success(t *testing.T) {
 	callCount := 0
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			callCount++
-			return dsgo.NewPrediction(map[string]interface{}{"answer": callCount}), nil
+			return core.NewPrediction(map[string]interface{}{"answer": callCount}), nil
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return float64(prediction.Outputs["answer"].(int)), nil
 	}
 
@@ -84,7 +84,7 @@ func TestBestOfN_Forward_InvalidN(t *testing.T) {
 
 func TestBestOfN_Forward_ModuleError(t *testing.T) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return nil, errors.New("module error")
 		},
 	}
@@ -100,12 +100,12 @@ func TestBestOfN_Forward_ModuleError(t *testing.T) {
 func TestBestOfN_Forward_PartialFailures(t *testing.T) {
 	callCount := 0
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			callCount++
 			if callCount <= 2 {
 				return nil, errors.New("temporary error")
 			}
-			return dsgo.NewPrediction(map[string]interface{}{"answer": "success"}), nil
+			return core.NewPrediction(map[string]interface{}{"answer": "success"}), nil
 		},
 	}
 
@@ -123,7 +123,7 @@ func TestBestOfN_Forward_PartialFailures(t *testing.T) {
 
 func TestBestOfN_Forward_ExceedMaxFailures(t *testing.T) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return nil, errors.New("always fail")
 		},
 	}
@@ -138,12 +138,12 @@ func TestBestOfN_Forward_ExceedMaxFailures(t *testing.T) {
 
 func TestBestOfN_Forward_ScorerError(t *testing.T) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
-			return dsgo.NewPrediction(map[string]interface{}{"answer": "test"}), nil
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{"answer": "test"}), nil
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return 0, errors.New("scorer error")
 	}
 
@@ -158,13 +158,13 @@ func TestBestOfN_Forward_ScorerError(t *testing.T) {
 func TestBestOfN_Forward_ReturnAll(t *testing.T) {
 	callCount := 0
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			callCount++
-			return dsgo.NewPrediction(map[string]interface{}{"score": callCount}), nil
+			return core.NewPrediction(map[string]interface{}{"score": callCount}), nil
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return float64(prediction.Outputs["score"].(int)), nil
 	}
 
@@ -186,8 +186,8 @@ func TestBestOfN_Forward_ReturnAll(t *testing.T) {
 
 func TestBestOfN_Forward_Parallel(t *testing.T) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
-			return dsgo.NewPrediction(map[string]interface{}{"result": "test"}), nil
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{"result": "test"}), nil
 		},
 	}
 
@@ -208,7 +208,7 @@ func TestBestOfN_Forward_ParallelWithFailures(t *testing.T) {
 	var mu sync.Mutex
 
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			mu.Lock()
 			callCount++
 			count := callCount
@@ -217,11 +217,11 @@ func TestBestOfN_Forward_ParallelWithFailures(t *testing.T) {
 			if count <= 2 {
 				return nil, errors.New("simulated failure")
 			}
-			return dsgo.NewPrediction(map[string]interface{}{"value": count}), nil
+			return core.NewPrediction(map[string]interface{}{"value": count}), nil
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return float64(prediction.Outputs["value"].(int)), nil
 	}
 
@@ -239,12 +239,12 @@ func TestBestOfN_Forward_ParallelWithFailures(t *testing.T) {
 
 func TestBestOfN_Forward_ParallelExceedMaxFailures(t *testing.T) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return nil, errors.New("always fail")
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return 1.0, nil
 	}
 
@@ -258,12 +258,12 @@ func TestBestOfN_Forward_ParallelExceedMaxFailures(t *testing.T) {
 
 func TestBestOfN_Forward_ParallelScorerError(t *testing.T) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
-			return dsgo.NewPrediction(map[string]interface{}{"value": "test"}), nil
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{"value": "test"}), nil
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return 0, errors.New("scorer error")
 	}
 
@@ -280,16 +280,16 @@ func TestBestOfN_Forward_ParallelReturnAll(t *testing.T) {
 	var mu sync.Mutex
 
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			mu.Lock()
 			callCount++
 			count := callCount
 			mu.Unlock()
-			return dsgo.NewPrediction(map[string]interface{}{"value": count}), nil
+			return core.NewPrediction(map[string]interface{}{"value": count}), nil
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return float64(prediction.Outputs["value"].(int)), nil
 	}
 
@@ -310,7 +310,7 @@ func TestBestOfN_Forward_ParallelReturnAll(t *testing.T) {
 }
 
 func TestBestOfN_GetSignature(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	module := &MockModule{SignatureValue: sig}
 	bon := NewBestOfN(module, 3)
 
@@ -322,7 +322,7 @@ func TestBestOfN_GetSignature(t *testing.T) {
 func TestDefaultScorer(t *testing.T) {
 	scorer := DefaultScorer()
 
-	pred := dsgo.NewPrediction(map[string]interface{}{
+	pred := core.NewPrediction(map[string]interface{}{
 		"answer": "short",
 	})
 
@@ -340,13 +340,13 @@ func TestDefaultScorer(t *testing.T) {
 func TestBestOfN_WithThreshold_EarlyStop(t *testing.T) {
 	callCount := 0
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			callCount++
-			return dsgo.NewPrediction(map[string]interface{}{"score": callCount * 10}), nil
+			return core.NewPrediction(map[string]interface{}{"score": callCount * 10}), nil
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return float64(prediction.Outputs["score"].(int)), nil
 	}
 
@@ -412,7 +412,7 @@ func TestConfidenceScorer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scorer := ConfidenceScorer("confidence")
-			pred := dsgo.NewPrediction(tt.outputs)
+			pred := core.NewPrediction(tt.outputs)
 			score, err := scorer(nil, pred)
 
 			if (err != nil) != tt.wantErr {
@@ -433,7 +433,7 @@ func TestBestOfN_ConcurrentForward(t *testing.T) {
 	var mu sync.Mutex
 
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			mu.Lock()
 			callCount++
 			count := callCount
@@ -444,12 +444,12 @@ func TestBestOfN_ConcurrentForward(t *testing.T) {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:
-				return dsgo.NewPrediction(map[string]interface{}{"answer": count}), nil
+				return core.NewPrediction(map[string]interface{}{"answer": count}), nil
 			}
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return float64(prediction.Outputs["answer"].(int)), nil
 	}
 
@@ -488,7 +488,7 @@ func TestBestOfN_Forward_ParallelContextCancellation(t *testing.T) {
 	var mu sync.Mutex
 
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			mu.Lock()
 			startedCount++
 			mu.Unlock()
@@ -499,7 +499,7 @@ func TestBestOfN_Forward_ParallelContextCancellation(t *testing.T) {
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return 1.0, nil
 	}
 
@@ -528,8 +528,8 @@ func TestBestOfN_Forward_ParallelContextCancellation(t *testing.T) {
 // BenchmarkBestOfN_Sequential benchmarks sequential execution with varying N values
 func BenchmarkBestOfN_Sequential(b *testing.B) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
-			return dsgo.NewPrediction(map[string]interface{}{"result": "test"}), nil
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{"result": "test"}), nil
 		},
 	}
 
@@ -562,8 +562,8 @@ func BenchmarkBestOfN_Sequential(b *testing.B) {
 // This stress test ensures stability and performance under heavy concurrent load
 func BenchmarkBestOfN_Parallel(b *testing.B) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
-			return dsgo.NewPrediction(map[string]interface{}{"result": "test"}), nil
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{"result": "test"}), nil
 		},
 	}
 
@@ -599,7 +599,7 @@ func BenchmarkBestOfN_ParallelWithFailures(b *testing.B) {
 	var mu sync.Mutex
 
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			mu.Lock()
 			callCount++
 			count := callCount
@@ -609,11 +609,11 @@ func BenchmarkBestOfN_ParallelWithFailures(b *testing.B) {
 			if count%5 == 0 {
 				return nil, errors.New("simulated failure")
 			}
-			return dsgo.NewPrediction(map[string]interface{}{"value": count}), nil
+			return core.NewPrediction(map[string]interface{}{"value": count}), nil
 		},
 	}
 
-	scorer := func(inputs map[string]interface{}, prediction *dsgo.Prediction) (float64, error) {
+	scorer := func(inputs map[string]interface{}, prediction *core.Prediction) (float64, error) {
 		return float64(prediction.Outputs["value"].(int)), nil
 	}
 
@@ -632,8 +632,8 @@ func BenchmarkBestOfN_ParallelWithFailures(b *testing.B) {
 // BenchmarkBestOfN_ParallelReturnAll benchmarks parallel execution with all completions returned
 func BenchmarkBestOfN_ParallelReturnAll(b *testing.B) {
 	module := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
-			return dsgo.NewPrediction(map[string]interface{}{"result": "test"}), nil
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{"result": "test"}), nil
 		},
 	}
 

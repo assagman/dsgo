@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestNewOpenRouter(t *testing.T) {
@@ -148,12 +148,12 @@ func TestInit_RegistersLM(t *testing.T) {
 	ctx := context.Background()
 
 	// Configure with openrouter provider
-	dsgo.Configure(
-		dsgo.WithProvider("openrouter"),
-		dsgo.WithModel("test-model"),
+	core.Configure(
+		core.WithProvider("openrouter"),
+		core.WithModel("test-model"),
 	)
 
-	lm, err := dsgo.NewLM(ctx)
+	lm, err := core.NewLM(ctx)
 	if err != nil {
 		t.Fatalf("expected LM to be created, got error: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestInit_RegistersLM(t *testing.T) {
 	switch v := lm.(type) {
 	case *OpenRouter:
 		// Direct OpenRouter
-	case interface{ Unwrap() dsgo.LM }:
+	case interface{ Unwrap() core.LM }:
 		// Wrapped LM, check the base
 		if _, ok := v.Unwrap().(*OpenRouter); !ok {
 			t.Errorf("expected wrapped *OpenRouter, got %T", v.Unwrap())
@@ -229,10 +229,10 @@ func TestOpenRouter_Generate_Success(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	messages := []dsgo.Message{
+	messages := []core.Message{
 		{Role: "user", Content: "Hello"},
 	}
-	options := dsgo.DefaultGenerateOptions()
+	options := core.DefaultGenerateOptions()
 
 	result, err := lm.Generate(context.Background(), messages, options)
 	if err != nil {
@@ -282,7 +282,7 @@ func TestOpenRouter_Generate_WithHeaders(t *testing.T) {
 		SiteURL:  "https://test.com",
 	}
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -340,13 +340,13 @@ func TestOpenRouter_Generate_WithTools(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	messages := []dsgo.Message{{Role: "user", Content: "What's the weather?"}}
-	options := dsgo.DefaultGenerateOptions()
+	messages := []core.Message{{Role: "user", Content: "What's the weather?"}}
+	options := core.DefaultGenerateOptions()
 	weatherFunc := func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 		return "sunny", nil
 	}
-	options.Tools = []dsgo.Tool{
-		*dsgo.NewTool("get_weather", "Get weather", weatherFunc),
+	options.Tools = []core.Tool{
+		*core.NewTool("get_weather", "Get weather", weatherFunc),
 	}
 
 	result, err := lm.Generate(context.Background(), messages, options)
@@ -408,13 +408,13 @@ func TestOpenRouter_Generate_ToolCallsWithMalformedJSON(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	messages := []dsgo.Message{{Role: "user", Content: "Search for test query"}}
-	options := dsgo.DefaultGenerateOptions()
+	messages := []core.Message{{Role: "user", Content: "Search for test query"}}
+	options := core.DefaultGenerateOptions()
 	searchFunc := func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 		return "results", nil
 	}
-	options.Tools = []dsgo.Tool{
-		*dsgo.NewTool("search", "Search tool", searchFunc).AddParameter("query", "string", "Search query", true),
+	options.Tools = []core.Tool{
+		*core.NewTool("search", "Search tool", searchFunc).AddParameter("query", "string", "Search query", true),
 	}
 
 	result, err := lm.Generate(context.Background(), messages, options)
@@ -448,7 +448,7 @@ func TestOpenRouter_Generate_ErrorResponse(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -473,7 +473,7 @@ func TestOpenRouter_Generate_NoChoices(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 	if err == nil || err.Error() != "no choices in response" {
 		t.Fatalf("expected 'no choices in response' error, got %v", err)
 	}
@@ -484,14 +484,14 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		messages []dsgo.Message
-		options  *dsgo.GenerateOptions
+		messages []core.Message
+		options  *core.GenerateOptions
 		check    func(t *testing.T, req map[string]interface{})
 	}{
 		{
 			name:     "basic request",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options:  dsgo.DefaultGenerateOptions(),
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options:  core.DefaultGenerateOptions(),
 			check: func(t *testing.T, req map[string]interface{}) {
 				if req["model"] != "gpt-4" {
 					t.Errorf("expected model gpt-4, got %v", req["model"])
@@ -500,8 +500,8 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with temperature",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				Temperature: 0.7,
 			},
 			check: func(t *testing.T, req map[string]interface{}) {
@@ -512,8 +512,8 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with max tokens",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				MaxTokens: 100,
 			},
 			check: func(t *testing.T, req map[string]interface{}) {
@@ -524,8 +524,8 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with top_p",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				TopP: 0.9,
 			},
 			check: func(t *testing.T, req map[string]interface{}) {
@@ -536,8 +536,8 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with json format (no schema)",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				ResponseFormat: "json",
 			},
 			check: func(t *testing.T, req map[string]interface{}) {
@@ -549,8 +549,8 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with json schema",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				ResponseFormat: "json",
 				ResponseSchema: map[string]any{
 					"type": "object",
@@ -597,8 +597,8 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 		},
 		{
 			name:     "with penalties",
-			messages: []dsgo.Message{{Role: "user", Content: "test"}},
-			options: &dsgo.GenerateOptions{
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
 				FrequencyPenalty: 0.5,
 				PresencePenalty:  0.3,
 			},
@@ -626,12 +626,12 @@ func TestOpenRouter_ConvertMessages(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		messages []dsgo.Message
+		messages []core.Message
 		check    func(t *testing.T, converted []map[string]interface{})
 	}{
 		{
 			name: "basic message",
-			messages: []dsgo.Message{
+			messages: []core.Message{
 				{Role: "user", Content: "Hello"},
 			},
 			check: func(t *testing.T, converted []map[string]interface{}) {
@@ -648,7 +648,7 @@ func TestOpenRouter_ConvertMessages(t *testing.T) {
 		},
 		{
 			name: "tool response",
-			messages: []dsgo.Message{
+			messages: []core.Message{
 				{Role: "tool", Content: "result", ToolID: "call_123"},
 			},
 			check: func(t *testing.T, converted []map[string]interface{}) {
@@ -659,11 +659,11 @@ func TestOpenRouter_ConvertMessages(t *testing.T) {
 		},
 		{
 			name: "assistant with tool calls",
-			messages: []dsgo.Message{
+			messages: []core.Message{
 				{
 					Role:    "assistant",
 					Content: "Let me check",
-					ToolCalls: []dsgo.ToolCall{
+					ToolCalls: []core.ToolCall{
 						{
 							ID:        "call_123",
 							Name:      "search",
@@ -694,7 +694,7 @@ func TestOpenRouter_ConvertMessages(t *testing.T) {
 
 func TestOpenRouter_ConvertTool(t *testing.T) {
 	lm := &OpenRouter{}
-	tool := dsgo.NewTool("test_tool", "A test tool", nil)
+	tool := core.NewTool("test_tool", "A test tool", nil)
 	tool.AddParameter("param1", "string", "First param", true)
 	tool.AddEnumParameter("param2", "Second param", []string{"a", "b"}, false)
 
@@ -811,11 +811,11 @@ func TestOpenRouter_Generate_WithToolChoice(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	options := dsgo.DefaultGenerateOptions()
-	options.Tools = []dsgo.Tool{*dsgo.NewTool("specific_tool", "desc", nil)}
+	options := core.DefaultGenerateOptions()
+	options.Tools = []core.Tool{*core.NewTool("specific_tool", "desc", nil)}
 	options.ToolChoice = "specific_tool"
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, options)
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, options)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -852,11 +852,11 @@ func TestOpenRouter_Generate_ToolChoiceNone(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	options := dsgo.DefaultGenerateOptions()
-	options.Tools = []dsgo.Tool{*dsgo.NewTool("tool", "desc", nil)}
+	options := core.DefaultGenerateOptions()
+	options.Tools = []core.Tool{*core.NewTool("tool", "desc", nil)}
 	options.ToolChoice = "none"
 
-	_, err := lm.Generate(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, options)
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, options)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -891,13 +891,13 @@ func TestOpenRouter_Stream_Success(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	messages := []dsgo.Message{{Role: "user", Content: "Hello"}}
-	options := dsgo.DefaultGenerateOptions()
+	messages := []core.Message{{Role: "user", Content: "Hello"}}
+	options := core.DefaultGenerateOptions()
 
 	chunkChan, errChan := lm.Stream(context.Background(), messages, options)
 
 	var content string
-	var finalUsage dsgo.Usage
+	var finalUsage core.Usage
 	chunkCount := 0
 
 	for chunk := range chunkChan {
@@ -940,7 +940,7 @@ func TestOpenRouter_Stream_Error(t *testing.T) {
 		Client:  &http.Client{},
 	}
 
-	chunkChan, errChan := lm.Stream(context.Background(), []dsgo.Message{{Role: "user", Content: "test"}}, dsgo.DefaultGenerateOptions())
+	chunkChan, errChan := lm.Stream(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 
 	// Should get error
 	for range chunkChan {

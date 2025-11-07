@@ -5,25 +5,25 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestProgram_Forward_Success(t *testing.T) {
 	module1 := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
-			return dsgo.NewPrediction(map[string]interface{}{"step1": "done"}), nil
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{"step1": "done"}), nil
 		},
-		SignatureValue: dsgo.NewSignature("Module1"),
+		SignatureValue: core.NewSignature("Module1"),
 	}
 
 	module2 := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			if inputs["step1"] != "done" {
 				t.Error("Module2 should receive step1 output")
 			}
-			return dsgo.NewPrediction(map[string]interface{}{"step2": "complete"}), nil
+			return core.NewPrediction(map[string]interface{}{"step2": "complete"}), nil
 		},
-		SignatureValue: dsgo.NewSignature("Module2"),
+		SignatureValue: core.NewSignature("Module2"),
 	}
 
 	program := NewProgram("test-program").
@@ -56,13 +56,13 @@ func TestProgram_Forward_NoModules(t *testing.T) {
 
 func TestProgram_Forward_ModuleError(t *testing.T) {
 	module1 := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
-			return dsgo.NewPrediction(map[string]interface{}{"result": "ok"}), nil
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
+			return core.NewPrediction(map[string]interface{}{"result": "ok"}), nil
 		},
 	}
 
 	module2 := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return nil, errors.New("module2 error")
 		},
 	}
@@ -76,7 +76,7 @@ func TestProgram_Forward_ModuleError(t *testing.T) {
 }
 
 func TestProgram_GetSignature(t *testing.T) {
-	sig := dsgo.NewSignature("LastModule")
+	sig := core.NewSignature("LastModule")
 	module := &MockModule{SignatureValue: sig}
 
 	program := NewProgram("test").AddModule(module)
@@ -119,23 +119,23 @@ func TestProgram_ModuleCount(t *testing.T) {
 
 func TestProgram_InputMerging(t *testing.T) {
 	module1 := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			if inputs["original"] != "value" {
 				t.Error("Module1 should receive original input")
 			}
-			return dsgo.NewPrediction(map[string]interface{}{"intermediate": "result"}), nil
+			return core.NewPrediction(map[string]interface{}{"intermediate": "result"}), nil
 		},
 	}
 
 	module2 := &MockModule{
-		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*dsgo.Prediction, error) {
+		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			if inputs["original"] != "value" {
 				t.Error("Module2 should still have access to original input")
 			}
 			if inputs["intermediate"] != "result" {
 				t.Error("Module2 should have module1's output")
 			}
-			return dsgo.NewPrediction(map[string]interface{}{"final": "done"}), nil
+			return core.NewPrediction(map[string]interface{}{"final": "done"}), nil
 		},
 	}
 

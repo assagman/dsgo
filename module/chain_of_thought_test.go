@@ -6,18 +6,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 func TestChainOfThought_Forward_Success(t *testing.T) {
-	sig := dsgo.NewSignature("Solve problem").
-		AddInput("problem", dsgo.FieldTypeString, "The problem").
-		AddOutput("answer", dsgo.FieldTypeString, "The answer")
+	sig := core.NewSignature("Solve problem").
+		AddInput("problem", core.FieldTypeString, "The problem").
+		AddOutput("answer", core.FieldTypeString, "The answer")
 
 	lm := &MockLM{
 		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{"reasoning": "Step 1... Step 2...", "answer": "42"}`,
 			}, nil
 		},
@@ -42,8 +42,8 @@ func TestChainOfThought_Forward_Success(t *testing.T) {
 }
 
 func TestChainOfThought_Forward_InvalidInput(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("required", dsgo.FieldTypeString, "Required")
+	sig := core.NewSignature("Test").
+		AddInput("required", core.FieldTypeString, "Required")
 
 	lm := &MockLM{}
 	cot := NewChainOfThought(sig, lm)
@@ -55,11 +55,11 @@ func TestChainOfThought_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestChainOfThought_Forward_LMError(t *testing.T) {
-	sig := dsgo.NewSignature("Test").
-		AddInput("problem", dsgo.FieldTypeString, "Problem")
+	sig := core.NewSignature("Test").
+		AddInput("problem", core.FieldTypeString, "Problem")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			return nil, errors.New("LM error")
 		},
 	}
@@ -75,11 +75,11 @@ func TestChainOfThought_Forward_LMError(t *testing.T) {
 }
 
 func TestChainOfThought_WithOptions(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	cot := NewChainOfThought(sig, lm)
 
-	customOpts := &dsgo.GenerateOptions{Temperature: 0.9}
+	customOpts := &core.GenerateOptions{Temperature: 0.9}
 	cot.WithOptions(customOpts)
 
 	if cot.Options.Temperature != 0.9 {
@@ -88,7 +88,7 @@ func TestChainOfThought_WithOptions(t *testing.T) {
 }
 
 func TestChainOfThought_GetSignature(t *testing.T) {
-	sig := dsgo.NewSignature("Test")
+	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	cot := NewChainOfThought(sig, lm)
 
@@ -98,12 +98,12 @@ func TestChainOfThought_GetSignature(t *testing.T) {
 }
 
 func TestChainOfThought_BuildPrompt(t *testing.T) {
-	sig := dsgo.NewSignature("Solve the problem").
-		AddInput("problem", dsgo.FieldTypeString, "Problem to solve").
-		AddOutput("answer", dsgo.FieldTypeString, "The answer")
+	sig := core.NewSignature("Solve the problem").
+		AddInput("problem", core.FieldTypeString, "Problem to solve").
+		AddOutput("answer", core.FieldTypeString, "The answer")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			content := messages[0].Content
 			if !contains(content, "step-by-step") {
 				t.Error("Prompt should include step-by-step instruction")
@@ -111,7 +111,7 @@ func TestChainOfThought_BuildPrompt(t *testing.T) {
 			if !contains(content, "reasoning") {
 				t.Error("Prompt should request reasoning field")
 			}
-			return &dsgo.GenerateResult{Content: `{"reasoning": "test", "answer": "ok"}`}, nil
+			return &core.GenerateResult{Content: `{"reasoning": "test", "answer": "ok"}`}, nil
 		},
 	}
 
@@ -126,13 +126,13 @@ func TestChainOfThought_BuildPrompt(t *testing.T) {
 }
 
 func TestChainOfThought_BuildPrompt_NoDescription(t *testing.T) {
-	sig := dsgo.NewSignature("").
-		AddInput("problem", dsgo.FieldTypeString, "Problem").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{Content: `{"reasoning": "test", "answer": "ok"}`}, nil
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{Content: `{"reasoning": "test", "answer": "ok"}`}, nil
 		},
 	}
 
@@ -149,13 +149,13 @@ func TestChainOfThought_BuildPrompt_NoDescription(t *testing.T) {
 // TestChainOfThought_ReasoningInRationale verifies that reasoning is stored in Rationale field,
 // not in Outputs["reasoning"]. This prevents the bug found in examples/sentiment and examples/interview.
 func TestChainOfThought_ReasoningInRationale(t *testing.T) {
-	sig := dsgo.NewSignature("Test signature").
-		AddInput("question", dsgo.FieldTypeString, "The question").
-		AddOutput("answer", dsgo.FieldTypeString, "The answer")
+	sig := core.NewSignature("Test signature").
+		AddInput("question", core.FieldTypeString, "The question").
+		AddOutput("answer", core.FieldTypeString, "The answer")
 
 	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-			return &dsgo.GenerateResult{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
 				Content: `{
 					"reasoning": "This is my step-by-step reasoning",
 					"answer": "42"
@@ -194,12 +194,12 @@ func TestChainOfThought_ReasoningInRationale(t *testing.T) {
 
 // TestChainOfThought_WithAdapter tests adapter configuration
 func TestChainOfThought_WithAdapter(t *testing.T) {
-	sig := dsgo.NewSignature("test").
-		AddInput("question", dsgo.FieldTypeString, "").
-		AddOutput("answer", dsgo.FieldTypeString, "")
+	sig := core.NewSignature("test").
+		AddInput("question", core.FieldTypeString, "").
+		AddOutput("answer", core.FieldTypeString, "")
 
 	lm := &MockLM{}
-	adapter := dsgo.NewChatAdapter()
+	adapter := core.NewChatAdapter()
 
 	cot := NewChainOfThought(sig, lm).WithAdapter(adapter)
 	if cot.Adapter != adapter {
@@ -209,8 +209,8 @@ func TestChainOfThought_WithAdapter(t *testing.T) {
 
 // TestChainOfThought_FinishReasonHandling tests all finish_reason scenarios
 func TestChainOfThought_FinishReasonHandling(t *testing.T) {
-	sig := dsgo.NewSignature("Test signature").
-		AddOutput("answer", dsgo.FieldTypeString, "Answer")
+	sig := core.NewSignature("Test signature").
+		AddOutput("answer", core.FieldTypeString, "Answer")
 
 	tests := []struct {
 		name          string
@@ -244,11 +244,11 @@ func TestChainOfThought_FinishReasonHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockLM := &MockLM{
-				GenerateFunc: func(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-					return &dsgo.GenerateResult{
+				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+					return &core.GenerateResult{
 						Content:      tt.content,
 						FinishReason: tt.finishReason,
-						Usage:        dsgo.Usage{TotalTokens: 10},
+						Usage:        core.Usage{TotalTokens: 10},
 					}, nil
 				},
 			}

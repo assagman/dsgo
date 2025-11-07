@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // Program represents a composable pipeline of modules
 type Program struct {
-	modules []dsgo.Module
+	modules []core.Module
 	name    string
 }
 
@@ -17,27 +17,27 @@ type Program struct {
 func NewProgram(name string) *Program {
 	return &Program{
 		name:    name,
-		modules: []dsgo.Module{},
+		modules: []core.Module{},
 	}
 }
 
 // AddModule adds a module to the program pipeline
-func (p *Program) AddModule(module dsgo.Module) *Program {
+func (p *Program) AddModule(module core.Module) *Program {
 	p.modules = append(p.modules, module)
 	return p
 }
 
 // Forward executes the program by running modules in sequence
 // Each module's outputs become available as inputs to subsequent modules
-func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	if len(p.modules) == 0 {
 		return nil, fmt.Errorf("program has no modules")
 	}
 
 	currentInputs := inputs
 	finalOutputs := make(map[string]any)
-	var lastPrediction *dsgo.Prediction
-	var totalUsage dsgo.Usage
+	var lastPrediction *core.Prediction
+	var totalUsage core.Usage
 
 	for i, module := range p.modules {
 		prediction, err := module.Forward(ctx, currentInputs)
@@ -71,7 +71,7 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 	}
 
 	// Build final prediction from accumulated results
-	finalPrediction := dsgo.NewPrediction(finalOutputs).
+	finalPrediction := core.NewPrediction(finalOutputs).
 		WithUsage(totalUsage).
 		WithModuleName(p.name).
 		WithInputs(inputs)
@@ -85,7 +85,7 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 }
 
 // GetSignature returns the signature of the last module in the pipeline
-func (p *Program) GetSignature() *dsgo.Signature {
+func (p *Program) GetSignature() *core.Signature {
 	if len(p.modules) == 0 {
 		return nil
 	}

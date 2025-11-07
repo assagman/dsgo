@@ -9,17 +9,18 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 	"github.com/assagman/dsgo/internal/jsonutil"
 	"github.com/assagman/dsgo/internal/retry"
 	"github.com/assagman/dsgo/logging"
 )
 
 func init() {
-	dsgo.RegisterLM("openai", func(model string) dsgo.LM {
+	core.RegisterLM("openai", func(model string) core.LM {
 		return NewOpenAI(model)
 	})
 }
@@ -34,7 +35,7 @@ type OpenAI struct {
 	Model   string
 	BaseURL string
 	Client  *http.Client
-	Cache   dsgo.Cache
+	Cache   core.Cache
 }
 
 // NewOpenAI creates a new OpenAI LM
@@ -64,7 +65,7 @@ func (o *OpenAI) SupportsTools() bool {
 }
 
 // Generate generates a response from OpenAI
-func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+func (o *OpenAI) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
 
 	// Calculate prompt length for logging
@@ -78,7 +79,7 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 
 	// Check cache if available
 	if o.Cache != nil {
-		cacheKey := dsgo.GenerateCacheKey(o.Model, messages, options)
+		cacheKey := core.GenerateCacheKey(o.Model, messages, options)
 		if cached, ok := o.Cache.Get(cacheKey); ok {
 			return cached, nil
 		}
@@ -120,10 +121,10 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 		return nil, fmt.Errorf("failed to read response body: %w", readErr)
 	}
 
-	// Save raw response if debug enabled
+	// Save raw request/response exchange if debug enabled
 	if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
-		if err := saveRawResponse(o.Model, bodyBytes); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save raw response: %v\n", err)
+		if err := saveRawExchange(o.Model, reqBody, resp.StatusCode, resp.Header, bodyBytes, nil); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save raw exchange: %v\n", err)
 		}
 	}
 
@@ -131,8 +132,8 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		logging.LogAPIError(ctx, o.Model, err)
 		// Save failed response for debugging
-		if err := saveRawResponse(o.Model+"_DECODE_FAILED", bodyBytes); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save failed response: %v\n", err)
+		if err := saveRawExchange(o.Model+"_DECODE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
 		}
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -141,8 +142,8 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 	if err != nil {
 		logging.LogAPIError(ctx, o.Model, err)
 		// Save raw response on parse error
-		if err := saveRawResponse(o.Model+"_PARSE_FAILED", bodyBytes); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save failed response: %v\n", err)
+		if err := saveRawExchange(o.Model+"_PARSE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
 		}
 		return nil, err
 	}
@@ -156,14 +157,14 @@ func (o *OpenAI) Generate(ctx context.Context, messages []dsgo.Message, options 
 
 	// Store in cache if available
 	if o.Cache != nil {
-		cacheKey := dsgo.GenerateCacheKey(o.Model, messages, options)
+		cacheKey := core.GenerateCacheKey(o.Model, messages, options)
 		o.Cache.Set(cacheKey, result)
 	}
 
 	return result, nil
 }
 
-func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOptions) map[string]any {
+func (o *OpenAI) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
 	req := map[string]any{
 		"model":    o.Model,
 		"messages": o.convertMessages(messages),
@@ -229,7 +230,7 @@ func (o *OpenAI) buildRequest(messages []dsgo.Message, options *dsgo.GenerateOpt
 	return req
 }
 
-func (o *OpenAI) convertMessages(messages []dsgo.Message) []map[string]any {
+func (o *OpenAI) convertMessages(messages []core.Message) []map[string]any {
 	converted := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
 		m := map[string]any{
@@ -270,7 +271,7 @@ func (o *OpenAI) convertMessages(messages []dsgo.Message) []map[string]any {
 	return converted
 }
 
-func (o *OpenAI) convertTool(tool *dsgo.Tool) map[string]any {
+func (o *OpenAI) convertTool(tool *core.Tool) map[string]any {
 	properties := make(map[string]any)
 	required := []string{}
 
@@ -303,16 +304,16 @@ func (o *OpenAI) convertTool(tool *dsgo.Tool) map[string]any {
 	}
 }
 
-func (o *OpenAI) parseResponse(resp *openAIResponse) (*dsgo.GenerateResult, error) {
+func (o *OpenAI) parseResponse(resp *openAIResponse) (*core.GenerateResult, error) {
 	if len(resp.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
 
 	choice := resp.Choices[0]
-	result := &dsgo.GenerateResult{
+	result := &core.GenerateResult{
 		Content:      choice.Message.Content,
 		FinishReason: choice.FinishReason,
-		Usage: dsgo.Usage{
+		Usage: core.Usage{
 			PromptTokens:     resp.Usage.PromptTokens,
 			CompletionTokens: resp.Usage.CompletionTokens,
 			TotalTokens:      resp.Usage.TotalTokens,
@@ -321,7 +322,7 @@ func (o *OpenAI) parseResponse(resp *openAIResponse) (*dsgo.GenerateResult, erro
 
 	// Parse tool calls if present
 	if len(choice.Message.ToolCalls) > 0 {
-		result.ToolCalls = make([]dsgo.ToolCall, 0, len(choice.Message.ToolCalls))
+		result.ToolCalls = make([]core.ToolCall, 0, len(choice.Message.ToolCalls))
 		for _, tc := range choice.Message.ToolCalls {
 			var args map[string]any
 
@@ -331,7 +332,7 @@ func (o *OpenAI) parseResponse(resp *openAIResponse) (*dsgo.GenerateResult, erro
 			if err := json.Unmarshal([]byte(repairedArgs), &args); err != nil {
 				return nil, fmt.Errorf("failed to parse tool arguments (after repair): %w", err)
 			}
-			result.ToolCalls = append(result.ToolCalls, dsgo.ToolCall{
+			result.ToolCalls = append(result.ToolCalls, core.ToolCall{
 				ID:        tc.ID,
 				Name:      tc.Function.Name,
 				Arguments: args,
@@ -383,8 +384,8 @@ func (o *OpenAI) extractMetadata(headers http.Header) map[string]any {
 }
 
 // Stream generates a streaming response from OpenAI
-func (o *OpenAI) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
-	chunkChan := make(chan dsgo.Chunk)
+func (o *OpenAI) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+	chunkChan := make(chan core.Chunk)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -455,14 +456,14 @@ func (o *OpenAI) Stream(ctx context.Context, messages []dsgo.Message, options *d
 			// Extract chunk data
 			if len(streamResp.Choices) > 0 {
 				choice := streamResp.Choices[0]
-				chunk := dsgo.Chunk{
+				chunk := core.Chunk{
 					Content:      choice.Delta.Content,
 					FinishReason: choice.FinishReason,
 				}
 
 				// Add usage if present (typically in last chunk)
 				if streamResp.Usage != nil {
-					chunk.Usage = dsgo.Usage{
+					chunk.Usage = core.Usage{
 						PromptTokens:     streamResp.Usage.PromptTokens,
 						CompletionTokens: streamResp.Usage.CompletionTokens,
 						TotalTokens:      streamResp.Usage.TotalTokens,
@@ -535,26 +536,67 @@ type openAIStreamResponse struct {
 	} `json:"usage,omitempty"`
 }
 
-// saveRawResponse saves raw API response to a file for debugging
-func saveRawResponse(model string, data []byte) error {
-	// Create raw_responses directory if it doesn't exist
-	dir := "raw_responses"
-	if err := os.MkdirAll(dir, 0755); err != nil {
+// saveRawExchange saves complete request/response exchange to a file for debugging
+func saveRawExchange(model string, request map[string]any, statusCode int, headers http.Header, responseBody []byte, saveErr error) error {
+	// Determine output directory - prefer DSGO_ARTIFACT_DIR, fallback to test_matrix_logs
+	baseDir := os.Getenv("DSGO_ARTIFACT_DIR")
+	if baseDir == "" {
+		baseDir = "test_matrix_logs"
+	}
+	rawDir := filepath.Join(baseDir, "raw")
+	if err := os.MkdirAll(rawDir, 0755); err != nil {
 		return err
+	}
+
+	// Parse response body as JSON if possible
+	var responseJSON any
+	var responseText string
+	if err := json.Unmarshal(responseBody, &responseJSON); err != nil {
+		responseText = string(responseBody)
+	}
+
+	// Build complete exchange record
+	exchange := map[string]any{
+		"timestamp": time.Now().Format(time.RFC3339Nano),
+		"provider":  "openai",
+		"model":     model,
+		"example":   os.Getenv("DSGO_EXAMPLE"),
+		"request":   request,
+		"http": map[string]any{
+			"status":  statusCode,
+			"headers": headers,
+		},
+	}
+
+	if responseJSON != nil {
+		exchange["response"] = responseJSON
+	} else {
+		exchange["response_text"] = responseText
+	}
+
+	if saveErr != nil {
+		exchange["error"] = saveErr.Error()
 	}
 
 	// Create filename with timestamp and model
 	timestamp := time.Now().Format("20060102_150405.000000")
-	// Sanitize model name for filename
 	safeModel := strings.ReplaceAll(model, "/", "_")
 	safeModel = strings.ReplaceAll(safeModel, ":", "_")
-	filename := fmt.Sprintf("%s/%s_%s.json", dir, safeModel, timestamp)
+	filename := filepath.Join(rawDir, fmt.Sprintf("%s_openai_%s.json", timestamp, safeModel))
 
-	// Write to file
-	if err := os.WriteFile(filename, data, 0644); err != nil {
+	// Marshal with 2-space indentation
+	exchangeJSON, err := json.MarshalIndent(exchange, "", "  ")
+	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "📝 Raw response saved to: %s\n", filename)
+	// Write to file
+	if err := os.WriteFile(filename, exchangeJSON, 0644); err != nil {
+		return err
+	}
+
+	if os.Getenv("DSGO_ARTIFACT_DIR") != "" {
+		fmt.Fprintf(os.Stderr, "📝 Raw exchange saved to: %s\n", filename)
+	}
 	return nil
 }

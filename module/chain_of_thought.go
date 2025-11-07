@@ -4,60 +4,60 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // ChainOfThought module encourages step-by-step reasoning
 type ChainOfThought struct {
-	Signature *dsgo.Signature
-	LM        dsgo.LM
-	Options   *dsgo.GenerateOptions
-	Adapter   dsgo.Adapter
-	History   *dsgo.History  // Optional conversation history
-	Demos     []dsgo.Example // Optional few-shot examples
+	Signature *core.Signature
+	LM        core.LM
+	Options   *core.GenerateOptions
+	Adapter   core.Adapter
+	History   *core.History  // Optional conversation history
+	Demos     []core.Example // Optional few-shot examples
 }
 
 // NewChainOfThought creates a new ChainOfThought module
-func NewChainOfThought(signature *dsgo.Signature, lm dsgo.LM) *ChainOfThought {
+func NewChainOfThought(signature *core.Signature, lm core.LM) *ChainOfThought {
 	return &ChainOfThought{
 		Signature: signature,
 		LM:        lm,
-		Options:   dsgo.DefaultGenerateOptions(),
-		Adapter:   dsgo.NewFallbackAdapter().WithReasoning(true),
+		Options:   core.DefaultGenerateOptions(),
+		Adapter:   core.NewFallbackAdapter().WithReasoning(true),
 	}
 }
 
 // WithOptions sets custom generation options
-func (cot *ChainOfThought) WithOptions(options *dsgo.GenerateOptions) *ChainOfThought {
+func (cot *ChainOfThought) WithOptions(options *core.GenerateOptions) *ChainOfThought {
 	cot.Options = options
 	return cot
 }
 
 // WithAdapter sets a custom adapter
-func (cot *ChainOfThought) WithAdapter(adapter dsgo.Adapter) *ChainOfThought {
+func (cot *ChainOfThought) WithAdapter(adapter core.Adapter) *ChainOfThought {
 	cot.Adapter = adapter
 	return cot
 }
 
 // WithHistory sets conversation history for multi-turn interactions
-func (cot *ChainOfThought) WithHistory(history *dsgo.History) *ChainOfThought {
+func (cot *ChainOfThought) WithHistory(history *core.History) *ChainOfThought {
 	cot.History = history
 	return cot
 }
 
 // WithDemos sets few-shot examples for in-context learning
-func (cot *ChainOfThought) WithDemos(demos []dsgo.Example) *ChainOfThought {
+func (cot *ChainOfThought) WithDemos(demos []core.Example) *ChainOfThought {
 	cot.Demos = demos
 	return cot
 }
 
 // GetSignature returns the module's signature
-func (cot *ChainOfThought) GetSignature() *dsgo.Signature {
+func (cot *ChainOfThought) GetSignature() *core.Signature {
 	return cot.Signature
 }
 
 // Forward executes the chain of thought reasoning
-func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	if err := cot.Signature.ValidateInputs(inputs); err != nil {
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
@@ -69,7 +69,7 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 	}
 
 	// Build final message list
-	var messages []dsgo.Message
+	var messages []core.Message
 
 	// Prepend history if available
 	if cot.History != nil && !cot.History.IsEmpty() {
@@ -83,7 +83,7 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 	// Copy options to avoid mutation
 	options := cot.Options.Copy()
 	if cot.LM.SupportsJSON() {
-		if _, isJSON := cot.Adapter.(*dsgo.JSONAdapter); isJSON {
+		if _, isJSON := cot.Adapter.(*core.JSONAdapter); isJSON {
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
@@ -123,7 +123,7 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 	}
 
 	// Extract adapter metadata
-	adapterUsed, parseAttempts, fallbackUsed := dsgo.ExtractAdapterMetadata(outputs)
+	adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
 	// Extract rationale from outputs
 	rationale := ""
@@ -145,14 +145,14 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 		}
 
 		// Add assistant response
-		cot.History.Add(dsgo.Message{
+		cot.History.Add(core.Message{
 			Role:    "assistant",
 			Content: result.Content,
 		})
 	}
 
 	// Build Prediction object with rationale
-	prediction := dsgo.NewPrediction(outputs).
+	prediction := core.NewPrediction(outputs).
 		WithRationale(rationale).
 		WithUsage(result.Usage).
 		WithModuleName("ChainOfThought").

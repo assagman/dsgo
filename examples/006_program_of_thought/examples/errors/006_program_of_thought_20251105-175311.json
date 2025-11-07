@@ -1,5 +1,0 @@
-{
-  "error": "program of thought failed: LM generation failed: API request failed with status 401: {\"error\":{\"message\":\"No cookie auth credentials found\",\"code\":401}}",
-  "example": "006_program_of_thought",
-  "timestamp": "20251105-175311"
-}

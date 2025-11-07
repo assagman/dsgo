@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 )
 
 // ScoringFunction evaluates the quality of a prediction
-type ScoringFunction func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error)
+type ScoringFunction func(inputs map[string]any, prediction *core.Prediction) (float64, error)
 
 // BestOfN executes a module N times and returns the best result.
 //
@@ -25,13 +25,13 @@ type ScoringFunction func(inputs map[string]any, prediction *dsgo.Prediction) (f
 //
 // Example with independent instances:
 //
-//	modules := make([]dsgo.Module, n)
+//	modules := make([]core.Module, n)
 //	for i := 0; i < n; i++ {
 //	    modules[i] = module.NewPredict(sig, lm) // Each has its own History
 //	}
 //	// Execute with BestOfN wrapping each independently
 type BestOfN struct {
-	Module      dsgo.Module
+	Module      core.Module
 	N           int
 	Scorer      ScoringFunction
 	Parallel    bool
@@ -50,7 +50,7 @@ type BestOfNResult struct {
 }
 
 // NewBestOfN creates a new BestOfN module
-func NewBestOfN(module dsgo.Module, n int) *BestOfN {
+func NewBestOfN(module core.Module, n int) *BestOfN {
 	return &BestOfN{
 		Module:      module,
 		N:           n,
@@ -95,12 +95,12 @@ func (b *BestOfN) WithThreshold(threshold float64) *BestOfN {
 }
 
 // GetSignature returns the module's signature
-func (b *BestOfN) GetSignature() *dsgo.Signature {
+func (b *BestOfN) GetSignature() *core.Signature {
 	return b.Module.GetSignature()
 }
 
 // Forward executes the module N times and returns the best result
-func (b *BestOfN) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (b *BestOfN) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	if b.Scorer == nil {
 		return nil, fmt.Errorf("scorer function must be set")
 	}
@@ -115,9 +115,9 @@ func (b *BestOfN) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Pre
 	return b.forwardSequential(ctx, inputs)
 }
 
-func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
-	var allPredictions []*dsgo.Prediction
-	var bestPrediction *dsgo.Prediction
+func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	var allPredictions []*core.Prediction
+	var bestPrediction *core.Prediction
 	bestScore := -1.0
 	failureCount := 0
 
@@ -172,9 +172,9 @@ func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) 
 	return bestPrediction, nil
 }
 
-func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
+func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	type result struct {
-		prediction *dsgo.Prediction
+		prediction *core.Prediction
 		score      float64
 		err        error
 	}
@@ -210,8 +210,8 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (*
 	}()
 
 	// Collect results
-	var allPredictions []*dsgo.Prediction
-	var bestPrediction *dsgo.Prediction
+	var allPredictions []*core.Prediction
+	var bestPrediction *core.Prediction
 	bestScore := -1.0
 	failureCount := 0
 
@@ -255,7 +255,7 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (*
 // DefaultScorer returns a simple length-based scorer
 // This is a basic scorer that prefers longer outputs
 func DefaultScorer() ScoringFunction {
-	return func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+	return func(inputs map[string]any, prediction *core.Prediction) (float64, error) {
 		totalLength := 0
 		for _, v := range prediction.Outputs {
 			totalLength += len(fmt.Sprintf("%v", v))
@@ -266,7 +266,7 @@ func DefaultScorer() ScoringFunction {
 
 // ConfidenceScorer returns a scorer based on a confidence field
 func ConfidenceScorer(field string) ScoringFunction {
-	return func(inputs map[string]any, prediction *dsgo.Prediction) (float64, error) {
+	return func(inputs map[string]any, prediction *core.Prediction) (float64, error) {
 		confidence, exists := prediction.Outputs[field]
 		if !exists {
 			return 0, fmt.Errorf("confidence field '%s' not found in outputs", field)
