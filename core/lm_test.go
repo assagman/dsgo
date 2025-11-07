@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 )
 
@@ -245,4 +246,58 @@ func TestDefaultGenerateOptions(t *testing.T) {
 	if opts.Stream != false {
 		t.Errorf("Expected default stream false, got %v", opts.Stream)
 	}
+}
+
+func TestDefaultGenerateOptions_WithEnvOverrides(t *testing.T) {
+	// Save original env vars
+	origMaxTokens := getEnv("EXAMPLES_MAX_TOKENS")
+	origTemp := getEnv("EXAMPLES_TEMPERATURE")
+	defer func() {
+		if origMaxTokens != "" {
+			setEnv("EXAMPLES_MAX_TOKENS", origMaxTokens)
+		} else {
+			unsetEnv("EXAMPLES_MAX_TOKENS")
+		}
+		if origTemp != "" {
+			setEnv("EXAMPLES_TEMPERATURE", origTemp)
+		} else {
+			unsetEnv("EXAMPLES_TEMPERATURE")
+		}
+	}()
+
+	// Test with max tokens override
+	setEnv("EXAMPLES_MAX_TOKENS", "5000")
+	setEnv("EXAMPLES_TEMPERATURE", "0.3")
+
+	opts := DefaultGenerateOptions()
+
+	if opts.MaxTokens != 5000 {
+		t.Errorf("Expected MaxTokens=5000 from env, got %d", opts.MaxTokens)
+	}
+
+	if opts.Temperature != 0.3 {
+		t.Errorf("Expected Temperature=0.3 from env, got %f", opts.Temperature)
+	}
+
+	// Test with negative temperature (should use defaults since parsed < 0)
+	setEnv("EXAMPLES_MAX_TOKENS", "-100")
+	setEnv("EXAMPLES_TEMPERATURE", "-1.5")
+
+	opts = DefaultGenerateOptions()
+
+	if opts.MaxTokens != 10000 {
+		t.Errorf("Expected default MaxTokens=10000 with negative env, got %d", opts.MaxTokens)
+	}
+
+	if opts.Temperature != 0.7 {
+		t.Errorf("Expected default Temperature=0.7 with negative env, got %f", opts.Temperature)
+	}
+}
+
+func setEnv(key, value string) {
+	_ = os.Setenv(key, value)
+}
+
+func unsetEnv(key string) {
+	_ = os.Unsetenv(key)
 }

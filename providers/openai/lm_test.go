@@ -772,6 +772,11 @@ func TestOpenAI_Generate_CacheSet(t *testing.T) {
 }
 
 func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
+	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
+	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
+
+	_ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("{invalid json"))
@@ -795,6 +800,11 @@ func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
 }
 
 func TestOpenAI_Generate_ParseResponseError(t *testing.T) {
+	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
+	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
+
+	_ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := openAIResponse{
 			Choices: []struct {
@@ -1077,25 +1087,279 @@ func TestOpenAI_Stream_SkipsNonDataLines(t *testing.T) {
 	}
 }
 
+func TestOpenAI_Stream_EmptyChoices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		_, _ = w.Write([]byte("data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"created\":123,\"model\":\"gpt-4\",\"choices\":[]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	chunkChan, errChan := lm.Stream(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
+
+	var chunks []core.Chunk
+	var streamErr error
+	done := false
+
+	for !done {
+		select {
+		case chunk, ok := <-chunkChan:
+			if !ok {
+				done = true
+				break
+			}
+			chunks = append(chunks, chunk)
+		case err, ok := <-errChan:
+			if ok {
+				streamErr = err
+			}
+			done = true
+		}
+	}
+
+	if streamErr != nil {
+		t.Fatalf("unexpected stream error: %v", streamErr)
+	}
+
+	if len(chunks) != 0 {
+		t.Fatalf("expected 0 chunks, got %d", len(chunks))
+	}
+}
+
 // TestOpenAI_InitRegistration tests that OpenAI provider is registered
 // This verifies the init() function properly registers the provider
 func TestOpenAI_InitRegistration(t *testing.T) {
-	// Create an LM instance directly (init() has already run)
-	lm := NewOpenAI("gpt-4-test")
+	// Test that the factory function registered in init() works
+	originalKey := os.Getenv("OPENAI_API_KEY")
+	defer func() { _ = os.Setenv("OPENAI_API_KEY", originalKey) }()
 
+	_ = os.Setenv("OPENAI_API_KEY", "test-registration-key")
+
+	// Get LM through the registered factory (gpt- prefix auto-detects openai provider)
+	lm, err := core.NewLM(context.Background(), "gpt-4-registration")
+	if err != nil {
+		t.Fatalf("NewLM failed: %v", err)
+	}
 	if lm == nil {
+		t.Fatal("NewLM returned nil for openai provider")
+	}
+
+	// Verify the model name is set correctly
+	if lm.Name() != "gpt-4-registration" {
+		t.Errorf("expected model name gpt-4-registration, got %s", lm.Name())
+	}
+
+	// Test direct construction
+	lm2 := NewOpenAI("gpt-4-test")
+
+	if lm2 == nil {
 		t.Fatal("NewOpenAI returned nil")
 	}
 
-	if lm.Model != "gpt-4-test" {
-		t.Errorf("expected model gpt-4-test, got %s", lm.Model)
+	if lm2.Model != "gpt-4-test" {
+		t.Errorf("expected model gpt-4-test, got %s", lm2.Model)
 	}
 
-	if lm.BaseURL != DefaultBaseURL {
-		t.Errorf("expected BaseURL %s, got %s", DefaultBaseURL, lm.BaseURL)
+	if lm2.BaseURL != DefaultBaseURL {
+		t.Errorf("expected BaseURL %s, got %s", DefaultBaseURL, lm2.BaseURL)
 	}
 
-	if lm.Client == nil {
+	if lm2.Client == nil {
 		t.Error("expected Client to be initialized")
+	}
+}
+
+func TestOpenAI_ExtractMetadata(t *testing.T) {
+	lm := &OpenAI{}
+
+	tests := []struct {
+		name     string
+		headers  http.Header
+		expected map[string]any
+	}{
+		{
+			name: "all OpenAI-specific headers",
+			headers: http.Header{
+				"X-Ratelimit-Limit-Requests":     []string{"3000"},
+				"X-Ratelimit-Remaining-Requests": []string{"2999"},
+				"X-Ratelimit-Limit-Tokens":       []string{"90000"},
+				"X-Ratelimit-Remaining-Tokens":   []string{"89000"},
+				"X-Request-Id":                   []string{"req_12345"},
+				"Openai-Organization":            []string{"org-abc123"},
+				"Cf-Cache-Status":                []string{"HIT"},
+			},
+			expected: map[string]any{
+				"rate_limit_requests":           "3000",
+				"rate_limit_remaining_requests": "2999",
+				"rate_limit_tokens":             "90000",
+				"rate_limit_remaining_tokens":   "89000",
+				"request_id":                    "req_12345",
+				"organization":                  "org-abc123",
+				"cache_status":                  "HIT",
+				"cache_hit":                     true,
+			},
+		},
+		{
+			name: "cache MISS",
+			headers: http.Header{
+				"Cf-Cache-Status": []string{"MISS"},
+			},
+			expected: map[string]any{
+				"cache_status": "MISS",
+				"cache_hit":    false,
+			},
+		},
+		{
+			name: "subset of headers",
+			headers: http.Header{
+				"X-Request-Id":    []string{"req_99999"},
+				"X-Cache":         []string{"HIT from cloudflare"},
+				"Cf-Cache-Status": []string{"DYNAMIC"},
+			},
+			expected: map[string]any{
+				"request_id":   "req_99999",
+				"x_cache":      "HIT from cloudflare",
+				"cache_status": "DYNAMIC",
+				"cache_hit":    false,
+			},
+		},
+		{
+			name:     "empty headers",
+			headers:  http.Header{},
+			expected: map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			metadata := lm.extractMetadata(tt.headers)
+
+			if len(metadata) != len(tt.expected) {
+				t.Errorf("expected %d metadata entries, got %d", len(tt.expected), len(metadata))
+			}
+
+			for key, expectedVal := range tt.expected {
+				actualVal, exists := metadata[key]
+				if !exists {
+					t.Errorf("expected metadata key %s to exist", key)
+					continue
+				}
+				if actualVal != expectedVal {
+					t.Errorf("for key %s: expected %v, got %v", key, expectedVal, actualVal)
+				}
+			}
+		})
+	}
+}
+
+func TestOpenAI_Generate_SaveRawExchange(t *testing.T) {
+	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
+	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
+
+	_ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := openAIResponse{
+			Choices: []struct {
+				Index        int           `json:"index"`
+				Message      openAIMessage `json:"message"`
+				FinishReason string        `json:"finish_reason"`
+			}{{Message: openAIMessage{Content: "ok"}, FinishReason: "stop"}},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenAI_Generate_WithMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Limit-Requests", "5000")
+		w.Header().Set("X-RateLimit-Remaining-Requests", "4999")
+		w.Header().Set("X-RateLimit-Limit-Tokens", "100000")
+		w.Header().Set("X-RateLimit-Remaining-Tokens", "99500")
+		w.Header().Set("X-Request-ID", "req_abc123")
+		w.Header().Set("Openai-Organization", "org-test")
+		w.Header().Set("CF-Cache-Status", "MISS")
+		w.Header().Set("X-Cache", "MISS")
+
+		resp := openAIResponse{
+			Choices: []struct {
+				Index        int           `json:"index"`
+				Message      openAIMessage `json:"message"`
+				FinishReason string        `json:"finish_reason"`
+			}{{Message: openAIMessage{Content: "response"}, FinishReason: "stop"}},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{PromptTokens: 5, CompletionTokens: 3, TotalTokens: 8},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	lm := &OpenAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	result, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Metadata == nil {
+		t.Fatal("expected metadata to be populated")
+	}
+
+	expectedMetadata := map[string]any{
+		"rate_limit_requests":           "5000",
+		"rate_limit_remaining_requests": "4999",
+		"rate_limit_tokens":             "100000",
+		"rate_limit_remaining_tokens":   "99500",
+		"request_id":                    "req_abc123",
+		"organization":                  "org-test",
+		"cache_status":                  "MISS",
+		"cache_hit":                     false,
+		"x_cache":                       "MISS",
+	}
+
+	for key, expectedVal := range expectedMetadata {
+		actualVal, exists := result.Metadata[key]
+		if !exists {
+			t.Errorf("expected metadata key %s to exist", key)
+			continue
+		}
+		if actualVal != expectedVal {
+			t.Errorf("for key %s: expected %v, got %v", key, expectedVal, actualVal)
+		}
 	}
 }

@@ -483,3 +483,71 @@ func TestMapToStruct_UnexportedFieldsSkipped(t *testing.T) {
 		t.Errorf("unexported = %q, want empty (should be skipped)", s.unexported)
 	}
 }
+
+func TestMapToStruct_ConvertibleTypes(t *testing.T) {
+	type TestStruct struct {
+		IntFromFloat   int     `dsgo:"output"`
+		FloatFromInt   float64 `dsgo:"output"`
+		IntFromFloat64 int     `dsgo:"output"`
+	}
+
+	m := map[string]any{
+		"IntFromFloat":   float64(42.7),  // float64 -> int (truncates)
+		"FloatFromInt":   int(100),       // int -> float64
+		"IntFromFloat64": float64(99.99), // float64 -> int
+	}
+
+	var s TestStruct
+	err := MapToStruct(m, &s)
+	if err != nil {
+		t.Fatalf("MapToStruct() error = %v", err)
+	}
+
+	if s.IntFromFloat != 42 {
+		t.Errorf("IntFromFloat = %d, want 42 (truncated from 42.7)", s.IntFromFloat)
+	}
+
+	if s.FloatFromInt != 100.0 {
+		t.Errorf("FloatFromInt = %f, want 100.0", s.FloatFromInt)
+	}
+
+	if s.IntFromFloat64 != 99 {
+		t.Errorf("IntFromFloat64 = %d, want 99 (truncated from 99.99)", s.IntFromFloat64)
+	}
+}
+
+func TestMapToStruct_NonPointerError(t *testing.T) {
+	type TestStruct struct {
+		Field string `dsgo:"output"`
+	}
+
+	m := map[string]any{"Field": "value"}
+	var s TestStruct
+
+	// Pass struct directly instead of pointer
+	err := MapToStruct(m, s)
+	if err == nil {
+		t.Error("MapToStruct() should return error when target is not a pointer")
+	}
+
+	expectedMsg := "target must be a pointer to struct"
+	if err.Error() != expectedMsg {
+		t.Errorf("error message = %q, want %q", err.Error(), expectedMsg)
+	}
+}
+
+func TestMapToStruct_NonStructError(t *testing.T) {
+	m := map[string]any{"Field": "value"}
+	var notStruct string
+
+	// Pass pointer to non-struct (string)
+	err := MapToStruct(m, &notStruct)
+	if err == nil {
+		t.Error("MapToStruct() should return error when target is pointer to non-struct")
+	}
+
+	// Error message should indicate the actual kind
+	if err == nil || err.Error() == "" {
+		t.Error("expected non-empty error message")
+	}
+}

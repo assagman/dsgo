@@ -1,6 +1,8 @@
 package ids
 
 import (
+	"crypto/rand"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -92,4 +94,55 @@ func TestNewShortID(t *testing.T) {
 			t.Errorf("Too many collisions: %d in 1000 iterations", collisions)
 		}
 	})
+}
+
+// errorReader always returns an error when Read is called
+type errorReader struct{}
+
+func (errorReader) Read([]byte) (int, error) {
+	return 0, errors.New("random reader error")
+}
+
+func TestNewUUID_ErrorPanics(t *testing.T) {
+	// Save original reader
+	originalReader := rand.Reader
+	defer func() {
+		// Restore original reader
+		rand.Reader = originalReader
+	}()
+
+	// Replace with error reader
+	rand.Reader = errorReader{}
+
+	// Recover from panic
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("NewUUID did not panic on reader error")
+		}
+	}()
+
+	// This should panic
+	NewUUID()
+}
+
+func TestNewShortID_ErrorPanics(t *testing.T) {
+	// Save original reader
+	originalReader := rand.Reader
+	defer func() {
+		// Restore original reader
+		rand.Reader = originalReader
+	}()
+
+	// Replace with error reader
+	rand.Reader = errorReader{}
+
+	// Recover from panic
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("NewShortID did not panic on reader error")
+		}
+	}()
+
+	// This should panic
+	NewShortID()
 }

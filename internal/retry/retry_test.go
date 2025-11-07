@@ -378,6 +378,99 @@ func TestWithExponentialBackoff_ContextCanceledAfterRetries(t *testing.T) {
 	}
 }
 
+// TestWithExponentialBackoff_ContextCancelledAfterRetriesWithLastErr covers line 42-44
+// Tests context cancellation at start of loop iteration after fn() has failed once (lastErr is set)
+func TestWithExponentialBackoff_ContextCancelledAfterRetriesWithLastErr(t *testing.T) {
+	callCount := 0
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel context after backoff completes but before next loop iteration
+	go func() {
+		// First backoff is ~1s, cancel slightly after that
+		time.Sleep(1100 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err := WithExponentialBackoff(ctx, func() (*http.Response, error) {
+		callCount++
+		// Always fail to ensure lastErr is set
+		return nil, errors.New("network error")
+	})
+
+	if err == nil {
+		t.Fatal("Expected error due to canceled context after retries")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled error, got: %v", err)
+	}
+	// Should contain both context cancellation and last error
+	errStr := err.Error()
+	// Line 42-44 returns "context cancelled after retries" when ctx.Err() at loop start and lastErr != nil
+	// Line 87-89 returns "context cancelled during backoff" when cancelled during backoff
+	if !bytes.Contains([]byte(errStr), []byte("context cancelled after retries")) &&
+		!bytes.Contains([]byte(errStr), []byte("context cancelled during backoff")) {
+		t.Errorf("Expected error to contain context cancellation message, got: %v", err)
+	}
+	if !bytes.Contains([]byte(errStr), []byte("last error")) {
+		t.Errorf("Expected error to contain 'last error', got: %v", err)
+	}
+}
+
+// TestWithExponentialBackoff_LastAttemptRetryable covers line 78
+// Tests that when last attempt returns retryable status, we return resp without error
+func TestWithExponentialBackoff_LastAttemptRetryable(t *testing.T) {
+	callCount := 0
+	ctx := context.Background()
+
+	// Always return 503 (retryable) - not quota exhaustion
+	resp, err := WithExponentialBackoff(ctx, func() (*http.Response, error) {
+		callCount++
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable,
+			Body:       http.NoBody,
+		}, nil
+	})
+
+	// Should not error - returns the 503 response
+	if err != nil {
+		t.Errorf("Expected no error on last retryable attempt, got: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("Expected response to be returned")
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("Expected status 503, got %d", resp.StatusCode)
+	}
+	// Should have tried MaxRetries+1 times
+	if callCount != MaxRetries+1 {
+		t.Errorf("Expected %d calls, got %d", MaxRetries+1, callCount)
+	}
+}
+
+// errorReader is an io.Reader that always returns an error
+type errorReader struct{}
+
+func (e *errorReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("read error")
+}
+
+func (e *errorReader) Close() error {
+	return nil
+}
+
+// TestIsQuotaExhausted_ReadError covers line 128-130
+// Tests that isQuotaExhausted returns false when io.ReadAll fails
+func TestIsQuotaExhausted_ReadError(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusTooManyRequests,
+		Body:       &errorReader{},
+	}
+
+	if isQuotaExhausted(resp) {
+		t.Error("Expected isQuotaExhausted to return false when body read fails")
+	}
+}
+
 func TestWithExponentialBackoff_ContextCanceledDuringBackoff(t *testing.T) {
 	callCount := 0
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)

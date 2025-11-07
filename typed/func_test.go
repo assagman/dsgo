@@ -797,3 +797,228 @@ func TestNewReAct(t *testing.T) {
 	fn.WithMaxIterations(5)
 	fn.WithVerbose(true)
 }
+
+func TestFunc_WithOptions_AllModuleTypes(t *testing.T) {
+	type Input struct {
+		Text string `dsgo:"input"`
+	}
+	type Output struct {
+		Result string `dsgo:"output"`
+	}
+
+	lm := &mockLM{}
+	opts := &core.GenerateOptions{Temperature: 0.7}
+
+	t.Run("Predict", func(t *testing.T) {
+		fn, _ := NewPredict[Input, Output](lm)
+		result := fn.WithOptions(opts)
+		if result == nil {
+			t.Error("WithOptions should return Func")
+		}
+	})
+
+	t.Run("ChainOfThought", func(t *testing.T) {
+		fn, _ := NewCoT[Input, Output](lm)
+		result := fn.WithOptions(opts)
+		if result == nil {
+			t.Error("WithOptions should return Func")
+		}
+	})
+
+	t.Run("ReAct", func(t *testing.T) {
+		fn, _ := NewReAct[Input, Output](lm, []core.Tool{})
+		result := fn.WithOptions(opts)
+		if result == nil {
+			t.Error("WithOptions should return Func")
+		}
+	})
+}
+
+func TestFunc_WithAdapter_AllModuleTypes(t *testing.T) {
+	type Input struct {
+		Text string `dsgo:"input"`
+	}
+	type Output struct {
+		Result string `dsgo:"output"`
+	}
+
+	lm := &mockLM{}
+	adapter := core.NewChatAdapter()
+
+	t.Run("Predict", func(t *testing.T) {
+		fn, _ := NewPredict[Input, Output](lm)
+		result := fn.WithAdapter(adapter)
+		if result == nil {
+			t.Error("WithAdapter should return Func")
+		}
+	})
+
+	t.Run("ChainOfThought", func(t *testing.T) {
+		fn, _ := NewCoT[Input, Output](lm)
+		result := fn.WithAdapter(adapter)
+		if result == nil {
+			t.Error("WithAdapter should return Func")
+		}
+	})
+
+	t.Run("ReAct", func(t *testing.T) {
+		fn, _ := NewReAct[Input, Output](lm, []core.Tool{})
+		result := fn.WithAdapter(adapter)
+		if result == nil {
+			t.Error("WithAdapter should return Func")
+		}
+	})
+}
+
+func TestFunc_WithHistory_AllModuleTypes(t *testing.T) {
+	type Input struct {
+		Text string `dsgo:"input"`
+	}
+	type Output struct {
+		Result string `dsgo:"output"`
+	}
+
+	lm := &mockLM{}
+	history := core.NewHistory()
+
+	t.Run("Predict", func(t *testing.T) {
+		fn, _ := NewPredict[Input, Output](lm)
+		result := fn.WithHistory(history)
+		if result == nil {
+			t.Error("WithHistory should return Func")
+		}
+	})
+
+	t.Run("ChainOfThought", func(t *testing.T) {
+		fn, _ := NewCoT[Input, Output](lm)
+		result := fn.WithHistory(history)
+		if result == nil {
+			t.Error("WithHistory should return Func")
+		}
+	})
+
+	t.Run("ReAct", func(t *testing.T) {
+		fn, _ := NewReAct[Input, Output](lm, []core.Tool{})
+		result := fn.WithHistory(history)
+		if result == nil {
+			t.Error("WithHistory should return Func")
+		}
+	})
+}
+
+func TestFunc_WithDemos_AllModuleTypes(t *testing.T) {
+	type Input struct {
+		Text string `dsgo:"input"`
+	}
+	type Output struct {
+		Result string `dsgo:"output"`
+	}
+
+	lm := &mockLM{}
+	demos := []core.Example{
+		*core.NewExample(map[string]any{"Text": "hello"}, map[string]any{"Result": "world"}),
+	}
+
+	t.Run("Predict", func(t *testing.T) {
+		fn, _ := NewPredict[Input, Output](lm)
+		result := fn.WithDemos(demos)
+		if result == nil {
+			t.Error("WithDemos should return Func")
+		}
+	})
+
+	t.Run("ChainOfThought", func(t *testing.T) {
+		fn, _ := NewCoT[Input, Output](lm)
+		result := fn.WithDemos(demos)
+		if result == nil {
+			t.Error("WithDemos should return Func")
+		}
+	})
+
+	t.Run("ReAct", func(t *testing.T) {
+		fn, _ := NewReAct[Input, Output](lm, []core.Tool{})
+		result := fn.WithDemos(demos)
+		if result == nil {
+			t.Error("WithDemos should return Func")
+		}
+	})
+}
+
+func TestFunc_WithDemosTyped_ValidDemos(t *testing.T) {
+	type Input struct {
+		Text string `dsgo:"input"`
+	}
+	type Output struct {
+		Result string `dsgo:"output"`
+	}
+
+	lm := &mockLM{}
+	fn, _ := NewPredict[Input, Output](lm)
+
+	// Test with valid typed demos
+	inputs := []Input{{Text: "hello"}}
+	outputs := []Output{{Result: "world"}}
+
+	_, err := fn.WithDemosTyped(inputs, outputs)
+	if err != nil {
+		t.Errorf("WithDemosTyped should not error with valid demos: %v", err)
+	}
+}
+
+func TestNewCoT_Success(t *testing.T) {
+	type Input struct {
+		Text string `dsgo:"input"`
+	}
+	type Output struct {
+		Result string `dsgo:"output"`
+	}
+
+	lm := &mockLM{}
+	fn, err := NewCoT[Input, Output](lm)
+	if err != nil {
+		t.Errorf("NewCoT should not error: %v", err)
+	}
+	if fn == nil {
+		t.Error("NewCoT should return Func")
+	}
+}
+
+func TestNewReAct_Success(t *testing.T) {
+	type Input struct {
+		Text string `dsgo:"input"`
+	}
+	type Output struct {
+		Result string `dsgo:"output"`
+	}
+
+	lm := &mockLM{}
+	fn, err := NewReAct[Input, Output](lm, []core.Tool{})
+	if err != nil {
+		t.Errorf("NewReAct should not error: %v", err)
+	}
+	if fn == nil {
+		t.Error("NewReAct should return Func")
+	}
+}
+
+func TestRun_ErrorConditions(t *testing.T) {
+	type Input struct {
+		Text string `dsgo:"input"`
+	}
+	type Output struct {
+		Result string `dsgo:"output"`
+	}
+
+	lm := &mockLM{
+		generateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return nil, fmt.Errorf("generation error")
+		},
+	}
+
+	fn, _ := NewPredict[Input, Output](lm)
+
+	_, err := fn.Run(context.Background(), Input{Text: "test"})
+	if err == nil {
+		t.Error("Run should return error when generation fails")
+	}
+}

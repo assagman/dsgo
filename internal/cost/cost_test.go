@@ -171,3 +171,41 @@ func TestCalculatorConcurrency(t *testing.T) {
 		<-done
 	}
 }
+
+func TestCalculate_PatternMatch(t *testing.T) {
+	calc := NewCalculator()
+
+	// Test Calculate with model that doesn't have exact key but matches pattern
+	cost := calc.Calculate("openai/gpt-4o-something-new", 1000, 500)
+
+	// Should match "openai/gpt-4o" pricing via pattern matching
+	expected := 0.0075 // (1000 * 2.5 + 500 * 10) / 1M = 0.0075
+
+	if math.Abs(cost-expected) > 0.000001 {
+		t.Errorf("Calculate() with pattern match = %f, want %f", cost, expected)
+	}
+
+	// Verify non-zero cost was calculated (proves pattern matching worked)
+	if cost == 0 {
+		t.Error("Calculate() with pattern match returned 0, expected non-zero cost")
+	}
+}
+
+func TestGetPricing_PatternMatch(t *testing.T) {
+	calc := NewCalculator()
+
+	// Test GetPricing with model that matches via pattern
+	pricing, ok := calc.GetPricing("meta/llama-3.1-70b-derivative")
+
+	if !ok {
+		t.Error("GetPricing() with pattern match returned ok=false, expected ok=true")
+	}
+
+	// Should match "meta/llama-3.1-70b" pricing
+	if pricing.PromptPrice != 0.35 {
+		t.Errorf("PromptPrice = %f, want 0.35", pricing.PromptPrice)
+	}
+	if pricing.CompletionPrice != 0.40 {
+		t.Errorf("CompletionPrice = %f, want 0.40", pricing.CompletionPrice)
+	}
+}

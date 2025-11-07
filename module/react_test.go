@@ -80,6 +80,320 @@ func TestReAct_Forward_WithToolCalls(t *testing.T) {
 	}
 }
 
+func TestCoerceBasicTypes(t *testing.T) {
+	tests := []struct {
+		name      string
+		signature *core.Signature
+		inputs    map[string]any
+		expected  map[string]any
+	}{
+		{
+			name: "int from string with number",
+			signature: core.NewSignature("test").
+				AddOutput("age", core.FieldTypeInt, "Age"),
+			inputs:   map[string]any{"age": "5 years"},
+			expected: map[string]any{"age": 5},
+		},
+		{
+			name: "int from string negative",
+			signature: core.NewSignature("test").
+				AddOutput("temp", core.FieldTypeInt, "Temperature"),
+			inputs:   map[string]any{"temp": "-10 degrees"},
+			expected: map[string]any{"temp": -10},
+		},
+		{
+			name: "int from float64",
+			signature: core.NewSignature("test").
+				AddOutput("count", core.FieldTypeInt, "Count"),
+			inputs:   map[string]any{"count": float64(42.7)},
+			expected: map[string]any{"count": 42},
+		},
+		{
+			name: "int from unparseable string",
+			signature: core.NewSignature("test").
+				AddOutput("val", core.FieldTypeInt, "Value"),
+			inputs:   map[string]any{"val": "no number here"},
+			expected: map[string]any{"val": "no number here"},
+		},
+		{
+			name: "bool from string true variants",
+			signature: core.NewSignature("test").
+				AddOutput("flag1", core.FieldTypeBool, "Flag1").
+				AddOutput("flag2", core.FieldTypeBool, "Flag2").
+				AddOutput("flag3", core.FieldTypeBool, "Flag3"),
+			inputs: map[string]any{
+				"flag1": "true",
+				"flag2": "YES",
+				"flag3": " 1 ",
+			},
+			expected: map[string]any{
+				"flag1": true,
+				"flag2": true,
+				"flag3": true,
+			},
+		},
+		{
+			name: "bool from string false variants",
+			signature: core.NewSignature("test").
+				AddOutput("flag1", core.FieldTypeBool, "Flag1").
+				AddOutput("flag2", core.FieldTypeBool, "Flag2").
+				AddOutput("flag3", core.FieldTypeBool, "Flag3"),
+			inputs: map[string]any{
+				"flag1": "false",
+				"flag2": "NO",
+				"flag3": " 0 ",
+			},
+			expected: map[string]any{
+				"flag1": false,
+				"flag2": false,
+				"flag3": false,
+			},
+		},
+		{
+			name: "bool from unparseable string",
+			signature: core.NewSignature("test").
+				AddOutput("flag", core.FieldTypeBool, "Flag"),
+			inputs:   map[string]any{"flag": "maybe"},
+			expected: map[string]any{"flag": "maybe"},
+		},
+		{
+			name: "string from non-nil value",
+			signature: core.NewSignature("test").
+				AddOutput("text", core.FieldTypeString, "Text"),
+			inputs:   map[string]any{"text": 123},
+			expected: map[string]any{"text": "123"},
+		},
+		{
+			name: "string from nil value",
+			signature: core.NewSignature("test").
+				AddOutput("text", core.FieldTypeString, "Text"),
+			inputs:   map[string]any{"text": nil},
+			expected: map[string]any{"text": nil},
+		},
+		{
+			name: "field not in signature",
+			signature: core.NewSignature("test").
+				AddOutput("known", core.FieldTypeString, "Known"),
+			inputs:   map[string]any{"unknown": "value", "known": "test"},
+			expected: map[string]any{"unknown": "value", "known": "test"},
+		},
+		{
+			name: "default type passthrough",
+			signature: core.NewSignature("test").
+				AddOutput("data", core.FieldTypeJSON, "Data"),
+			inputs:   map[string]any{"data": map[string]any{"key": "value"}},
+			expected: map[string]any{"data": map[string]any{"key": "value"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := coerceBasicTypes(tt.signature, tt.inputs)
+
+			for key, expectedVal := range tt.expected {
+				actualVal, ok := result[key]
+				if !ok {
+					t.Errorf("Expected key %q not found in result", key)
+					continue
+				}
+				if fmt.Sprintf("%v", actualVal) != fmt.Sprintf("%v", expectedVal) {
+					t.Errorf("For key %q: expected %v (%T), got %v (%T)",
+						key, expectedVal, expectedVal, actualVal, actualVal)
+				}
+			}
+		})
+	}
+}
+
+func TestReAct_RunExtract_Success(t *testing.T) {
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
+				Content: `{"rationale": "my reasoning", "answer": "extracted answer"}`,
+				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []core.Tool{})
+	messages := []core.Message{
+		{Role: "user", Content: "What is the answer?"},
+	}
+	inputs := map[string]any{"question": "test"}
+
+	pred, err := react.runExtract(context.Background(), messages, inputs)
+	if err != nil {
+		t.Fatalf("runExtract() error = %v", err)
+	}
+
+	if pred.Outputs["answer"] != "extracted answer" {
+		t.Errorf("Expected answer='extracted answer', got %v", pred.Outputs["answer"])
+	}
+
+	if pred.Rationale != "my reasoning" {
+		t.Errorf("Expected rationale='my reasoning', got %v", pred.Rationale)
+	}
+}
+
+func TestReAct_RunExtract_FallbackToDirectJSON(t *testing.T) {
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			// Return JSON that might fail adapter parsing but is valid JSON
+			return &core.GenerateResult{
+				Content: `{"answer": "direct json answer"}`,
+				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []core.Tool{})
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	inputs := map[string]any{"question": "test"}
+
+	pred, err := react.runExtract(context.Background(), messages, inputs)
+	if err != nil {
+		t.Fatalf("runExtract() error = %v", err)
+	}
+
+	if pred.Outputs["answer"] != "direct json answer" {
+		t.Errorf("Expected answer from direct JSON, got %v", pred.Outputs["answer"])
+	}
+}
+
+func TestReAct_RunExtract_FallbackToTextExtraction(t *testing.T) {
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			// Return non-JSON text that needs text extraction
+			return &core.GenerateResult{
+				Content: `The answer is: fallback text answer`,
+				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []core.Tool{})
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	inputs := map[string]any{"question": "test"}
+
+	pred, err := react.runExtract(context.Background(), messages, inputs)
+	// Should succeed using extractTextOutputs as last resort
+	if err != nil {
+		t.Fatalf("runExtract() should succeed with text extraction, got error: %v", err)
+	}
+
+	// Check that some output was extracted
+	if len(pred.Outputs) == 0 {
+		t.Errorf("Expected text extraction to produce outputs")
+	}
+}
+
+func TestReAct_RunExtract_GenerationError(t *testing.T) {
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return nil, errors.New("generation failed")
+		},
+	}
+
+	react := NewReAct(sig, lm, []core.Tool{})
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	inputs := map[string]any{"question": "test"}
+
+	_, err := react.runExtract(context.Background(), messages, inputs)
+	if err == nil {
+		t.Fatal("runExtract() should fail when generation fails")
+	}
+
+	if !strings.Contains(err.Error(), "extraction generation failed") {
+		t.Errorf("Expected error about generation failure, got: %v", err)
+	}
+}
+
+func TestReAct_RunExtract_CompleteFailure(t *testing.T) {
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			// Return unparseable JSON-like content
+			return &core.GenerateResult{
+				Content: `{invalid json`,
+				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []core.Tool{})
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	inputs := map[string]any{"question": "test"}
+
+	// Even with invalid JSON, extractTextOutputs will extract something
+	pred, err := react.runExtract(context.Background(), messages, inputs)
+	if err != nil {
+		t.Fatalf("runExtract() should succeed with text extraction fallback, got error: %v", err)
+	}
+
+	// Should have extracted something via text extraction
+	if len(pred.Outputs) == 0 {
+		t.Error("Expected text extraction to produce outputs")
+	}
+}
+
+func TestReAct_RunExtract_WithReasoningField(t *testing.T) {
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
+				Content: `{"reasoning": "alternative reasoning field", "answer": "test answer"}`,
+				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
+			}, nil
+		},
+	}
+
+	react := NewReAct(sig, lm, []core.Tool{})
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	inputs := map[string]any{"question": "test"}
+
+	pred, err := react.runExtract(context.Background(), messages, inputs)
+	if err != nil {
+		t.Fatalf("runExtract() error = %v", err)
+	}
+
+	if pred.Rationale != "alternative reasoning field" {
+		t.Errorf("Expected rationale from 'reasoning' field, got %v", pred.Rationale)
+	}
+
+	// Reasoning field should be removed from outputs
+	if _, exists := pred.Outputs["reasoning"]; exists {
+		t.Errorf("reasoning field should be removed from outputs")
+	}
+}
+
 func TestReAct_Forward_InvalidInput(t *testing.T) {
 	sig := core.NewSignature("Test").
 		AddInput("required", core.FieldTypeString, "Required")

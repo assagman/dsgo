@@ -88,6 +88,8 @@ func (w *LMWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 			finalUsage         Usage
 			finishReason       string
 			streamErr          error
+			chunkClosed        bool
+			errClosed          bool
 		)
 
 		// Forward chunks and accumulate data
@@ -95,8 +97,13 @@ func (w *LMWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 			select {
 			case chunk, ok := <-inChunkChan:
 				if !ok {
-					// Channel closed, stream complete
-					goto StreamComplete
+					chunkClosed = true
+					// Check if error channel also closed
+					if errClosed {
+						goto StreamComplete
+					}
+					// Continue to drain error channel
+					continue
 				}
 
 				// Accumulate data
@@ -115,7 +122,16 @@ func (w *LMWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 				// Forward to caller
 				outChunkChan <- chunk
 
-			case err := <-inErrChan:
+			case err, ok := <-inErrChan:
+				if !ok {
+					errClosed = true
+					// Check if chunk channel also closed
+					if chunkClosed {
+						goto StreamComplete
+					}
+					// Continue to drain chunk channel
+					continue
+				}
 				if err != nil {
 					streamErr = err
 					outErrChan <- err
