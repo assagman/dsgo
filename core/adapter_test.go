@@ -348,6 +348,27 @@ func TestJSONAdapter_CoerceOutputs_EdgeCases(t *testing.T) {
 			input: `{"flag": "maybe"}`,
 			want:  map[string]any{"flag": "maybe"},
 		},
+		{
+			name: "json field with string containing array",
+			sig: NewSignature("test").
+				AddOutput("data", FieldTypeJSON, ""),
+			input: `{"data": "[\"item1\", \"item2\"]"}`,
+			want:  map[string]any{"data": []any{"item1", "item2"}},
+		},
+		{
+			name: "json field with string containing object",
+			sig: NewSignature("test").
+				AddOutput("config", FieldTypeJSON, ""),
+			input: `{"config": "{\"key\": \"value\", \"count\": 5}"}`,
+			want:  map[string]any{"config": map[string]any{"key": "value", "count": float64(5)}},
+		},
+		{
+			name: "json field with malformed json string gets repaired",
+			sig: NewSignature("test").
+				AddOutput("items", FieldTypeJSON, ""),
+			input: `{"items": "[\"item1\", \"item2\",]"}`,
+			want:  map[string]any{"items": []any{"item1", "item2"}},
+		},
 	}
 
 	for _, tt := range tests {

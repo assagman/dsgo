@@ -106,6 +106,26 @@ func coerceOutputs(sig *Signature, outputs map[string]any, allowArrayToString bo
 				}
 			}
 
+		case FieldTypeJSON:
+			// For JSON fields, if value is a string containing JSON, parse it
+			if s, ok := value.(string); ok && s != "" {
+				var parsed any
+				if err := json.Unmarshal([]byte(s), &parsed); err == nil {
+					// Successfully parsed as JSON
+					result[key] = parsed
+					continue
+				}
+				// Try to repair the JSON string
+				repaired := jsonutil.RepairJSON(s)
+				if repaired != s { // Only if repair changed something
+					if err := json.Unmarshal([]byte(repaired), &parsed); err == nil {
+						result[key] = parsed
+						continue
+					}
+				}
+				// If parsing/repair failed, keep as string (validation will catch this)
+			}
+
 		case FieldTypeString, FieldTypeClass:
 			// Coerce arrays to strings if allowed (JSON adapter needs this)
 			if allowArrayToString {
