@@ -74,5 +74,5 @@ const (
 	FieldTypeFloat  = core.FieldTypeFloat
 	FieldTypeBool   = core.FieldTypeBool
 	FieldTypeClass  = core.FieldTypeClass
-	FieldTypeJSON   = core.FieldTypeClass // FieldTypeJSON is an alias for FieldTypeClass
+	FieldTypeJSON   = core.FieldTypeJSON
 )
