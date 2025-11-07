@@ -2,8 +2,13 @@
 
 **Composable LLM orchestration framework for Go** — inspired by DSPy, built for production.
 
-[![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue.svg)](https://go.dev/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/assagman/dsgo.svg)](https://pkg.go.dev/github.com/assagman/dsgo)
+[![Go Report Card](https://goreportcard.com/badge/github.com/assagman/dsgo)](https://goreportcard.com/report/github.com/assagman/dsgo)
+[![CI](https://github.com/assagman/dsgo/actions/workflows/ci.yml/badge.svg)](https://github.com/assagman/dsgo/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/assagman/dsgo/branch/main/graph/badge.svg)](https://codecov.io/gh/assagman/dsgo)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/assagman/dsgo)](https://github.com/assagman/dsgo)
+[![GitHub release](https://img.shields.io/github/v/release/assagman/dsgo)](https://github.com/assagman/dsgo/releases)
 
 ## Table of Contents
 
@@ -96,7 +101,7 @@ import (
     "context"
     "fmt"
     "log"
-    
+
     "github.com/assagman/dsgo"
     "github.com/assagman/dsgo/module"
 )
@@ -108,22 +113,22 @@ func main() {
         dsgo.WithModel("gpt-4"),
         dsgo.WithAPIKey("sk-..."),
     )
-    
+
     // Create LM instance
     lm, err := dsgo.NewLM(context.Background(), "gpt-4")
     if err != nil {
         log.Fatal(err)
     }
-    
+
     // Define signature
     sig := dsgo.NewSignature("Classify sentiment").
         AddInput("text", dsgo.FieldTypeString, "Text to classify").
-        AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, 
+        AddClassOutput("sentiment", []string{"positive", "negative", "neutral"},
             "Sentiment classification")
-    
+
     // Create module
     classifier := module.NewPredict(sig, lm)
-    
+
     // Execute
     result, err := classifier.Forward(context.Background(), map[string]any{
         "text": "I love this product!",
@@ -131,9 +136,9 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    
+
     fmt.Printf("Sentiment: %s\n", result.GetString("sentiment"))
-    fmt.Printf("Cost: $%.6f, Tokens: %d\n", 
+    fmt.Printf("Cost: $%.6f, Tokens: %d\n",
         result.Usage.Cost, result.Usage.TotalTokens)
 }
 ```
