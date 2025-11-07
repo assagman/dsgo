@@ -15,16 +15,7 @@ import (
 )
 
 // Demonstrates: Program, ProgramOfThought, JSON adapter, Typed signatures
-// Story: Itinerary planner with multi-step pipeline and structured outputs
-
-type Itinerary struct {
-	Destination string   `json:"destination"`
-	Days        int      `json:"days"`
-	Budget      float64  `json:"budget"`
-	Activities  []string `json:"activities"`
-	Hotels      []string `json:"hotels"`
-	TotalCost   float64  `json:"total_cost"`
-}
+// Story: Code implementation and testing pipeline - generate, test, and refine code
 
 func main() {
 	cwd, err := os.Getwd()
@@ -82,34 +73,34 @@ func main() {
 	var totalPromptTokens, totalCompletionTokens int
 
 	// User request
-	userRequest := "Plan a 3-day trip to Kyoto with a budget of $1500. I'm interested in temples and food."
+	userRequest := "Write a Python function to find the longest common prefix of an array of strings. Test it with ['flower','flow','flight'] and ['dog','racecar','car']."
 	fmt.Printf("User: %s\n", userRequest)
 
-	// Step 1: Program of Thought - Generate planning logic
-	fmt.Println("\n=== Step 1: Generate Planning Logic (ProgramOfThought) ===")
-	step1Ctx, step1Span := observe.Start(ctx, observe.SpanKindModule, "step1_planning_logic", map[string]interface{}{
+	// Step 1: Program of Thought - Generate code implementation
+	fmt.Println("\n=== Step 1: Generate Code Implementation (ProgramOfThought) ===")
+	step1Ctx, step1Span := observe.Start(ctx, observe.SpanKindModule, "step1_code_generation", map[string]interface{}{
 		"module": "program_of_thought",
 	})
 
-	potSig := dsgo.NewSignature("Generate step-by-step planning logic for trip itinerary").
-		AddInput("requirements", dsgo.FieldTypeString, "Trip requirements").
-		AddOutput("code", dsgo.FieldTypeString, "Planning steps in pseudocode").
-		AddOutput("explanation", dsgo.FieldTypeString, "Explanation of the planning approach")
+	potSig := dsgo.NewSignature("Generate Python code for the longest common prefix problem").
+		AddInput("problem", dsgo.FieldTypeString, "Programming problem description").
+		AddOutput("code", dsgo.FieldTypeString, "Complete Python function").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation of the algorithm")
 
 	pot := module.NewProgramOfThought(potSig, lm, "python").
 		WithAllowExecution(true).  // Enable code execution
 		WithExecutionTimeout(10)    // 10 second safety timeout
 
 	planResult, err := pot.Forward(step1Ctx, map[string]interface{}{
-		"requirements": "3-day trip to Kyoto, budget $1500, interested in temples and food",
+		"problem": "Write a function longestCommonPrefix that takes an array of strings and returns the longest common prefix. If no common prefix, return empty string.",
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	steps, _ := planResult.GetString("code")
+	code, _ := planResult.GetString("code")
 	explanation, _ := planResult.GetString("explanation")
-	fmt.Printf("Planning logic:\n%s\n\nExplanation: %s\n", steps, explanation)
+	fmt.Printf("Generated code:\n%s\n\nExplanation: %s\n", code, explanation)
 	
 	// Show execution result if available
 	if execResult, ok := planResult.GetString("execution_result"); ok {
@@ -124,92 +115,86 @@ func main() {
 	totalCompletionTokens += usage1.CompletionTokens
 	step1Span.End(nil)
 
-	// Step 2: Extract constraints (Predict with JSON)
-	fmt.Println("\n=== Step 2: Extract Constraints (JSON Output) ===")
-	step2Ctx, step2Span := observe.Start(ctx, observe.SpanKindModule, "step2_constraints", map[string]interface{}{
+	// Step 2: Extract test cases (Predict with JSON)
+	fmt.Println("\n=== Step 2: Extract Test Cases (JSON Output) ===")
+	step2Ctx, step2Span := observe.Start(ctx, observe.SpanKindModule, "step2_test_cases", map[string]interface{}{
 		"module":  "predict",
 		"adapter": "json",
 	})
 
-	constraintsSig := dsgo.NewSignature("Extract structured constraints from requirements").
-		AddInput("requirements", dsgo.FieldTypeString, "Trip requirements").
-		AddOutput("destination", dsgo.FieldTypeString, "Destination city").
-		AddOutput("days", dsgo.FieldTypeInt, "Number of days").
-		AddOutput("budget", dsgo.FieldTypeFloat, "Budget in USD").
-		AddOutput("interests", dsgo.FieldTypeJSON, "List of interests")
+	testCasesSig := dsgo.NewSignature("Extract test cases from coding request").
+		AddInput("request", dsgo.FieldTypeString, "User coding request").
+		AddOutput("language", dsgo.FieldTypeString, "Programming language").
+		AddOutput("test_inputs", dsgo.FieldTypeJSON, "List of test inputs").
+		AddOutput("expected_outputs", dsgo.FieldTypeJSON, "List of expected outputs")
 
-	extractPredict := module.NewPredict(constraintsSig, lm)
+	extractPredict := module.NewPredict(testCasesSig, lm)
 
 	constraintsResult, err := extractPredict.Forward(step2Ctx, map[string]interface{}{
-		"requirements": "3-day trip to Kyoto, budget $1500, interested in temples and food",
+		"request": userRequest,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	destination, _ := constraintsResult.GetString("destination")
-	days, _ := constraintsResult.GetInt("days")
-	budget, _ := constraintsResult.GetFloat("budget")
-	interests, _ := constraintsResult.Get("interests")
-	
-	fmt.Printf("Constraints:\n")
-	fmt.Printf("  Destination: %s\n", destination)
-	fmt.Printf("  Days: %d\n", days)
-	fmt.Printf("  Budget: $%.2f\n", budget)
-	interestsJSON, _ := json.Marshal(interests)
-	fmt.Printf("  Interests: %s\n", string(interestsJSON))
+	language, _ := constraintsResult.GetString("language")
+	testInputs, _ := constraintsResult.Get("test_inputs")
+	expectedOutputs, _ := constraintsResult.Get("expected_outputs")
+
+	fmt.Printf("Test Cases:\n")
+	fmt.Printf("  Language: %s\n", language)
+	testInputsJSON, _ := json.Marshal(testInputs)
+	fmt.Printf("  Test Inputs: %s\n", string(testInputsJSON))
+	expectedOutputsJSON, _ := json.Marshal(expectedOutputs)
+	fmt.Printf("  Expected Outputs: %s\n", string(expectedOutputsJSON))
 	usage2 := constraintsResult.Usage
 	fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage2.PromptTokens, usage2.CompletionTokens)
 	totalPromptTokens += usage2.PromptTokens
 	totalCompletionTokens += usage2.CompletionTokens
 	step2Span.End(nil)
 
-	// Step 3: Build Program - Chained pipeline
-	fmt.Println("\n=== Step 3: Execute Planning Pipeline (Program) ===")
-	step3Ctx, step3Span := observe.Start(ctx, observe.SpanKindProgram, "step3_pipeline", map[string]interface{}{
+	// Step 3: Build Program - Testing pipeline
+	fmt.Println("\n=== Step 3: Execute Testing Pipeline (Program) ===")
+	step3Ctx, step3Span := observe.Start(ctx, observe.SpanKindProgram, "step3_testing_pipeline", map[string]interface{}{
 		"steps": 3,
 	})
 
-	// Sub-step 3a: Get activities
-	activitiesSig := dsgo.NewSignature("Recommend activities based on interests").
-		AddInput("destination", dsgo.FieldTypeString, "Destination").
-		AddInput("interests", dsgo.FieldTypeJSON, "Interests list").
-		AddInput("days", dsgo.FieldTypeInt, "Number of days").
-		AddOutput("activities", dsgo.FieldTypeJSON, "List of recommended activities")
+	// Sub-step 3a: Generate test runner code
+	testRunnerSig := dsgo.NewSignature("Generate test runner code").
+		AddInput("language", dsgo.FieldTypeString, "Programming language").
+		AddInput("code", dsgo.FieldTypeString, "Function code to test").
+		AddInput("test_inputs", dsgo.FieldTypeJSON, "Test input arrays").
+		AddInput("expected_outputs", dsgo.FieldTypeJSON, "Expected outputs").
+		AddOutput("test_code", dsgo.FieldTypeString, "Complete test runner code")
 
-	activitiesPredict := module.NewPredict(activitiesSig, lm)
+	testRunnerPredict := module.NewPredict(testRunnerSig, lm)
 
-	// Sub-step 3b: Get hotels
-	hotelsSig := dsgo.NewSignature("Recommend hotels within budget").
-		AddInput("destination", dsgo.FieldTypeString, "Destination").
-		AddInput("budget", dsgo.FieldTypeFloat, "Budget per night").
-		AddInput("days", dsgo.FieldTypeInt, "Number of days").
-		AddOutput("hotels", dsgo.FieldTypeJSON, "List of hotel recommendations")
+	// Sub-step 3b: Execute tests
+	testExecutionSig := dsgo.NewSignature("Execute tests and collect results").
+		AddInput("test_code", dsgo.FieldTypeString, "Test runner code to execute").
+		AddOutput("test_results", dsgo.FieldTypeJSON, "Test execution results")
 
-	hotelsPredict := module.NewPredict(hotelsSig, lm)
+	testExecutionPredict := module.NewPredict(testExecutionSig, lm)
 
-	// Sub-step 3c: Build final itinerary
-	itinerarySig := dsgo.NewSignature("Create final itinerary with cost breakdown").
-		AddInput("destination", dsgo.FieldTypeString, "Destination").
-		AddInput("days", dsgo.FieldTypeInt, "Number of days").
-		AddInput("budget", dsgo.FieldTypeFloat, "Total budget").
-		AddInput("activities", dsgo.FieldTypeJSON, "Activities list").
-		AddInput("hotels", dsgo.FieldTypeJSON, "Hotels list").
-		AddOutput("itinerary", dsgo.FieldTypeJSON, "Complete itinerary with cost")
+	// Sub-step 3c: Analyze results and create final solution
+	finalSolutionSig := dsgo.NewSignature("Analyze test results and finalize solution").
+		AddInput("code", dsgo.FieldTypeString, "Original generated code").
+		AddInput("test_results", dsgo.FieldTypeJSON, "Test execution results").
+		AddOutput("final_solution", dsgo.FieldTypeJSON, "Complete solution with results")
 
-	itineraryPredict := module.NewPredict(itinerarySig, lm)
+	finalSolutionPredict := module.NewPredict(finalSolutionSig, lm)
 
-	// Create Program - simplified pipeline
-	program := module.NewProgram("itinerary_planner").
-		AddModule(activitiesPredict).
-		AddModule(hotelsPredict).
-		AddModule(itineraryPredict)
+	// Create Program - testing pipeline
+	program := module.NewProgram("code_testing_pipeline").
+		AddModule(testRunnerPredict).
+		AddModule(testExecutionPredict).
+		AddModule(finalSolutionPredict)
 
 	programInputs := map[string]interface{}{
-		"destination": destination,
-		"days":        days,
-		"budget":      budget,
-		"interests":   interests,
+		"language":         language,
+		"code":             code,
+		"test_inputs":      testInputs,
+		"expected_outputs": expectedOutputs,
 	}
 
 	programResult, err := program.Forward(step3Ctx, programInputs)
@@ -217,38 +202,38 @@ func main() {
 		log.Fatal(err)
 	}
 
-	itineraryData, _ := programResult.Get("itinerary")
-	itineraryJSON, _ := json.MarshalIndent(itineraryData, "", "  ")
-	fmt.Printf("\nFinal Itinerary:\n%s\n", string(itineraryJSON))
+	solutionData, _ := programResult.Get("final_solution")
+	solutionJSON, _ := json.MarshalIndent(solutionData, "", "  ")
+	fmt.Printf("\nFinal Solution:\n%s\n", string(solutionJSON))
 	usage3 := programResult.Usage
 	fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage3.PromptTokens, usage3.CompletionTokens)
 	totalPromptTokens += usage3.PromptTokens
 	totalCompletionTokens += usage3.CompletionTokens
 	step3Span.End(nil)
 
-	// Turn 2: Modify itinerary
-	fmt.Println("\n=== Turn 2: Modify Itinerary (Add Kid-Friendly Activity) ===")
-	fmt.Printf("User: Please add one kid-friendly activity per day to this itinerary\n")
-	turn2Ctx, turn2Span := observe.Start(ctx, observe.SpanKindModule, "turn2_modify", nil)
+	// Turn 2: Refine code
+	fmt.Println("\n=== Turn 2: Refine Code (Fix Bugs and Optimize) ===")
+	fmt.Printf("User: Fix any bugs found in the testing and provide an optimized version\n")
+	turn2Ctx, turn2Span := observe.Start(ctx, observe.SpanKindModule, "turn2_refine", nil)
 
-	modifySig := dsgo.NewSignature("Modify itinerary to add specific requirement").
-		AddInput("current_itinerary", dsgo.FieldTypeJSON, "Current itinerary").
-		AddInput("modification", dsgo.FieldTypeString, "Modification request").
-		AddOutput("updated_itinerary", dsgo.FieldTypeJSON, "Updated itinerary")
+	refineSig := dsgo.NewSignature("Refine code based on test results").
+		AddInput("current_solution", dsgo.FieldTypeJSON, "Current solution with test results").
+		AddInput("refinement_request", dsgo.FieldTypeString, "Refinement request").
+		AddOutput("refined_solution", dsgo.FieldTypeJSON, "Refined solution")
 
-	modifyPredict := module.NewPredict(modifySig, lm)
+	refinePredict := module.NewPredict(refineSig, lm)
 
-	modifyResult, err := modifyPredict.Forward(turn2Ctx, map[string]interface{}{
-		"current_itinerary": itineraryData,
-		"modification":      "Add one kid-friendly activity per day",
+	modifyResult, err := refinePredict.Forward(turn2Ctx, map[string]interface{}{
+		"current_solution":   solutionData,
+		"refinement_request": "Fix any bugs found in testing and provide an optimized version",
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	updatedItinerary, _ := modifyResult.Get("updated_itinerary")
-	updatedJSON, _ := json.MarshalIndent(updatedItinerary, "", "  ")
-	fmt.Printf("\nUpdated Itinerary:\n%s\n", string(updatedJSON))
+	refinedSolution, _ := modifyResult.Get("refined_solution")
+	refinedJSON, _ := json.MarshalIndent(refinedSolution, "", "  ")
+	fmt.Printf("\nRefined Solution:\n%s\n", string(refinedJSON))
 	usage4 := modifyResult.Usage
 	fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage4.PromptTokens, usage4.CompletionTokens)
 	totalPromptTokens += usage4.PromptTokens
@@ -256,14 +241,14 @@ func main() {
 	turn2Span.End(nil)
 
 	// Summary
-	fmt.Println("\n=== Itinerary Planner Summary ===")
-	fmt.Println("Pipeline: PoT (logic) → Extract (JSON) → Program (activities → hotels → itinerary)")
+	fmt.Println("\n=== Code Implementation Pipeline Summary ===")
+	fmt.Println("Pipeline: PoT (code gen) → Extract (test cases) → Program (test runner → execute → analyze)")
 	fmt.Println("\nFeatures demonstrated:")
 	fmt.Println("  ✓ ProgramOfThought with code execution + timeout")
 	fmt.Println("  ✓ JSON adapter (structured I/O)")
 	fmt.Println("  ✓ Typed signatures (strong field types)")
 	fmt.Println("  ✓ Program (multi-step module composition)")
-	fmt.Println("  ✓ Multi-turn modification")
+	fmt.Println("  ✓ Multi-turn refinement")
 	fmt.Println("  ✓ Event logging for each pipeline step")
 
 	// Usage stats
