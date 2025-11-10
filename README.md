@@ -55,6 +55,7 @@ DSGo is a Go port of [DSPy](https://github.com/stanfordnlp/dspy) that brings str
 - **Refine** — Iterative output improvement with feedback
 - **ProgramOfThought** — Code generation and optional execution
 - **BestOfN** — Sample multiple outputs and score them
+- **Parallel** — Concurrent execution with worker pools and batch processing
 - **Program** — Compose modules into pipelines
 
 ### 🛠️ Tools & Function Calling
@@ -204,6 +205,7 @@ type Module interface {
 - **Refine**: Iterative improvement
 - **ProgramOfThought**: Code generation
 - **BestOfN**: Sampling and scoring
+- **Parallel**: Concurrent batch processing
 - **Program**: Module composition
 
 ### Adapters
@@ -343,6 +345,7 @@ See [examples/](examples/) directory:
 - **[03-quality-refine-bestof](examples/03-quality-refine-bestof/)** — Refine and BestOfN
 - **[04-structured-programs](examples/04-structured-programs/)** — Module composition
 - **[05-resilience-observability](examples/05-resilience-observability/)** — Production patterns
+- **[06-parallel](examples/06-parallel/)** — Parallel batch processing
 
 Run examples:
 

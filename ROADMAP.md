@@ -10,7 +10,7 @@
 
 ```mermaid
 pie title Component Coverage vs DSPy
-    "Modules (7/11)" : 64
+    "Modules (8/11)" : 73
     "Primitives (9/12)" : 75
     "Adapters (4/5)" : 80
     "Infrastructure (7/10)" : 70
@@ -18,12 +18,12 @@ pie title Component Coverage vs DSPy
 ```
 
 ### Summary
-- **Core Modules**: 64% (7/11) ✅ - All everyday modules complete
+- **Core Modules**: 73% (8/11) ✅ - All everyday modules + Parallel complete
 - **Primitives**: 75% (9/12) ✅ - Core + typed generics complete
 - **Adapters**: 80% (4/5) ✅ - Production-ready with fallbacks
 - **Infrastructure**: 70% (7/10) 🟡 - Strong observability, partial caching
 - **Providers**: 33% (2/6) 🟡 - OpenAI + OpenRouter complete
-- **Overall Parity**: ~70%
+- **Overall Parity**: ~72%
 - **Optimization/Evaluation**: Intentionally excluded (out of scope)
 
 ---
@@ -394,27 +394,45 @@ fmt.Println(out.Sentiment, out.Score) // Type-safe access
 
 ---
 
-## 📋 Phase 6: Advanced Modules (PLANNED)
+## ✅ Phase 6: Advanced Modules (1/4 COMPLETE)
 
 Missing modules to reach full DSPy parity:
 
-### 6.1: Parallel Module (Priority: HIGH)
+### 6.1: Parallel Module ✅ COMPLETE
 **DSPy has this** - [`dspy.Parallel`](https://github.com/stanfordnlp/dspy/blob/main/dspy/predict/parallel.py)
 
-Current state:
-- ⚠️ `BestOfN.WithParallel(true)` exists but has race-safety caveats
-- ⚠️ History is NOT thread-safe - requires separate instances
-- ⚠️ No general parallel execution primitive
+**Status**: ✅ Implemented, tested, and documented
 
-Planned implementation:
-- [ ] General `Parallel` module for concurrent execution
-- [ ] Worker pool with configurable parallelism limits
-- [ ] Input isolation to prevent data races
-- [ ] Error aggregation with configurable error thresholds
-- [ ] Thread-safe execution with proper synchronization
-- [ ] Usage aggregation across parallel calls
+Implementation details:
+- [x] General `Parallel` module for concurrent execution
+- [x] Worker pool with configurable parallelism limits (`WithMaxWorkers`)
+- [x] Input isolation to prevent data races (per-task map copies)
+- [x] Error aggregation with configurable error thresholds (`WithMaxFailures`)
+- [x] Thread-safe execution with proper synchronization
+- [x] Usage aggregation across parallel calls (tokens, cost, latency)
+- [x] Fail-fast mode (`WithFailFast`)
+- [x] Factory pattern for stateful modules (`NewParallelWithFactory`)
+- [x] Multiple input modes (batch array, map-of-slices, repeat)
+- [x] Rich metrics (per-task latency, success/failure counts)
+- [x] Comprehensive tests (88.8% coverage)
+- [x] Example: `examples/06-parallel/`
 
-**Effort**: Medium (1-3 days)
+**Key Features**:
+- Three constructor patterns: `NewParallel` (shared module), `NewParallelWithFactory` (factory function), `NewParallelWithInstances` (pre-created instances)
+- Configurable worker pool, error thresholds, and completions filtering
+- Batch input modes: explicit `_batch`, map-of-slices auto-zip, or repeat
+- Automatic cancellation on fail-fast or max failures exceeded
+- Context propagation for graceful shutdown
+- Detailed parallel metrics in `__parallel_metrics` output
+
+**Design Note**: 
+DSGo's Parallel returns `Prediction` (first successful + all in Completions), while DSPy returns a flat list with `None` for failures. This matches DSGo's module conventions (BestOfN, Refine) where Prediction is the standard return type.
+
+**Future Enhancements** (see Phase 10.7):
+- Straggler detection and resubmission (like DSPy's 120s timeout)
+- Optional progress bar integration
+- Module.Batch() convenience method
+
 
 ### 6.2: MultiChainComparison (Priority: MEDIUM)
 **DSPy has this** - [`dspy.MultiChainComparison`](https://github.com/stanfordnlp/dspy/blob/main/dspy/predict/multi_chain_comparison.py)
@@ -425,7 +443,6 @@ Planned implementation:
 - [ ] Best answer selection with scoring
 - [ ] Metadata tracking for comparison rationale
 
-**Effort**: Medium (1-3 days)
 
 ### 6.3: KNN (k-Nearest Neighbors) (Priority: MEDIUM)
 **DSPy has this** - [`dspy.KNN`](https://github.com/stanfordnlp/dspy/blob/main/dspy/predict/knn.py)
@@ -439,7 +456,6 @@ Planned implementation:
 - [ ] Configurable K parameter
 - [ ] Integration with existing few-shot system
 
-**Effort**: Medium (1-3 days, after embeddings)
 
 ### 6.4: CodeAct (Priority: LOW)
 **DSPy has this** - [`dspy.CodeAct`](https://github.com/stanfordnlp/dspy/blob/main/dspy/predict/code_act.py)
@@ -455,9 +471,9 @@ Planned implementation:
 - [ ] Whitelist/blacklist for allowed operations
 - [ ] Combined ReAct + ProgramOfThought pattern
 
-**Effort**: Medium (1-3 days)
 
-**Overall Phase 6 Status**: 0/4 modules | 4 planned
+**Overall Phase 6 Status**: 1/4 modules complete (25%) | 3 remaining planned
+**Completed**: Parallel ✅
 **Target**: Complete 2-3 modules for 80%+ DSPy parity
 
 ---
@@ -503,7 +519,6 @@ Planned implementation:
 - [ ] Memory-mapped storage for large indices
 
 **Status**: Not started | **Priority**: Medium
-**Effort**: Large (1-2 weeks)
 **Blockers**: None (can start immediately)
 
 ---
@@ -566,7 +581,6 @@ Current DSGo state:
 - [ ] Proper content part handling (text + images)
 
 **Status**: Minimal (only Image type exists) | **Priority**: Low-Medium
-**Effort**: Large (1-2 weeks)
 **Blockers**: None, but depends on provider vision model support
 
 ---
@@ -595,7 +609,6 @@ Missing major providers (DSPy has via LiteLLM):
 - [ ] Metadata extraction (usage, cost, rate limits)
 - [ ] Retry and error handling
 
-**Effort**: Medium (2-4 days per provider)
 
 ### 9.2: Google AI Provider (Priority: MEDIUM)
 - [ ] Gemini API (direct, not OpenRouter)
@@ -605,7 +618,6 @@ Missing major providers (DSPy has via LiteLLM):
 - [ ] Streaming
 - [ ] Metadata extraction
 
-**Effort**: Medium (2-4 days)
 
 ### 9.3: Mistral AI Provider (Priority: LOW)
 - [ ] Mistral API implementation
@@ -614,7 +626,6 @@ Missing major providers (DSPy has via LiteLLM):
 - [ ] Streaming
 - [ ] Metadata extraction
 
-**Effort**: Small-Medium (2-3 days)
 
 ### 9.4: Cohere Provider (Priority: LOW)
 - [ ] Cohere API implementation
@@ -623,10 +634,8 @@ Missing major providers (DSPy has via LiteLLM):
 - [ ] Streaming
 - [ ] Metadata extraction
 
-**Effort**: Small-Medium (2-3 days)
 
 **Status**: 2/6 providers (33%) | **Priority**: Medium
-**Effort**: Medium per provider (2-4 days each)
 
 ---
 
@@ -665,7 +674,6 @@ Planned improvements:
   - Cache invalidation utilities
   - Export cache stats for monitoring
 
-**Effort**: Medium (1-3 days)
 
 ### 10.2: Enhanced Retry (Priority: MEDIUM)
 
@@ -692,7 +700,6 @@ Planned improvements:
   - Per-request retry limits
   - Retry statistics in observability
 
-**Effort**: Small-Medium (1-2 days)
 
 ### 10.3: Streaming Enhancements (Priority: MEDIUM)
 
@@ -722,7 +729,6 @@ Planned improvements:
   - Async streaming support
   - Stream buffering strategies
 
-**Effort**: Medium (3-5 days)
 
 ### 10.4: Async Support (Priority: LOW)
 
@@ -740,7 +746,6 @@ Planned improvements:
 - [ ] Error aggregation in async mode
 - [ ] Context propagation
 
-**Effort**: Medium-Large (5-7 days)
 **Note**: Go's goroutines + channels may provide simpler patterns than Python asyncio
 
 ### 10.5: Callback System (Priority: LOW)
@@ -769,7 +774,6 @@ Planned improvements:
   - Metrics callback
   - Debug logging callback
 
-**Effort**: Medium (3-5 days)
 
 ### 10.6: Utilities (Priority: LOW)
 
@@ -794,10 +798,46 @@ Planned improvements:
   - Configurable redaction patterns
   - Safe logging for production
 
-**Effort**: Small-Medium (2-4 days)
 
-**Overall Phase 10 Status**: 0/6 features | All planned
-**Priority**: Mixed (some HIGH, some LOW)
+### 10.7: Parallel Enhancements (Priority: MEDIUM)
+
+Current state:
+- ✅ Worker pool with configurable max workers
+- ✅ Error aggregation with max failures and fail-fast
+- ✅ Factory pattern for stateful modules
+- ✅ Multiple input modes (batch, map-of-slices, repeat)
+- ✅ Rich metrics tracking
+- ⚠️ **No straggler detection/resubmission**
+- ⚠️ **No progress bar**
+- ⚠️ **No Module.Batch() convenience method**
+
+**DSPy has**: 
+- Straggler detection (resubmits tasks running >120s if ≤3 remaining)
+- Progress bar with tqdm
+- Module.batch() method on all modules
+
+Planned improvements:
+- [ ] **Straggler Detection**
+  - Track task submission times
+  - Resubmit tasks exceeding timeout threshold (default: 120s)
+  - Only resubmit when ≤N tasks remaining (default: 3)
+  - Resubmit at most once per task
+  - Configurable via `WithStragglerResubmit(timeout, limit)`
+  - Critical for production resilience against hanging workers
+- [ ] **Progress Bar**
+  - Optional progress reporting (e.g., "Processing 45/100")
+  - Configurable verbosity
+  - Integration with logging system
+  - `WithProgressBar(enabled bool)` option
+- [ ] **Module.Batch() Method**
+  - Add `Batch(ctx, examples []Example) ([]Prediction, error)` to Module interface
+  - Automatically creates Parallel instance
+  - Convenience wrapper for common batch processing pattern
+  - Configurable parallelism and error handling
+
+
+**Overall Phase 10 Status**: 0/7 features | All planned
+**Priority**: Mixed (some HIGH, some MEDIUM, some LOW)
 
 ---
 
@@ -940,67 +980,54 @@ The following DSPy features are **intentionally excluded** from DSGo:
 1. **Parallel module** (HIGH priority)
    - Needed for production batch processing
    - Address BestOfN race-safety issues
-   - Effort: 1-3 days
 
 2. **MultiChainComparison** (MEDIUM priority)
    - Useful for quality improvement
-   - Effort: 1-3 days
 
 **Phase 10: Infrastructure** - Production improvements
 3. **Cache enhancements** (HIGH priority)
    - Add TTL support
    - Auto-wire cache to providers
-   - Effort: 1-3 days
 
 4. **Retry-After support** (MEDIUM priority)
    - Better rate limit handling
-   - Effort: 1-2 days
 
 5. **XMLAdapter** (LOW priority)
    - DSPy parity
-   - Effort: <1 day
 
 ### Medium Term (Next 1-2 months)
 
 **Phase 9: Providers** - Expand model support
 6. **Anthropic provider** (HIGH priority)
    - Claude 3 is widely used
-   - Effort: 2-4 days
 
 **Phase 7: Embeddings** - Enable RAG workflows
 7. **Embedder interface + OpenAI embeddings** (MEDIUM priority)
    - Unlock KNN and RAG use cases
-   - Effort: 1-2 weeks
 
 8. **KNN module** (depends on #7)
    - Complete Phase 6
-   - Effort: 1-3 days
 
 **Phase 10: Streaming** - Complete streaming support
 9. **Streaming for all modules** (MEDIUM priority)
    - CoT, ReAct, PoT streaming
-   - Effort: 3-5 days
 
 ### Long Term (3+ months)
 
 **Phase 8: Multimodal** - Vision and audio
 10. **Image integration** (LOW-MEDIUM priority)
     - Vision model support
-    - Effort: 1 week
 
 11. **Audio support** (LOW priority)
     - Whisper integration
-    - Effort: 1 week
 
 **Phase 9: More Providers**
 12. Google AI, Mistral, Cohere (LOW priority)
     - Incremental provider additions
-    - Effort: 2-4 days each
 
 **Phase 10: Advanced Infrastructure**
 13. Disk cache, callbacks, async, save/load (LOW priority)
     - Quality-of-life improvements
-    - Effort: 1-2 weeks total
 
 ---
 

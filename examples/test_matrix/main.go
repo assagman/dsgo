@@ -141,6 +141,7 @@ var allExamples = []string{
 	"examples/03-quality-refine-bestof",
 	"examples/04-structured-programs",
 	"examples/05-resilience-observability",
+	"examples/06-parallel",
 }
 
 func main() {
