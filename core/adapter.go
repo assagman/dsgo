@@ -1101,7 +1101,7 @@ func (a *TwoStepAdapter) Parse(sig *Signature, content string) (map[string]any, 
 
 	// Call extraction LM (use context.Background() for extraction call)
 	extractMsg := []Message{{Role: "user", Content: extractPrompt.String()}}
-	result, err := a.extractionLM.Generate(context.Background(), extractMsg, nil)
+	result, err := a.extractionLM.Generate(context.Background(), extractMsg, DefaultGenerateOptions())
 	if err != nil {
 		return nil, fmt.Errorf("extraction LM failed: %w", err)
 	}

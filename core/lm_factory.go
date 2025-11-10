@@ -72,6 +72,14 @@ func NewLM(ctx context.Context, model ...string) (LM, error) {
 	// Create base LM
 	baseLM := factory(targetModel)
 
+	// Auto-wire cache if configured
+	if settings.DefaultCache != nil {
+		// Use type assertion to check if provider supports SetCache
+		if cacheableLM, ok := baseLM.(interface{ SetCache(Cache) }); ok {
+			cacheableLM.SetCache(settings.DefaultCache)
+		}
+	}
+
 	// Automatically wrap with LMWrapper if a Collector is configured
 	if settings.Collector != nil {
 		return NewLMWrapper(baseLM, settings.Collector), nil

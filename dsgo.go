@@ -58,6 +58,8 @@ var (
 	WithMaxRetries      = core.WithMaxRetries
 	WithTracing         = core.WithTracing
 	WithCollector       = core.WithCollector
+	WithCache           = core.WithCache
+	WithCacheTTL        = core.WithCacheTTL
 	GenerateCacheKey    = core.GenerateCacheKey
 	NewFallbackAdapter  = core.NewFallbackAdapter
 	NewJSONAdapter      = core.NewJSONAdapter

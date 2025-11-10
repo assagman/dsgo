@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 )
 
 // Cache interface for LM result caching
@@ -22,6 +23,9 @@ type Cache interface {
 
 	// Size returns the current number of cached entries
 	Size() int
+
+	// Capacity returns the maximum number of entries the cache can hold
+	Capacity() int
 
 	// Stats returns cache hit/miss statistics
 	Stats() CacheStats
@@ -47,6 +51,7 @@ func (s CacheStats) HitRate() float64 {
 type LMCache struct {
 	mu       sync.RWMutex
 	capacity int
+	ttl      time.Duration
 	items    map[string]*list.Element
 	lru      *list.List
 	hits     int64
@@ -55,18 +60,27 @@ type LMCache struct {
 
 // cacheEntry represents a cached item
 type cacheEntry struct {
-	key    string
-	result *GenerateResult
+	key     string
+	result  *GenerateResult
+	expires time.Time
 }
 
 // NewLMCache creates a new LRU cache with the specified capacity
 // Default capacity is 1000 entries
+// Default TTL is 0 (no expiration)
 func NewLMCache(capacity int) *LMCache {
+	return NewLMCacheWithTTL(capacity, 0)
+}
+
+// NewLMCacheWithTTL creates a new LRU cache with capacity and TTL
+// TTL of 0 means no expiration
+func NewLMCacheWithTTL(capacity int, ttl time.Duration) *LMCache {
 	if capacity <= 0 {
 		capacity = 1000 // Default capacity
 	}
 	return &LMCache{
 		capacity: capacity,
+		ttl:      ttl,
 		items:    make(map[string]*list.Element),
 		lru:      list.New(),
 	}
@@ -79,10 +93,20 @@ func (c *LMCache) Get(key string) (*GenerateResult, bool) {
 	defer c.mu.Unlock()
 
 	if elem, ok := c.items[key]; ok {
+		entry := elem.Value.(*cacheEntry)
+
+		// Check TTL expiration
+		if c.ttl > 0 && time.Now().After(entry.expires) {
+			// Entry expired, remove it
+			c.lru.Remove(elem)
+			delete(c.items, key)
+			c.misses++
+			return nil, false
+		}
+
 		// Move to front (most recently used)
 		c.lru.MoveToFront(elem)
 		c.hits++
-		entry := elem.Value.(*cacheEntry)
 		// Return a deep copy to prevent external mutation
 		return deepCopyResult(entry.result), true
 	}
@@ -100,17 +124,28 @@ func (c *LMCache) Set(key string, result *GenerateResult) {
 	// Deep copy to prevent external mutation
 	resultCopy := deepCopyResult(result)
 
+	// Calculate expiration time
+	var expires time.Time
+	if c.ttl > 0 {
+		expires = time.Now().Add(c.ttl)
+	}
+
 	// Check if key already exists
 	if elem, ok := c.items[key]; ok {
 		// Update existing entry and move to front
 		c.lru.MoveToFront(elem)
 		entry := elem.Value.(*cacheEntry)
 		entry.result = resultCopy
+		entry.expires = expires
 		return
 	}
 
 	// Add new entry
-	entry := &cacheEntry{key: key, result: resultCopy}
+	entry := &cacheEntry{
+		key:     key,
+		result:  resultCopy,
+		expires: expires,
+	}
 	elem := c.lru.PushFront(entry)
 	c.items[key] = elem
 
@@ -141,6 +176,13 @@ func (c *LMCache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.lru.Len()
+}
+
+// Capacity returns the maximum number of entries the cache can hold
+func (c *LMCache) Capacity() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.capacity
 }
 
 // Stats returns cache hit/miss statistics

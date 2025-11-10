@@ -81,6 +81,29 @@ func WithCollector(collector Collector) Option {
 	}
 }
 
+// WithCache enables caching with the specified capacity.
+// A cache with the given capacity will be created and auto-wired to all LM instances.
+// Uses the configured CacheTTL if set, otherwise no expiration.
+func WithCache(capacity int) Option {
+	return func(s *Settings) {
+		s.DefaultCache = NewLMCacheWithTTL(capacity, s.CacheTTL)
+	}
+}
+
+// WithCacheTTL sets the cache time-to-live for cached entries.
+// After the TTL expires, entries will be considered stale.
+// If a cache already exists, it will be recreated with the new TTL.
+func WithCacheTTL(ttl time.Duration) Option {
+	return func(s *Settings) {
+		s.CacheTTL = ttl
+		// Recreate cache if it already exists to apply new TTL
+		if s.DefaultCache != nil {
+			capacity := s.DefaultCache.Capacity()
+			s.DefaultCache = NewLMCacheWithTTL(capacity, ttl)
+		}
+	}
+}
+
 // ResetConfig resets all settings to their default values.
 func ResetConfig() {
 	globalSettings.Reset()

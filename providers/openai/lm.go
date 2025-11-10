@@ -64,6 +64,11 @@ func (o *OpenAI) SupportsTools() bool {
 	return true
 }
 
+// SetCache sets the cache instance for this LM
+func (o *OpenAI) SetCache(cache core.Cache) {
+	o.Cache = cache
+}
+
 // Generate generates a response from OpenAI
 func (o *OpenAI) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()

@@ -1,6 +1,6 @@
 # DSGo Examples
 
-**5 Comprehensive Examples Covering All Framework Features**
+**6 Comprehensive Examples Covering All Framework Features**
 
 Each example demonstrates multiple features through natural multi-turn conversations, with clear event logging showing atomic operations.
 
@@ -98,41 +98,80 @@ cd 04-structured-programs && go run main.go
 Production-grade resilience and monitoring:
 - Streaming with chunk tracking
 - LM caching with metrics (hit rate, speedup)
+- Cache TTL (time-to-live expiry demonstration)
 - Fallback adapters (Chat → JSON)
 - Provider fallback (primary → secondary)
 - Comprehensive event logging
 
-**Learn**: Error handling, caching strategies, metrics, observability
+**Learn**: Error handling, caching strategies, cache TTL, metrics, observability
 
 ```bash
 cd 05-resilience-observability && go run main.go
 ```
 
+---
+
+### 06 - Parallel
+**Concurrent Module Execution**
+
+Parallel processing with multiple modules:
+- Parallel module for concurrent execution
+- Synchronized results collection
+- Error handling across goroutines
+- Performance optimization for independent tasks
+
+**Learn**: Concurrency patterns, parallel execution, goroutine management
+
+```bash
+cd 06-parallel && go run main.go
+```
+
+---
+
+### 07 - Cache and TTL
+**Cache Configuration and Performance Testing**
+
+Focused cache demonstration:
+- Cache configuration (capacity, TTL)
+- Cache hit/miss behavior
+- TTL expiry demonstration
+- Cache statistics and metrics
+- Performance comparison
+
+**Learn**: Cache optimization, TTL configuration, hit rate analysis, performance tuning
+
+```bash
+cd 07-cache-ttl && go run main.go
+```
+
 ## Feature Coverage Matrix
 
-| Feature | Ex 01 | Ex 02 | Ex 03 | Ex 04 | Ex 05 |
-|---------|-------|-------|-------|-------|-------|
+| Feature | Ex 01 | Ex 02 | Ex 03 | Ex 04 | Ex 05 | Ex 06 | Ex 07 |
+|---------|-------|-------|-------|-------|-------|-------|-------|
 | **Modules** |
-| Predict | ✓ | ✓ | ✓ | ✓ | ✓ |
-| ChainOfThought | | | ✓ | | |
-| ReAct | | ✓ | | | |
-| Refine | | | ✓ | | |
-| BestOfN | | | ✓ | | |
-| ProgramOfThought | | | | ✓ | |
-| Program | | | | ✓ | |
+| Predict | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| ChainOfThought | | | ✓ | | | | |
+| ReAct | | ✓ | | | | | |
+| Refine | | | ✓ | | | | |
+| BestOfN | | | ✓ | | | | |
+| ProgramOfThought | | | | ✓ | | | |
+| Program | | | | ✓ | | | |
+| Parallel | | | | | | ✓ | |
 | **Adapters** |
-| Chat | ✓ | ✓ | ✓ | ✓ | ✓ |
-| JSON | | ✓ | | ✓ | ✓ |
-| Fallback | | | | | ✓ |
+| Chat | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| JSON | | ✓ | | ✓ | ✓ | | |
+| Fallback | | | | | ✓ | | |
 | **Features** |
-| Streaming | ✓ | | | | ✓ |
-| History | ✓ | | | | |
-| Caching | ✓ | | | | ✓ |
-| Tools | | ✓ | | | |
-| Few-shot | | | ✓ | | |
-| Typed signatures | | ✓ | | ✓ | |
-| Observability | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Multi-turn | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Streaming | ✓ | | | | ✓ | | |
+| History | ✓ | | | | | | |
+| Caching | ✓ | | | | ✓ | | ✓ |
+| Cache TTL | | | | | ✓ | | ✓ |
+| Tools | | ✓ | | | | | |
+| Few-shot | | | ✓ | | | | |
+| Typed signatures | | ✓ | | ✓ | | | |
+| Observability | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Multi-turn | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| Concurrency | | | | | | ✓ | |
 
 ## Logging and Observability
 
@@ -150,6 +189,9 @@ EXAMPLES_DEFAULT_MODEL=anthropic/claude-3.5-sonnet  # Required: Model to use (an
 # Generation options
 EXAMPLES_MAX_TOKENS=10000      # Max tokens (default: 10000)
 EXAMPLES_TEMPERATURE=0.7       # Temperature (default: 0.7)
+
+# Caching configuration
+DSGO_CACHE_TTL=5m              # Cache TTL (e.g., "5m", "1h", "30s", "0" for infinite)
 
 # Logging mode
 DSGO_LOG=off       # No logging
@@ -206,6 +248,8 @@ Examples emit structured events showing atomic operations:
 3. **03-quality-refine-bestof** - Explore quality optimization
 4. **04-structured-programs** - Master complex pipelines
 5. **05-resilience-observability** - Production patterns
+6. **06-parallel** - Concurrent execution patterns
+7. **07-cache-ttl** - Cache optimization and performance tuning
 
 **Building a specific use case?**
 
@@ -213,6 +257,7 @@ Examples emit structured events showing atomic operations:
 - **Content Generation** → See 03 for quality patterns
 - **Data Pipeline** → Check 04 for structured flows
 - **Production System** → Review 05 for resilience
+- **High Performance** → Check 06 for parallelization, 07 for caching
 
 ## Migration from Old Examples
 
@@ -226,7 +271,7 @@ The previous 28 numbered examples have been consolidated:
 | 006, 007, 010, 012 | **04-structured-programs** | PoT, Program, Typed sigs |
 | 014, 018, 019, 023, 024, 025, 026 | **05-resilience-observability** | Adapters, Config, Logging |
 
-All features from the original 28 examples are preserved in the new 5 consolidated examples.
+All features from the original 28 examples are preserved in the new 6 consolidated examples.
 
 ## Directory Structure
 
@@ -237,6 +282,8 @@ examples/
 ├── 03-quality-refine-bestof/ # CoT + BestOfN + Refine + Few-shot
 ├── 04-structured-programs/  # Program + PoT + JSON + Typed sigs
 ├── 05-resilience-observability/ # Fallback + Metrics + Logging
+├── 06-parallel/             # Concurrent module execution
+├── 07-cache-ttl/            # Cache configuration and TTL testing
 ├── _shared/                 # Shared utilities
 │   └── observe/             # Event logging infrastructure
 ├── .env.local               # API keys (gitignored)

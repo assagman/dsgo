@@ -14,6 +14,7 @@ import (
 //   - DSGO_TIMEOUT: Default timeout in seconds (e.g., "30")
 //   - DSGO_MAX_RETRIES: Default number of retries (e.g., "3")
 //   - DSGO_TRACING: Enable tracing ("true" or "false")
+//   - DSGO_CACHE_TTL: Cache time-to-live duration (e.g., "5m", "1h", "30s")
 //   - DSGO_OPENAI_API_KEY: OpenAI API key
 //   - DSGO_OPENROUTER_API_KEY: OpenRouter API key
 //   - DSGO_ANTHROPIC_API_KEY: Anthropic API key
@@ -70,5 +71,12 @@ func loadEnv() {
 
 	if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" && globalSettings.APIKey["anthropic"] == "" {
 		globalSettings.APIKey["anthropic"] = apiKey
+	}
+
+	// Parse DSGO_CACHE_TTL (e.g., "5m", "1h", "30s")
+	if ttlStr := os.Getenv("DSGO_CACHE_TTL"); ttlStr != "" {
+		if ttl, err := time.ParseDuration(ttlStr); err == nil {
+			globalSettings.CacheTTL = ttl
+		}
 	}
 }

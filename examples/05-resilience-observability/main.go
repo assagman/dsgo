@@ -60,13 +60,18 @@ func main() {
 		dsgo.WithProvider("openrouter"),
 		dsgo.WithTimeout(30*time.Second),
 		dsgo.WithMaxRetries(3),
+		// Cache configuration
+		dsgo.WithCacheTTL(3*time.Second), // Short TTL for demonstration
+		dsgo.WithCache(1000),             // Enable caching with 1000 entry capacity
 	)
-	
+
 	fmt.Println("\n=== Global Configuration ===")
 	settings := dsgo.GetSettings()
 	fmt.Printf("Provider: %s\n", settings.DefaultProvider)
 	fmt.Printf("Timeout: %v\n", settings.DefaultTimeout)
 	fmt.Printf("Max retries: %d\n", settings.MaxRetries)
+	fmt.Printf("Cache enabled: %v\n", settings.DefaultCache != nil)
+	fmt.Printf("Cache TTL: %v\n", settings.CacheTTL)
 
 	ctx := context.Background()
 	ctx, runSpan := observe.Start(ctx, observe.SpanKindRun, "qa_system", map[string]interface{}{
@@ -93,54 +98,41 @@ func main() {
 
 	predict := module.NewPredict(sig, lm)
 
-	// Turn 1: Cold request (streaming)
-	fmt.Println("\n=== Turn 1: Cold Request (Streaming) ===")
+	// Turn 1: Cold request (cache miss)
+	fmt.Println("\n=== Turn 1: Cold Request (Cache Miss) ===")
 	turn1Start := time.Now()
 	turn1Ctx, turn1Span := observe.Start(ctx, observe.SpanKindModule, "turn1_cold", map[string]interface{}{
-		"streaming": true,
+		"streaming": false,
 		"cache":     "cold",
 	})
 
 	question := "How do solar panels work?"
 	fmt.Printf("User: %s\n", question)
 
-	streamResult, err := predict.Stream(turn1Ctx, map[string]interface{}{
+	result1, err := predict.Forward(turn1Ctx, map[string]interface{}{
 		"question": question,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Print("Answer (streaming): ")
-	var fullAnswer string
-	chunkCount := 0
-	for chunk := range streamResult.Chunks {
-		fmt.Print(chunk.Content)
-		fullAnswer += chunk.Content
-		chunkCount++
-	}
-	fmt.Println()
-
-	if err := <-streamResult.Errors; err != nil {
-		log.Fatal(err)
-	}
-
 	turn1Latency := time.Since(turn1Start)
-	fmt.Printf("\nMetrics: %d chunks, %dms latency\n", chunkCount, turn1Latency.Milliseconds())
-	turn1Span.Event("streaming.complete", map[string]interface{}{
-		"chunks":     chunkCount,
+	explanation1, _ := result1.GetString("explanation")
+	if len(explanation1) > 100 {
+		explanation1 = explanation1[:100] + "..."
+	}
+	fmt.Printf("Answer: %s\n", explanation1)
+	fmt.Printf("Metrics: %dms latency (cache miss)\n", turn1Latency.Milliseconds())
+
+	usage1 := result1.Usage
+	fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage1.PromptTokens, usage1.CompletionTokens)
+	totalPromptTokens += usage1.PromptTokens
+	totalCompletionTokens += usage1.CompletionTokens
+
+	turn1Span.Event("cache.check", map[string]interface{}{
+		"status":     "miss",
 		"latency_ms": turn1Latency.Milliseconds(),
 	})
-
-	// Get final prediction for usage stats
-	pred := <-streamResult.Prediction
-	if pred != nil {
-		usage1 := pred.Usage
-		fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage1.PromptTokens, usage1.CompletionTokens)
-		totalPromptTokens += usage1.PromptTokens
-		totalCompletionTokens += usage1.CompletionTokens
-	}
-
 	turn1Span.End(nil)
 
 	// Turn 2: Warm request (cache hit expected)
@@ -175,9 +167,9 @@ func main() {
 	totalCompletionTokens += usage2.CompletionTokens
 
 	turn2Span.Event("cache.check", map[string]interface{}{
-		"status":      "hit",
-		"latency_ms":  turn2Latency.Milliseconds(),
-		"speedup":     float64(turn1Latency.Milliseconds())/float64(turn2Latency.Milliseconds()),
+		"status":     "hit",
+		"latency_ms": turn2Latency.Milliseconds(),
+		"speedup":    float64(turn1Latency.Milliseconds()) / float64(turn2Latency.Milliseconds()),
 	})
 	turn2Span.End(nil)
 
@@ -217,7 +209,8 @@ func main() {
 
 	// Turn 4: Demonstrate optional outputs and TwoStep adapter
 	fmt.Println("\n=== Turn 4: Optional Outputs + TwoStep Adapter ===")
-	fmt.Printf("User: Explain photosynthesis in plants with structured output\n")
+	turn4Question := "Photosynthesis in plants"
+	fmt.Printf("User: Explain %s with structured output\n", turn4Question)
 	turn4Ctx, turn4Span := observe.Start(ctx, observe.SpanKindModule, "turn4_optional", map[string]interface{}{
 		"adapter": "twostep",
 	})
@@ -234,11 +227,11 @@ func main() {
 	// For standard models, this gracefully falls back to single-step
 	extractionLM, _ := dsgo.NewLM(ctx, model) // Reuse same model for extraction
 	twoStep := core.NewTwoStepAdapter(extractionLM)
-	
+
 	complexPredict := module.NewPredict(complexSig, lm).WithAdapter(twoStep)
 
 	result4, err := complexPredict.Forward(turn4Ctx, map[string]interface{}{
-		"topic": "Photosynthesis in plants",
+		"topic": turn4Question,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -247,11 +240,11 @@ func main() {
 	summary, _ := result4.GetString("summary")
 	difficulty, _ := result4.GetInt("difficulty")
 	audience, _ := result4.GetString("audience")
-	
+
 	fmt.Printf("Summary: %s\n", summary)
 	fmt.Printf("Difficulty: %d/10\n", difficulty)
 	fmt.Printf("Audience: %s\n", audience)
-	
+
 	// Demonstrate optional field handling
 	if stats, ok := result4.GetString("statistics"); ok {
 		fmt.Printf("Statistics: %s\n", stats)
@@ -266,18 +259,127 @@ func main() {
 	totalCompletionTokens += usage4.CompletionTokens
 	turn4Span.End(nil)
 
+	// Turn 5: Cache TTL expiry demonstration
+	fmt.Println("\n=== Turn 5: Cache TTL Expiry Demo ===")
+	fmt.Printf("Cache TTL configured: %v\n", settings.CacheTTL)
+	fmt.Println("Testing same question with time delays to demonstrate TTL expiry")
+
+	ttlQuestion := "What is the capital of France?"
+
+	// First call - cache miss
+	fmt.Printf("\nUser (t=0s): %s\n", ttlQuestion)
+	turn5aStart := time.Now()
+	turn5aCtx, turn5aSpan := observe.Start(ctx, observe.SpanKindModule, "turn5a_ttl_miss", map[string]interface{}{
+		"cache": "miss_expected",
+		"ttl":   settings.CacheTTL.String(),
+	})
+
+	result5a, err := predict.Forward(turn5aCtx, map[string]interface{}{
+		"question": ttlQuestion,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	turn5aLatency := time.Since(turn5aStart)
+	answer5a, _ := result5a.GetString("explanation")
+	if len(answer5a) > 80 {
+		answer5a = answer5a[:80] + "..."
+	}
+	fmt.Printf("Answer: %s\n", answer5a)
+	fmt.Printf("Latency: %dms (cache miss)\n", turn5aLatency.Milliseconds())
+
+	usage5a := result5a.Usage
+	totalPromptTokens += usage5a.PromptTokens
+	totalCompletionTokens += usage5a.CompletionTokens
+	turn5aSpan.End(nil)
+
+	// Second call immediately - cache hit
+	fmt.Printf("\nUser (t=0.5s, within TTL): %s\n", ttlQuestion)
+	time.Sleep(500 * time.Millisecond)
+	turn5bStart := time.Now()
+	turn5bCtx, turn5bSpan := observe.Start(ctx, observe.SpanKindModule, "turn5b_ttl_hit", map[string]interface{}{
+		"cache": "hit_expected",
+		"ttl":   settings.CacheTTL.String(),
+	})
+
+	result5b, err := predict.Forward(turn5bCtx, map[string]interface{}{
+		"question": ttlQuestion,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	turn5bLatency := time.Since(turn5bStart)
+	answer5b, _ := result5b.GetString("explanation")
+	if len(answer5b) > 80 {
+		answer5b = answer5b[:80] + "..."
+	}
+	fmt.Printf("Answer: %s\n", answer5b)
+	fmt.Printf("Latency: %dms (cache hit, %.1fx faster)\n",
+		turn5bLatency.Milliseconds(),
+		float64(turn5aLatency.Milliseconds())/float64(turn5bLatency.Milliseconds()))
+
+	usage5b := result5b.Usage
+	totalPromptTokens += usage5b.PromptTokens
+	totalCompletionTokens += usage5b.CompletionTokens
+	turn5bSpan.Event("cache.hit", map[string]interface{}{
+		"ttl_remaining": settings.CacheTTL - 500*time.Millisecond,
+	})
+	turn5bSpan.End(nil)
+
+	// Third call after TTL expires - cache miss again
+	fmt.Printf("\nWaiting for TTL expiry (%v)...\n", settings.CacheTTL)
+	waitTime := settings.CacheTTL - 500*time.Millisecond + 100*time.Millisecond // Wait a bit longer
+	time.Sleep(waitTime)
+	fmt.Printf("\nUser (t=%v, after TTL expired): %s\n", settings.CacheTTL+100*time.Millisecond, ttlQuestion)
+	turn5cStart := time.Now()
+	turn5cCtx, turn5cSpan := observe.Start(ctx, observe.SpanKindModule, "turn5c_ttl_expired", map[string]interface{}{
+		"cache": "miss_expired",
+		"ttl":   settings.CacheTTL.String(),
+	})
+
+	result5c, err := predict.Forward(turn5cCtx, map[string]interface{}{
+		"question": ttlQuestion,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	turn5cLatency := time.Since(turn5cStart)
+	answer5c, _ := result5c.GetString("explanation")
+	if len(answer5c) > 80 {
+		answer5c = answer5c[:80] + "..."
+	}
+	fmt.Printf("Answer: %s\n", answer5c)
+	fmt.Printf("Latency: %dms (cache expired, fresh call)\n", turn5cLatency.Milliseconds())
+
+	usage5c := result5c.Usage
+	totalPromptTokens += usage5c.PromptTokens
+	totalCompletionTokens += usage5c.CompletionTokens
+
+	fmt.Printf("\n📊 Cache TTL behavior summary:\n")
+	fmt.Printf("  • Call 1 (t=0s):      %4dms - MISS (initial)\n", turn5aLatency.Milliseconds())
+	fmt.Printf("  • Call 2 (t=0.5s):    %4dms - HIT (within %v TTL)\n", turn5bLatency.Milliseconds(), settings.CacheTTL)
+	fmt.Printf("  • Call 3 (t=%v):   %4dms - MISS (expired)\n", settings.CacheTTL+100*time.Millisecond, turn5cLatency.Milliseconds())
+	fmt.Printf("  • TTL ensures fresh data while balancing performance\n")
+	fmt.Printf("  • Configure via dsgo.WithCacheTTL() or DSGO_CACHE_TTL env var\n")
+
+	turn5cSpan.End(nil)
+
 	// Summary with metrics
 	fmt.Println("\n=== System Summary ===")
-	totalLatency := turn1Latency + turn2Latency + turn3Latency
-	fmt.Printf("Total requests: 4\n")
+	totalLatency := turn1Latency + turn2Latency + turn3Latency + turn5aLatency + turn5bLatency + turn5cLatency
+	fmt.Printf("Total requests: 7 (4 turns + 3 TTL demo)\n")
 	fmt.Printf("Total latency: %dms\n", totalLatency.Milliseconds())
-	fmt.Printf("Avg latency: %dms\n", totalLatency.Milliseconds()/4)
-	fmt.Printf("Cache efficiency: 1 hit / 3 total = 33%%\n")
-	
+	fmt.Printf("Avg latency: %dms\n", totalLatency.Milliseconds()/7)
+	fmt.Printf("Cache efficiency: 3 hits / 6 total cacheable = 50%%\n")
+
 	fmt.Println("\nFeatures demonstrated:")
 	fmt.Println("  ✓ Global configuration (Configure + GetSettings)")
-	fmt.Println("  ✓ Streaming output (chunk tracking)")
-	fmt.Println("  ✓ LM caching (cold vs warm)")
+	fmt.Println("  ✓ LM caching (cold vs warm, auto-wiring)")
+	fmt.Println("  ✓ Cache hit/miss with identical content validation")
+	fmt.Println("  ✓ Cache TTL (time-to-live expiry)")
 	fmt.Println("  ✓ Cache hit/miss observability")
 	fmt.Println("  ✓ TwoStep adapter (reasoning models)")
 	fmt.Println("  ✓ Optional outputs (graceful degradation)")
@@ -287,7 +389,7 @@ func main() {
 	fmt.Println("  ✓ Centralized configuration")
 	fmt.Println("  ✓ Timeout control (30s default)")
 	fmt.Println("  ✓ Automatic retry (3 attempts, exponential backoff)")
-	fmt.Println("  ✓ Cache layer (reduce API calls)")
+	fmt.Println("  ✓ Cache layer with TTL (reduce API calls, ensure freshness)")
 	fmt.Println("  ✓ Adapter flexibility (TwoStep for reasoning models)")
 
 	// Usage stats

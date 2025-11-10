@@ -32,6 +32,12 @@ type Settings struct {
 
 	// Collector is the default collector for LM observability.
 	Collector Collector
+
+	// DefaultCache is the global cache instance (auto-wired to LM instances).
+	DefaultCache Cache
+
+	// CacheTTL is the cache time-to-live (0 = no expiry).
+	CacheTTL time.Duration
 }
 
 // globalSettings is the singleton instance of Settings.
@@ -40,6 +46,7 @@ var globalSettings = &Settings{
 	APIKey:         make(map[string]string),
 	MaxRetries:     3,
 	EnableTracing:  false,
+	CacheTTL:       0, // No expiry by default
 }
 
 // GetSettings returns a copy of the current global settings.
@@ -61,6 +68,8 @@ func GetSettings() Settings {
 		MaxRetries:      globalSettings.MaxRetries,
 		EnableTracing:   globalSettings.EnableTracing,
 		Collector:       globalSettings.Collector,
+		DefaultCache:    globalSettings.DefaultCache,
+		CacheTTL:        globalSettings.CacheTTL,
 	}
 }
 
@@ -143,4 +152,6 @@ func (s *Settings) Reset() {
 	s.MaxRetries = 3
 	s.EnableTracing = false
 	s.Collector = nil
+	s.DefaultCache = nil
+	s.CacheTTL = 0
 }

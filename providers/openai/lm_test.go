@@ -676,6 +676,10 @@ func (f *fakeCache) Size() int {
 	return len(f.data)
 }
 
+func (f *fakeCache) Capacity() int {
+	return 1000 // Fixed capacity for fake cache
+}
+
 func (f *fakeCache) Stats() core.CacheStats {
 	return core.CacheStats{
 		Hits:   0,

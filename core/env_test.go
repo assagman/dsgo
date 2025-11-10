@@ -24,6 +24,7 @@ func TestLoadEnv(t *testing.T) {
 		_ = os.Unsetenv("DSGO_TIMEOUT")
 		_ = os.Unsetenv("DSGO_MAX_RETRIES")
 		_ = os.Unsetenv("DSGO_TRACING")
+		_ = os.Unsetenv("DSGO_CACHE_TTL")
 		_ = os.Unsetenv("DSGO_OPENAI_API_KEY")
 		_ = os.Unsetenv("DSGO_OPENROUTER_API_KEY")
 		_ = os.Unsetenv("DSGO_ANTHROPIC_API_KEY")
@@ -210,6 +211,70 @@ func TestLoadEnv(t *testing.T) {
 
 		if settings.MaxRetries != 3 {
 			t.Errorf("expected default max retries for negative value, got %d", settings.MaxRetries)
+		}
+	})
+
+	t.Run("CacheTTL", func(t *testing.T) {
+		cleanupEnv()
+		defer cleanupEnv()
+
+		_ = os.Setenv("DSGO_CACHE_TTL", "5m")
+
+		ResetConfig()
+		Configure()
+
+		settings := GetSettings()
+
+		expected := 5 * time.Minute
+		if settings.CacheTTL != expected {
+			t.Errorf("expected CacheTTL=%v, got %v", expected, settings.CacheTTL)
+		}
+	})
+
+	t.Run("CacheTTL_InvalidDuration", func(t *testing.T) {
+		cleanupEnv()
+		defer cleanupEnv()
+
+		_ = os.Setenv("DSGO_CACHE_TTL", "invalid")
+
+		ResetConfig()
+		Configure()
+
+		settings := GetSettings()
+
+		if settings.CacheTTL != 0 {
+			t.Errorf("expected default CacheTTL=0 for invalid value, got %v", settings.CacheTTL)
+		}
+	})
+
+	t.Run("CacheTTL_VariousFormats", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			value    string
+			expected time.Duration
+		}{
+			{"seconds", "30s", 30 * time.Second},
+			{"minutes", "10m", 10 * time.Minute},
+			{"hours", "2h", 2 * time.Hour},
+			{"combined", "1h30m", 90 * time.Minute},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				cleanupEnv()
+				defer cleanupEnv()
+
+				_ = os.Setenv("DSGO_CACHE_TTL", tt.value)
+
+				ResetConfig()
+				Configure()
+
+				settings := GetSettings()
+
+				if settings.CacheTTL != tt.expected {
+					t.Errorf("expected CacheTTL=%v, got %v", tt.expected, settings.CacheTTL)
+				}
+			})
 		}
 	})
 }

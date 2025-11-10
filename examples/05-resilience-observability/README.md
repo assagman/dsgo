@@ -15,6 +15,7 @@
 ### Features
 - ✓ **Streaming** - Real-time chunked output with metrics
 - ✓ **Caching** - LM cache with hit/miss tracking
+- ✓ **Cache TTL** - Time-to-live expiry for cache freshness
 - ✓ **Provider fallback** - Primary → secondary LM
 - ✓ **Adapter fallback** - Automatic format switching
 - ✓ **Retry with backoff** - Transparent error recovery
@@ -32,7 +33,8 @@
 1. **Turn 1**: Cold request with streaming (cache miss, full latency)
 2. **Turn 2**: Repeat same question (cache hit, near-instant)
 3. **Turn 3**: Different question (cache miss, full latency)
-4. **Turn 4**: Complex output with fallback adapter demonstration
+4. **Turn 4**: Complex output with TwoStep adapter demonstration
+5. **Turn 5**: Cache TTL expiry demonstration (3 calls showing expiry behavior)
 
 ## Resilience Patterns
 
@@ -57,7 +59,16 @@ predict := module.NewPredict(sig, lm).WithAdapter(fallbackAdapter)
 
 ### Caching Strategy
 ```go
-lm = dsgo.NewLMCache(lm, 50)  // Cache last 50 requests
+// Configure global cache TTL
+dsgo.Configure(
+    dsgo.WithCacheTTL(5*time.Minute),  // 5 minute TTL
+)
+
+// Or via environment variable
+// DSGO_CACHE_TTL=5m
+
+// Cache automatically expires entries after TTL
+// TTL of 0 means infinite (no expiry)
 ```
 
 ### Automatic Retry
@@ -100,72 +111,87 @@ DSGO_LOG=events go run main.go > events.jsonl
 ## Expected Output
 
 ```
-=== Setup: Provider Fallback Strategy ===
-Primary: OpenAI (gpt-4)
-Fallback: OpenRouter (claude-3-haiku)
-Cache: 50 entries per provider
+=== Global Configuration ===
+Provider: openrouter
+Timeout: 30s
+Max retries: 3
+Cache TTL: 3s
 
-=== Turn 1: Cold Request (Streaming) ===
-▶ turn1_cold.start streaming=true cache=cold
-
-Answer (streaming): Solar panels work by converting sunlight into 
-electricity through photovoltaic cells. When sunlight hits the cells, 
-it knocks electrons loose, creating an electrical current...
-
-• streaming.complete chunks=47 latency_ms=1834
-✓ turn1_cold.end 1834ms
-
-Metrics: 47 chunks, 1834ms latency
+=== Turn 1: Cold Request (Cache Miss) ===
+User: How do solar panels work?
+Answer: Imagine your toy car needs batteries...
+Metrics: 1554ms latency (cache miss)
+Usage: Prompt 123 tokens, Completion 87 tokens
 
 === Turn 2: Warm Request (Cache Hit Expected) ===
-▶ turn2_warm.start streaming=false cache=expected_hit
-• cache.check status=hit latency_ms=8 speedup=229.3
-✓ turn2_warm.end 8ms
-
-Answer (cached): Solar panels work by converting sunlight into 
-electricity through photovoltaic cells...
-Metrics: 8ms latency (229.3x faster)
+User: How do solar panels work?
+Answer: Imagine your toy car needs batteries...
+Metrics: 0ms latency (inf x faster)
+Usage: Prompt 123 tokens, Completion 87 tokens
 
 === Turn 3: Different Question (Cache Miss) ===
-▶ turn3_miss.start cache=expected_miss
-• cache.check status=miss latency_ms=1456
-✓ turn3_miss.end 1456ms
-
-Answer: The sky appears blue because of Rayleigh scattering. When 
-sunlight enters Earth's atmosphere...
+User: Why is the sky blue?
+Answer: The sky appears blue because of Rayleigh scattering...
 Metrics: 1456ms latency
+Usage: Prompt 115 tokens, Completion 92 tokens
 
-=== Turn 4: Adapter Fallback Demo ===
-▶ turn4_fallback.start adapter=fallback_chain
-
+=== Turn 4: Optional Outputs + TwoStep Adapter ===
+User: Explain Photosynthesis in plants with structured output
 Summary: Photosynthesis is how plants make food from sunlight...
 Difficulty: 6/10
 Audience: teen
-Adapter used: chat
+Statistics: (not provided)
+Adapter: TwoStep (reasoning → extraction)
+Usage: Prompt 234 tokens, Completion 156 tokens
 
-• adapter.selected adapter=chat
-✓ turn4_fallback.end 1102ms
+=== Turn 5: Cache TTL Expiry Demo ===
+Cache TTL configured: 3s
+Testing same question with time delays to demonstrate TTL expiry
+
+User (t=0s): What is the capital of France?
+Answer: Paris is the capital of France...
+Latency: 1523ms (cache miss)
+
+User (t=0.5s, within TTL): What is the capital of France?
+Answer: Paris is the capital of France...
+Latency: 7ms (cache hit, 217.6x faster)
+
+Waiting for TTL expiry (3s)...
+
+User (t=3.1s, after TTL expired): What is the capital of France?
+Answer: Paris is the capital of France...
+Latency: 1489ms (cache expired, fresh call)
+
+📊 Cache TTL behavior summary:
+  • Call 1 (t=0s):      1523ms - MISS (initial)
+  • Call 2 (t=0.5s):       7ms - HIT (within 3s TTL)
+  • Call 3 (t=3.1s):    1489ms - MISS (expired)
+  • TTL ensures fresh data while balancing performance
+  • Configure via dsgo.WithCacheTTL() or DSGO_CACHE_TTL env var
 
 === System Summary ===
-Total requests: 4
-Total latency: 3298ms
-Avg latency: 824ms
-Cache efficiency: 1 hit / 3 total = 33%
+Total requests: 7 (4 turns + 3 TTL demo)
+Total latency: 6352ms
+Avg latency: 907ms
+Cache efficiency: 3 hits / 6 total cacheable = 50%
 
 Features demonstrated:
+  ✓ Global configuration (Configure + GetSettings)
   ✓ Streaming output (chunk tracking)
   ✓ LM caching (cold vs warm)
+  ✓ Cache TTL (time-to-live expiry)
   ✓ Cache hit/miss observability
-  ✓ Fallback adapter chain
-  ✓ Adapter selection tracking
+  ✓ TwoStep adapter (reasoning models)
+  ✓ Optional outputs (graceful degradation)
   ✓ Latency and performance metrics
   ✓ Event logging (DSGO_LOG=pretty)
 
 Resilience patterns:
-  ✓ Provider fallback (primary → secondary)
-  ✓ Adapter fallback (Chat → JSON)
-  ✓ Automatic retry (transparent, exponential backoff)
-  ✓ Cache layer (reduce API calls)
+  ✓ Centralized configuration
+  ✓ Timeout control (30s default)
+  ✓ Automatic retry (3 attempts, exponential backoff)
+  ✓ Cache layer with TTL (reduce API calls, ensure freshness)
+  ✓ Adapter flexibility (TwoStep for reasoning models)
 ```
 
 ## Event Logging
@@ -203,12 +229,14 @@ Resilience patterns:
 | Cold (streaming) | ~1800ms | miss | Full LM call + streaming |
 | Warm (cached) | ~8ms | **hit** | **229x faster** |
 | Cold (non-stream) | ~1450ms | miss | Full LM call |
-| Fallback adapter | ~1100ms | - | Auto-selects working format |
+| TTL cache hit | ~7ms | **hit** | Within TTL window |
+| TTL cache expired | ~1490ms | miss | After TTL expiry |
 
 ## Key Takeaways
 
 1. **Caching** provides 100-200x speedup for repeated queries
-2. **Streaming** adds minimal overhead while improving UX
-3. **Fallback adapters** ensure robust parsing across LM variations
-4. **Event logging** enables production debugging and optimization
-5. **Built-in retry** handles transient failures transparently
+2. **Cache TTL** balances performance and freshness (configurable per use case)
+3. **Streaming** adds minimal overhead while improving UX
+4. **Fallback adapters** ensure robust parsing across LM variations
+5. **Event logging** enables production debugging and optimization
+6. **Built-in retry** handles transient failures transparently

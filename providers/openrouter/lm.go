@@ -68,6 +68,11 @@ func (o *OpenRouter) SupportsTools() bool {
 	return true
 }
 
+// SetCache sets the cache instance for this LM
+func (o *OpenRouter) SetCache(cache core.Cache) {
+	o.Cache = cache
+}
+
 // Generate generates a response from OpenRouter
 func (o *OpenRouter) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
