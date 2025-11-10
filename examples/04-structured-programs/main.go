@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/observe"
@@ -73,8 +74,9 @@ func main() {
 	var totalPromptTokens, totalCompletionTokens int
 
 	// User request
-	userRequest := "Write a Python function to find the longest common prefix of an array of strings. Test it with ['flower','flow','flight'] and ['dog','racecar','car']."
+	userRequest := "Write a Python function to implement binary search on a sorted array. Test it with [1, 3, 5, 7, 9] searching for 5 and 2."
 	fmt.Printf("User: %s\n", userRequest)
+	fmt.Println(strings.Repeat("=", 80))
 
 	// Step 1: Program of Thought - Generate code implementation
 	fmt.Println("\n=== Step 1: Generate Code Implementation (ProgramOfThought) ===")
@@ -82,17 +84,22 @@ func main() {
 		"module": "program_of_thought",
 	})
 
-	potSig := dsgo.NewSignature("Generate Python code for the longest common prefix problem").
+	potSig := dsgo.NewSignature("Generate Python code for binary search algorithm with test cases").
 		AddInput("problem", dsgo.FieldTypeString, "Programming problem description").
-		AddOutput("code", dsgo.FieldTypeString, "Complete Python function").
+		AddInput("test_cases", dsgo.FieldTypeJSON, "Test cases to include in the code").
+		AddOutput("code", dsgo.FieldTypeString, "Complete Python function with test calls").
 		AddOutput("explanation", dsgo.FieldTypeString, "Explanation of the algorithm")
 
 	pot := module.NewProgramOfThought(potSig, lm, "python").
-		WithAllowExecution(true).  // Enable code execution
-		WithExecutionTimeout(10)    // 10 second safety timeout
+		WithAllowExecution(true). // Enable code execution
+		WithExecutionTimeout(10)  // 10 second safety timeout
+
+	// Increase max tokens for code generation (minimax-m2 needs more)
+	pot.Options.MaxTokens = 20000
 
 	planResult, err := pot.Forward(step1Ctx, map[string]interface{}{
-		"problem": "Write a function longestCommonPrefix that takes an array of strings and returns the longest common prefix. If no common prefix, return empty string.",
+		"problem":    "Write a function binary_search that takes a sorted array and a target value, and returns the index of the target if found, or -1 if not found.",
+		"test_cases": [][]interface{}{{[]int{1, 3, 5, 7, 9}, 5}, {[]int{1, 3, 5, 7, 9}, 2}},
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -101,19 +108,22 @@ func main() {
 	code, _ := planResult.GetString("code")
 	explanation, _ := planResult.GetString("explanation")
 	fmt.Printf("Generated code:\n%s\n\nExplanation: %s\n", code, explanation)
-	
+
 	// Show execution result if available
-	if execResult, ok := planResult.GetString("execution_result"); ok {
-		fmt.Printf("\n✓ Code executed successfully:\n%s\n", execResult)
+	if execResult, ok := planResult.GetString("execution_result"); ok && strings.TrimSpace(execResult) != "" {
+		fmt.Printf("\n✓ Code executed successfully:\n%s\n", strings.TrimSpace(execResult))
 	} else if execErr, ok := planResult.GetString("execution_error"); ok {
 		fmt.Printf("\n✗ Execution failed: %s\n", execErr)
+	} else if pot.AllowExecution {
+		fmt.Printf("\n✓ Code executed successfully (no output)\n")
 	}
-	
+
 	usage1 := planResult.Usage
 	fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage1.PromptTokens, usage1.CompletionTokens)
 	totalPromptTokens += usage1.PromptTokens
 	totalCompletionTokens += usage1.CompletionTokens
 	step1Span.End(nil)
+	fmt.Println(strings.Repeat("-", 80))
 
 	// Step 2: Extract test cases (Predict with JSON)
 	fmt.Println("\n=== Step 2: Extract Test Cases (JSON Output) ===")
@@ -143,15 +153,40 @@ func main() {
 
 	fmt.Printf("Test Cases:\n")
 	fmt.Printf("  Language: %s\n", language)
-	testInputsJSON, _ := json.Marshal(testInputs)
-	fmt.Printf("  Test Inputs: %s\n", string(testInputsJSON))
-	expectedOutputsJSON, _ := json.Marshal(expectedOutputs)
-	fmt.Printf("  Expected Outputs: %s\n", string(expectedOutputsJSON))
+
+	// Pretty print test inputs
+	if testInputsStr, ok := testInputs.(string); ok {
+		var testInputsParsed interface{}
+		if err := json.Unmarshal([]byte(testInputsStr), &testInputsParsed); err == nil {
+			testInputsJSON, _ := json.MarshalIndent(testInputsParsed, "    ", "  ")
+			fmt.Printf("  Test Inputs:\n%s\n", string(testInputsJSON))
+		} else {
+			fmt.Printf("  Test Inputs: %s\n", testInputsStr)
+		}
+	} else {
+		testInputsJSON, _ := json.MarshalIndent(testInputs, "    ", "  ")
+		fmt.Printf("  Test Inputs:\n%s\n", string(testInputsJSON))
+	}
+
+	// Pretty print expected outputs
+	if expectedOutputsStr, ok := expectedOutputs.(string); ok {
+		var expectedOutputsParsed interface{}
+		if err := json.Unmarshal([]byte(expectedOutputsStr), &expectedOutputsParsed); err == nil {
+			expectedOutputsJSON, _ := json.MarshalIndent(expectedOutputsParsed, "    ", "  ")
+			fmt.Printf("  Expected Outputs:\n%s\n", string(expectedOutputsJSON))
+		} else {
+			fmt.Printf("  Expected Outputs: %s\n", expectedOutputsStr)
+		}
+	} else {
+		expectedOutputsJSON, _ := json.MarshalIndent(expectedOutputs, "    ", "  ")
+		fmt.Printf("  Expected Outputs:\n%s\n", string(expectedOutputsJSON))
+	}
 	usage2 := constraintsResult.Usage
 	fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage2.PromptTokens, usage2.CompletionTokens)
 	totalPromptTokens += usage2.PromptTokens
 	totalCompletionTokens += usage2.CompletionTokens
 	step2Span.End(nil)
+	fmt.Println(strings.Repeat("-", 80))
 
 	// Step 3: Build Program - Testing pipeline
 	fmt.Println("\n=== Step 3: Execute Testing Pipeline (Program) ===")
@@ -203,13 +238,21 @@ func main() {
 	}
 
 	solutionData, _ := programResult.Get("final_solution")
-	solutionJSON, _ := json.MarshalIndent(solutionData, "", "  ")
-	fmt.Printf("\nFinal Solution:\n%s\n", string(solutionJSON))
+
+	// Display final solution in original format
+	if solutionStr, ok := solutionData.(string); ok {
+		fmt.Printf("\nFinal Solution:\n%s\n", solutionStr)
+	} else {
+		// It's structured data, format as JSON
+		solutionJSON, _ := json.MarshalIndent(solutionData, "", "  ")
+		fmt.Printf("\nFinal Solution:\n%s\n", string(solutionJSON))
+	}
 	usage3 := programResult.Usage
 	fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage3.PromptTokens, usage3.CompletionTokens)
 	totalPromptTokens += usage3.PromptTokens
 	totalCompletionTokens += usage3.CompletionTokens
 	step3Span.End(nil)
+	fmt.Println(strings.Repeat("-", 80))
 
 	// Turn 2: Refine code
 	fmt.Println("\n=== Turn 2: Refine Code (Fix Bugs and Optimize) ===")
@@ -232,8 +275,15 @@ func main() {
 	}
 
 	refinedSolution, _ := modifyResult.Get("refined_solution")
-	refinedJSON, _ := json.MarshalIndent(refinedSolution, "", "  ")
-	fmt.Printf("\nRefined Solution:\n%s\n", string(refinedJSON))
+
+	// Display refined solution in original format
+	if refinedStr, ok := refinedSolution.(string); ok {
+		fmt.Printf("\nRefined Solution:\n%s\n", refinedStr)
+	} else {
+		// It's structured data, format as JSON
+		refinedJSON, _ := json.MarshalIndent(refinedSolution, "", "  ")
+		fmt.Printf("\nRefined Solution:\n%s\n", string(refinedJSON))
+	}
 	usage4 := modifyResult.Usage
 	fmt.Printf("Usage: Prompt %d tokens, Completion %d tokens\n", usage4.PromptTokens, usage4.CompletionTokens)
 	totalPromptTokens += usage4.PromptTokens

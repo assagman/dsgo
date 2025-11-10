@@ -431,6 +431,9 @@ func classifyError(r *testResult) {
 		case strings.Contains(lowerOut, "api key"):
 			r.errorType = "API_KEY"
 			r.errorMsg = extractError(output)
+		case strings.Contains(lowerOut, "max_tokens") || strings.Contains(lowerOut, "finish_reason=length"):
+			r.errorType = "MAX_TOKENS"
+			r.errorMsg = extractError(output)
 		default:
 			r.errorType = "UNKNOWN"
 			r.errorMsg = extractError(output)
