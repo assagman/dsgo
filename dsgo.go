@@ -9,8 +9,8 @@ import (
 	"github.com/assagman/dsgo/internal/env"
 
 	// Import all standard providers to trigger their init() registration
-	_ "github.com/assagman/dsgo/providers/openai"
-	_ "github.com/assagman/dsgo/providers/openrouter"
+	_ "github.com/assagman/dsgo/internal/providers/openai"
+	_ "github.com/assagman/dsgo/internal/providers/openrouter"
 )
 
 func init() {
@@ -73,7 +73,6 @@ var (
 	NewChatAdapter      = core.NewChatAdapter
 	NewTwoStepAdapter   = core.NewTwoStepAdapter
 	RegisterLM          = core.RegisterLM
-	NewLMWrapper        = core.NewLMWrapper
 )
 
 // Re-export constants

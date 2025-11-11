@@ -1,4 +1,4 @@
-package openrouter
+package openai
 
 import (
 	"bufio"
@@ -20,61 +20,66 @@ import (
 )
 
 func init() {
-	core.RegisterLM("openrouter", func(model string) core.LM {
-		return newOpenRouter(model)
+	core.RegisterLM("openai", func(model string) core.LM {
+		return newOpenAI(model)
 	})
 }
 
 const (
-	defaultBaseURL = "https://openrouter.ai/api/v1"
+	defaultBaseURL = "https://api.openai.com/v1"
 )
 
-// openRouter implements the LM interface for OpenRouter models
-type openRouter struct {
-	APIKey   string
-	Model    string
-	BaseURL  string
-	Client   *http.Client
-	SiteName string
-	SiteURL  string
-	Cache    core.Cache
+// openAI implements the LM interface for OpenAI models
+type openAI struct {
+	APIKey  string
+	Model   string
+	BaseURL string
+	Client  *http.Client
+	Cache   core.Cache
 }
 
-// newOpenRouter creates a new OpenRouter LM
-func newOpenRouter(model string) *openRouter {
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	return &openRouter{
-		APIKey:   apiKey,
-		Model:    model,
-		BaseURL:  defaultBaseURL,
-		Client:   &http.Client{},
-		SiteName: os.Getenv("OPENROUTER_SITE_NAME"),
-		SiteURL:  os.Getenv("OPENROUTER_SITE_URL"),
+// newOpenAI creates a new OpenAI LM
+func newOpenAI(model string) *openAI {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+
+	// Default timeout 30s; override via DSGO_HTTP_TIMEOUT_MS
+	timeout := 30 * time.Second
+	if v := os.Getenv("DSGO_HTTP_TIMEOUT_MS"); v != "" {
+		if d, err := time.ParseDuration(v + "ms"); err == nil && d > 0 {
+			timeout = d
+		}
+	}
+
+	return &openAI{
+		APIKey:  apiKey,
+		Model:   model,
+		BaseURL: defaultBaseURL,
+		Client:  &http.Client{Timeout: timeout},
 	}
 }
 
 // Name returns the model name
-func (o *openRouter) Name() string {
+func (o *openAI) Name() string {
 	return o.Model
 }
 
-// SupportsJSON indicates OpenRouter supports native JSON mode
-func (o *openRouter) SupportsJSON() bool {
+// SupportsJSON indicates OpenAI supports native JSON mode
+func (o *openAI) SupportsJSON() bool {
 	return true
 }
 
-// SupportsTools indicates OpenRouter supports tool calling
-func (o *openRouter) SupportsTools() bool {
+// SupportsTools indicates OpenAI supports tool calling
+func (o *openAI) SupportsTools() bool {
 	return true
 }
 
 // SetCache sets the cache instance for this LM
-func (o *openRouter) SetCache(cache core.Cache) {
+func (o *openAI) SetCache(cache core.Cache) {
 	o.Cache = cache
 }
 
-// Generate generates a response from OpenRouter
-func (o *openRouter) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+// Generate generates a response from OpenAI
+func (o *openAI) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
 
 	// Calculate prompt length for logging
@@ -108,12 +113,6 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+o.APIKey)
-		if o.SiteName != "" {
-			req.Header.Set("X-Title", o.SiteName)
-		}
-		if o.SiteURL != "" {
-			req.Header.Set("HTTP-Referer", o.SiteURL)
-		}
 		return o.Client.Do(req)
 	})
 	if err != nil {
@@ -124,42 +123,6 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-
-		// Check for 405 with json format unsupported - automatic fallback
-		if resp.StatusCode == http.StatusMethodNotAllowed &&
-			options != nil && options.ResponseFormat == "json" {
-			bodyStr := string(body)
-
-			// Fallback from json_schema to json_object
-			if options.ResponseSchema != nil && strings.Contains(bodyStr, "json_schema") {
-				fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support json_schema, falling back to json_object\n", o.Model)
-				fallbackOpts := *options
-				fallbackOpts.ResponseSchema = nil
-				return o.Generate(ctx, messages, &fallbackOpts)
-			}
-
-			// Fallback from json_object to plain text (adapter-based parsing)
-			if strings.Contains(bodyStr, "json_object") || strings.Contains(bodyStr, "response format") {
-				fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support JSON mode, using adapter-based parsing\n", o.Model)
-				fallbackOpts := *options
-				fallbackOpts.ResponseFormat = ""
-				fallbackOpts.ResponseSchema = nil
-				return o.Generate(ctx, messages, &fallbackOpts)
-			}
-		}
-
-		// Verbose HTTP error logging for debugging
-		fmt.Fprintf(os.Stderr, "\n=== HTTP ERROR DEBUG ===\n")
-		fmt.Fprintf(os.Stderr, "Status: %d %s\n", resp.StatusCode, resp.Status)
-		fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
-		fmt.Fprintf(os.Stderr, "URL: %s\n", o.BaseURL+"/chat/completions")
-		fmt.Fprintf(os.Stderr, "\nResponse Headers:\n")
-		for k, v := range resp.Header {
-			fmt.Fprintf(os.Stderr, "  %s: %s\n", k, strings.Join(v, ", "))
-		}
-		fmt.Fprintf(os.Stderr, "\nResponse Body:\n%s\n", string(body))
-		fmt.Fprintf(os.Stderr, "=======================\n\n")
-
 		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 		logging.LogAPIError(ctx, o.Model, err)
 		return nil, err
@@ -179,7 +142,7 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 		}
 	}
 
-	var apiResp openRouterResponse
+	var apiResp openAIResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		logging.LogAPIError(ctx, o.Model, err)
 		// Save failed response for debugging
@@ -215,14 +178,10 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 	return result, nil
 }
 
-func (o *openRouter) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
+func (o *openAI) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
 	req := map[string]any{
 		"model":    o.Model,
 		"messages": o.convertMessages(messages),
-	}
-
-	if options == nil {
-		return req
 	}
 
 	if options.Temperature > 0 {
@@ -240,7 +199,6 @@ func (o *openRouter) buildRequest(messages []core.Message, options *core.Generat
 	if options.ResponseFormat == "json" {
 		if options.ResponseSchema != nil {
 			// Full structured output with JSON schema
-			// OpenAI format: { type: "json_schema", json_schema: { name, schema, strict } }
 			req["response_format"] = map[string]any{
 				"type": "json_schema",
 				"json_schema": map[string]any{
@@ -286,7 +244,7 @@ func (o *openRouter) buildRequest(messages []core.Message, options *core.Generat
 	return req
 }
 
-func (o *openRouter) convertMessages(messages []core.Message) []map[string]any {
+func (o *openAI) convertMessages(messages []core.Message) []map[string]any {
 	converted := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
 		m := map[string]any{
@@ -327,7 +285,7 @@ func (o *openRouter) convertMessages(messages []core.Message) []map[string]any {
 	return converted
 }
 
-func (o *openRouter) convertTool(tool *core.Tool) map[string]any {
+func (o *openAI) convertTool(tool *core.Tool) map[string]any {
 	properties := make(map[string]any)
 	required := []string{}
 
@@ -360,17 +318,8 @@ func (o *openRouter) convertTool(tool *core.Tool) map[string]any {
 	}
 }
 
-func (o *openRouter) parseResponse(resp *openRouterResponse) (*core.GenerateResult, error) {
+func (o *openAI) parseResponse(resp *openAIResponse) (*core.GenerateResult, error) {
 	if len(resp.Choices) == 0 {
-		// VERBOSE DEBUG for no choices error
-		if debugEnv := os.Getenv("DSGO_DEBUG_PARSE"); debugEnv == "1" || debugEnv == "true" {
-			respJSON, _ := json.MarshalIndent(resp, "", "  ")
-			fmt.Fprintf(os.Stderr, "\n=== NO CHOICES ERROR DEBUG ===\n")
-			fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
-			fmt.Fprintf(os.Stderr, "Response ID: %s\n", resp.ID)
-			fmt.Fprintf(os.Stderr, "Full Response:\n%s\n", string(respJSON))
-			fmt.Fprintf(os.Stderr, "==============================\n\n")
-		}
 		return nil, fmt.Errorf("no choices in response")
 	}
 
@@ -389,9 +338,13 @@ func (o *openRouter) parseResponse(resp *openRouterResponse) (*core.GenerateResu
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]core.ToolCall, 0, len(choice.Message.ToolCalls))
 		for _, tc := range choice.Message.ToolCalls {
-			args, err := parseToolArguments(o.Model, resp.ID, choice.FinishReason, tc)
-			if err != nil {
-				return nil, err
+			var args map[string]any
+
+			// Apply JSON repair to handle malformed tool arguments from models
+			repairedArgs := jsonutil.RepairJSON(tc.Function.Arguments)
+
+			if err := json.Unmarshal([]byte(repairedArgs), &args); err != nil {
+				return nil, fmt.Errorf("failed to parse tool arguments (after repair): %w", err)
 			}
 			result.ToolCalls = append(result.ToolCalls, core.ToolCall{
 				ID:        tc.ID,
@@ -405,10 +358,10 @@ func (o *openRouter) parseResponse(resp *openRouterResponse) (*core.GenerateResu
 }
 
 // extractMetadata extracts provider-specific metadata from HTTP response headers
-func (o *openRouter) extractMetadata(headers http.Header) map[string]any {
+func (o *openAI) extractMetadata(headers http.Header) map[string]any {
 	metadata := make(map[string]any)
 
-	// Cache detection (OpenRouter uses Cloudflare)
+	// Cache detection (OpenAI uses Cloudflare)
 	if cacheStatus := headers.Get("CF-Cache-Status"); cacheStatus != "" {
 		metadata["cache_status"] = cacheStatus
 		metadata["cache_hit"] = (cacheStatus == "HIT")
@@ -417,27 +370,35 @@ func (o *openRouter) extractMetadata(headers http.Header) map[string]any {
 		metadata["x_cache"] = cache
 	}
 
-	// Rate limit headers (OpenRouter specific)
-	if rateLimit := headers.Get("X-RateLimit-Limit"); rateLimit != "" {
-		metadata["rate_limit_limit"] = rateLimit
+	// OpenAI rate limit headers
+	if rateLimit := headers.Get("X-RateLimit-Limit-Requests"); rateLimit != "" {
+		metadata["rate_limit_requests"] = rateLimit
 	}
-	if rateRemaining := headers.Get("X-RateLimit-Remaining"); rateRemaining != "" {
-		metadata["rate_limit_remaining"] = rateRemaining
+	if rateRemaining := headers.Get("X-RateLimit-Remaining-Requests"); rateRemaining != "" {
+		metadata["rate_limit_remaining_requests"] = rateRemaining
 	}
-	if rateReset := headers.Get("X-RateLimit-Reset"); rateReset != "" {
-		metadata["rate_limit_reset"] = rateReset
+	if rateLimit := headers.Get("X-RateLimit-Limit-Tokens"); rateLimit != "" {
+		metadata["rate_limit_tokens"] = rateLimit
+	}
+	if rateRemaining := headers.Get("X-RateLimit-Remaining-Tokens"); rateRemaining != "" {
+		metadata["rate_limit_remaining_tokens"] = rateRemaining
 	}
 
-	// OpenRouter-specific headers
-	if genID := headers.Get("X-OpenRouter-Generation-ID"); genID != "" {
-		metadata["generation_id"] = genID
+	// OpenAI request ID for debugging
+	if requestID := headers.Get("X-Request-ID"); requestID != "" {
+		metadata["request_id"] = requestID
+	}
+
+	// OpenAI organization
+	if org := headers.Get("Openai-Organization"); org != "" {
+		metadata["organization"] = org
 	}
 
 	return metadata
 }
 
-// Stream generates a streaming response from OpenRouter
-func (o *openRouter) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+// Stream generates a streaming response from OpenAI
+func (o *openAI) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
 	chunkChan := make(chan core.Chunk)
 	errChan := make(chan error, 1)
 
@@ -462,12 +423,6 @@ func (o *openRouter) Stream(ctx context.Context, messages []core.Message, option
 
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+o.APIKey)
-			if o.SiteName != "" {
-				req.Header.Set("X-Title", o.SiteName)
-			}
-			if o.SiteURL != "" {
-				req.Header.Set("HTTP-Referer", o.SiteURL)
-			}
 
 			return o.Client.Do(req)
 		})
@@ -479,19 +434,6 @@ func (o *openRouter) Stream(ctx context.Context, messages []core.Message, option
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-
-			// Verbose HTTP error logging for streaming
-			fmt.Fprintf(os.Stderr, "\n=== HTTP STREAMING ERROR DEBUG ===\n")
-			fmt.Fprintf(os.Stderr, "Status: %d %s\n", resp.StatusCode, resp.Status)
-			fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
-			fmt.Fprintf(os.Stderr, "URL: %s\n", o.BaseURL+"/chat/completions")
-			fmt.Fprintf(os.Stderr, "\nResponse Headers:\n")
-			for k, v := range resp.Header {
-				fmt.Fprintf(os.Stderr, "  %s: %s\n", k, strings.Join(v, ", "))
-			}
-			fmt.Fprintf(os.Stderr, "\nResponse Body:\n%s\n", string(body))
-			fmt.Fprintf(os.Stderr, "==================================\n\n")
-
 			errChan <- fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 			return
 		}
@@ -519,7 +461,7 @@ func (o *openRouter) Stream(ctx context.Context, messages []core.Message, option
 			}
 
 			// Parse JSON chunk
-			var streamResp openRouterStreamResponse
+			var streamResp openAIStreamResponse
 			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
 				errChan <- fmt.Errorf("failed to parse stream chunk: %w", err)
 				return
@@ -555,16 +497,16 @@ func (o *openRouter) Stream(ctx context.Context, messages []core.Message, option
 	return chunkChan, errChan
 }
 
-// OpenRouter API response structures
-type openRouterResponse struct {
+// OpenAI API response structures
+type openAIResponse struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
 	Created int64  `json:"created"`
 	Model   string `json:"model"`
 	Choices []struct {
-		Index        int               `json:"index"`
-		Message      openRouterMessage `json:"message"`
-		FinishReason string            `json:"finish_reason"`
+		Index        int           `json:"index"`
+		Message      openAIMessage `json:"message"`
+		FinishReason string        `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`
@@ -573,13 +515,13 @@ type openRouterResponse struct {
 	} `json:"usage"`
 }
 
-type openRouterMessage struct {
-	Role      string               `json:"role"`
-	Content   string               `json:"content"`
-	ToolCalls []openRouterToolCall `json:"tool_calls,omitempty"`
+type openAIMessage struct {
+	Role      string           `json:"role"`
+	Content   string           `json:"content"`
+	ToolCalls []openAIToolCall `json:"tool_calls,omitempty"`
 }
 
-type openRouterToolCall struct {
+type openAIToolCall struct {
 	ID       string `json:"id"`
 	Type     string `json:"type"`
 	Function struct {
@@ -588,7 +530,7 @@ type openRouterToolCall struct {
 	} `json:"function"`
 }
 
-type openRouterStreamResponse struct {
+type openAIStreamResponse struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
 	Created int64  `json:"created"`
@@ -606,98 +548,6 @@ type openRouterStreamResponse struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage,omitempty"`
-}
-
-// parseToolArguments attempts to parse tool call arguments with multiple fallback strategies
-func parseToolArguments(model, responseID, finishReason string, tc openRouterToolCall) (map[string]any, error) {
-	raw := tc.Function.Arguments
-
-	// Handle empty arguments (some models return empty string for zero-param tools)
-	if strings.TrimSpace(raw) == "" {
-		return map[string]any{}, nil
-	}
-
-	// Try primary parse with JSON repair
-	repaired := jsonutil.RepairJSON(raw)
-	var args map[string]any
-
-	if err := json.Unmarshal([]byte(repaired), &args); err == nil {
-		return args, nil
-	}
-
-	// Fallback 1: Try nested JSON string unescape (double-encoded args)
-	var inner string
-	if json.Unmarshal([]byte(repaired), &inner) == nil && strings.Contains(inner, "{") {
-		innerRepaired := jsonutil.RepairJSON(inner)
-		if err := json.Unmarshal([]byte(innerRepaired), &args); err == nil {
-			return args, nil
-		}
-	}
-
-	// Fallback 2: Extract largest valid object substring
-	if jsonStr, err := jsonutil.ExtractJSON(repaired); err == nil {
-		if err := json.Unmarshal([]byte(jsonStr), &args); err == nil {
-			return args, nil
-		}
-	}
-
-	// Fallback 3: Balance delimiters for truncated JSON
-	if strings.Contains(repaired, "{") || strings.Contains(repaired, "[") {
-		balanced := balanceDelimiters(repaired)
-		if err := json.Unmarshal([]byte(balanced), &args); err == nil {
-			return args, nil
-		}
-	}
-
-	// Final attempt: Log detailed debug info if enabled
-	if debugEnabled() {
-		fmt.Fprintf(os.Stderr, "\n=== TOOL ARGS PARSE ERROR DEBUG ===\n")
-		fmt.Fprintf(os.Stderr, "Model: %s\nResponse ID: %s\nFinish Reason: %s\n", model, responseID, finishReason)
-		fmt.Fprintf(os.Stderr, "Tool Call ID: %s  Name: %s\n", tc.ID, tc.Function.Name)
-		fmt.Fprintf(os.Stderr, "Raw args length: %d\n", len(raw))
-		fmt.Fprintf(os.Stderr, "Braces: {=%d }=%d  Brackets: [=%d ]=%d\n",
-			strings.Count(raw, "{"), strings.Count(raw, "}"),
-			strings.Count(raw, "["), strings.Count(raw, "]"))
-		fmt.Fprintf(os.Stderr, "Raw preview: %s\n", preview(raw, 200))
-		fmt.Fprintf(os.Stderr, "Repaired preview: %s\n", preview(repaired, 200))
-		fmt.Fprintf(os.Stderr, "===================================\n\n")
-	}
-
-	return nil, fmt.Errorf("failed to parse tool arguments (model=%s, tool=%s, finish_reason=%s): all parsing attempts failed",
-		model, tc.Function.Name, finishReason)
-}
-
-// balanceDelimiters attempts to balance unmatched braces and brackets
-func balanceDelimiters(s string) string {
-	// Balance curly braces
-	openCurly := strings.Count(s, "{")
-	closeCurly := strings.Count(s, "}")
-	if closeCurly < openCurly {
-		s += strings.Repeat("}", openCurly-closeCurly)
-	}
-
-	// Balance square brackets
-	openSquare := strings.Count(s, "[")
-	closeSquare := strings.Count(s, "]")
-	if closeSquare < openSquare {
-		s += strings.Repeat("]", openSquare-closeSquare)
-	}
-
-	return s
-}
-
-// preview returns a preview of a string with head and tail
-func preview(s string, n int) string {
-	if len(s) <= n*2 {
-		return s
-	}
-	return s[:n] + " ... " + s[len(s)-n:]
-}
-
-// debugEnabled checks if debug mode is enabled via environment variable
-func debugEnabled() bool {
-	d := os.Getenv("DSGO_DEBUG_PARSE")
-	return d == "1" || strings.ToLower(d) == "true"
 }
 
 // saveRawExchange saves complete request/response exchange to a file for debugging
@@ -722,7 +572,7 @@ func saveRawExchange(model string, request map[string]any, statusCode int, heade
 	// Build complete exchange record
 	exchange := map[string]any{
 		"timestamp": time.Now().Format(time.RFC3339Nano),
-		"provider":  "openrouter",
+		"provider":  "openai",
 		"model":     model,
 		"example":   os.Getenv("DSGO_EXAMPLE"),
 		"request":   request,
@@ -746,7 +596,7 @@ func saveRawExchange(model string, request map[string]any, statusCode int, heade
 	timestamp := time.Now().Format("20060102_150405.000000")
 	safeModel := strings.ReplaceAll(model, "/", "_")
 	safeModel = strings.ReplaceAll(safeModel, ":", "_")
-	filename := filepath.Join(rawDir, fmt.Sprintf("%s_openrouter_%s.json", timestamp, safeModel))
+	filename := filepath.Join(rawDir, fmt.Sprintf("%s_openai_%s.json", timestamp, safeModel))
 
 	// Marshal with 2-space indentation
 	exchangeJSON, err := json.MarshalIndent(exchange, "", "  ")
