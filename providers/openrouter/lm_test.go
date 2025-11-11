@@ -25,15 +25,15 @@ func TestNewOpenRouter(t *testing.T) {
 	_ = os.Setenv("OPENROUTER_SITE_NAME", "test-site")
 	_ = os.Setenv("OPENROUTER_SITE_URL", "https://test.com")
 
-	lm := NewOpenRouter("gpt-4")
+	lm := newOpenRouter("gpt-4")
 	if lm.APIKey != "test-key" {
 		t.Errorf("expected APIKey test-key, got %s", lm.APIKey)
 	}
 	if lm.Model != "gpt-4" {
 		t.Errorf("expected Model gpt-4, got %s", lm.Model)
 	}
-	if lm.BaseURL != DefaultBaseURL {
-		t.Errorf("expected BaseURL %s, got %s", DefaultBaseURL, lm.BaseURL)
+	if lm.BaseURL != defaultBaseURL {
+		t.Errorf("expected BaseURL %s, got %s", defaultBaseURL, lm.BaseURL)
 	}
 	if lm.SiteName != "test-site" {
 		t.Errorf("expected SiteName test-site, got %s", lm.SiteName)
@@ -47,28 +47,28 @@ func TestNewOpenRouter(t *testing.T) {
 }
 
 func TestOpenRouter_Name(t *testing.T) {
-	lm := &OpenRouter{Model: "gpt-4-turbo"}
+	lm := &openRouter{Model: "gpt-4-turbo"}
 	if lm.Name() != "gpt-4-turbo" {
 		t.Errorf("expected Name gpt-4-turbo, got %s", lm.Name())
 	}
 }
 
 func TestOpenRouter_SupportsJSON(t *testing.T) {
-	lm := &OpenRouter{}
+	lm := &openRouter{}
 	if !lm.SupportsJSON() {
 		t.Error("expected SupportsJSON to return true")
 	}
 }
 
 func TestOpenRouter_SupportsTools(t *testing.T) {
-	lm := &OpenRouter{}
+	lm := &openRouter{}
 	if !lm.SupportsTools() {
 		t.Error("expected SupportsTools to return true")
 	}
 }
 
 func TestOpenRouter_ExtractMetadata(t *testing.T) {
-	lm := &OpenRouter{}
+	lm := &openRouter{}
 
 	t.Run("extracts all headers", func(t *testing.T) {
 		headers := http.Header{}
@@ -165,15 +165,15 @@ func TestInit_RegistersLM(t *testing.T) {
 	// Verify it's actually an OpenRouter instance (or wrapped)
 	// Could be LMWrapper, so we check the base type
 	switch v := lm.(type) {
-	case *OpenRouter:
-		// Direct OpenRouter
+	case *openRouter:
+		// Direct openRouter
 	case interface{ Unwrap() core.LM }:
 		// Wrapped LM, check the base
-		if _, ok := v.Unwrap().(*OpenRouter); !ok {
-			t.Errorf("expected wrapped *OpenRouter, got %T", v.Unwrap())
+		if _, ok := v.Unwrap().(*openRouter); !ok {
+			t.Errorf("expected wrapped *openRouter, got %T", v.Unwrap())
 		}
 	default:
-		t.Errorf("expected *OpenRouter or wrapper, got %T", lm)
+		t.Errorf("expected *openRouter or wrapper, got %T", lm)
 	}
 }
 
@@ -222,7 +222,7 @@ func TestOpenRouter_Generate_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -274,7 +274,7 @@ func TestOpenRouter_Generate_WithHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:   "test-key",
 		BaseURL:  server.URL,
 		Client:   &http.Client{},
@@ -333,7 +333,7 @@ func TestOpenRouter_Generate_WithTools(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -401,7 +401,7 @@ func TestOpenRouter_Generate_ToolCallsWithMalformedJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		Model:   "test-model",
 		BaseURL: server.URL,
@@ -441,7 +441,7 @@ func TestOpenRouter_Generate_ErrorResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -467,7 +467,7 @@ func TestOpenRouter_Generate_NoChoices(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		BaseURL: server.URL,
 		Client:  &http.Client{},
@@ -480,7 +480,7 @@ func TestOpenRouter_Generate_NoChoices(t *testing.T) {
 }
 
 func TestOpenRouter_BuildRequest(t *testing.T) {
-	lm := &OpenRouter{Model: "gpt-4"}
+	lm := &openRouter{Model: "gpt-4"}
 
 	tests := []struct {
 		name     string
@@ -622,7 +622,7 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 }
 
 func TestOpenRouter_ConvertMessages(t *testing.T) {
-	lm := &OpenRouter{}
+	lm := &openRouter{}
 
 	tests := []struct {
 		name     string
@@ -693,7 +693,7 @@ func TestOpenRouter_ConvertMessages(t *testing.T) {
 }
 
 func TestOpenRouter_ConvertTool(t *testing.T) {
-	lm := &OpenRouter{}
+	lm := &openRouter{}
 	tool := core.NewTool("test_tool", "A test tool", nil)
 	tool.AddParameter("param1", "string", "First param", true)
 	tool.AddEnumParameter("param2", "Second param", []string{"a", "b"}, false)
@@ -737,7 +737,7 @@ func TestOpenRouter_ConvertTool(t *testing.T) {
 }
 
 func TestOpenRouter_ParseResponse_InvalidToolArgs(t *testing.T) {
-	lm := &OpenRouter{}
+	lm := &openRouter{}
 	resp := &openRouterResponse{
 		Choices: []struct {
 			Index        int               `json:"index"`
@@ -804,7 +804,7 @@ func TestOpenRouter_Generate_WithToolChoice(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -846,7 +846,7 @@ func TestOpenRouter_Generate_ToolChoiceNone(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		BaseURL: server.URL,
 		Client:  &http.Client{},
@@ -884,7 +884,7 @@ func TestOpenRouter_Stream_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -934,7 +934,7 @@ func TestOpenRouter_Stream_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenRouter{
+	lm := &openRouter{
 		APIKey:  "test-key",
 		BaseURL: server.URL,
 		Client:  &http.Client{},

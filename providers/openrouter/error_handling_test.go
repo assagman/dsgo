@@ -31,7 +31,7 @@ func TestGenerate_EmptyChoices(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := NewOpenRouter("test-model")
+	lm := newOpenRouter("test-model")
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
@@ -65,7 +65,7 @@ func TestGenerate_NullContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := NewOpenRouter("test-model")
+	lm := newOpenRouter("test-model")
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
@@ -90,7 +90,7 @@ func TestGenerate_HTTP405(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := NewOpenRouter("test-model")
+	lm := newOpenRouter("test-model")
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
@@ -117,7 +117,7 @@ func TestGenerate_HTTP400_BadRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := NewOpenRouter("test-model")
+	lm := newOpenRouter("test-model")
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
@@ -144,7 +144,7 @@ func TestGenerate_MalformedJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := NewOpenRouter("test-model")
+	lm := newOpenRouter("test-model")
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
@@ -198,7 +198,7 @@ func TestGenerate_WithTools_RequestStructure(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := NewOpenRouter("test-model")
+	lm := newOpenRouter("test-model")
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 
@@ -463,7 +463,7 @@ func TestGenerate_HTTP405_JSONSchemaFallback(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := NewOpenRouter("test-model")
+	lm := newOpenRouter("test-model")
 	lm.BaseURL = server.URL
 	lm.APIKey = "test-key"
 

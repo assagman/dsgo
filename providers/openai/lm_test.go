@@ -17,15 +17,15 @@ func TestNewOpenAI(t *testing.T) {
 
 	_ = os.Setenv("OPENAI_API_KEY", "test-key")
 
-	lm := NewOpenAI("gpt-4")
+	lm := newOpenAI("gpt-4")
 	if lm.APIKey != "test-key" {
 		t.Errorf("expected APIKey test-key, got %s", lm.APIKey)
 	}
 	if lm.Model != "gpt-4" {
 		t.Errorf("expected Model gpt-4, got %s", lm.Model)
 	}
-	if lm.BaseURL != DefaultBaseURL {
-		t.Errorf("expected BaseURL %s, got %s", DefaultBaseURL, lm.BaseURL)
+	if lm.BaseURL != defaultBaseURL {
+		t.Errorf("expected BaseURL %s, got %s", defaultBaseURL, lm.BaseURL)
 	}
 	if lm.Client == nil {
 		t.Error("expected Client to be initialized")
@@ -33,21 +33,21 @@ func TestNewOpenAI(t *testing.T) {
 }
 
 func TestOpenAI_Name(t *testing.T) {
-	lm := &OpenAI{Model: "gpt-4-turbo"}
+	lm := &openAI{Model: "gpt-4-turbo"}
 	if lm.Name() != "gpt-4-turbo" {
 		t.Errorf("expected Name gpt-4-turbo, got %s", lm.Name())
 	}
 }
 
 func TestOpenAI_SupportsJSON(t *testing.T) {
-	lm := &OpenAI{}
+	lm := &openAI{}
 	if !lm.SupportsJSON() {
 		t.Error("expected SupportsJSON to return true")
 	}
 }
 
 func TestOpenAI_SupportsTools(t *testing.T) {
-	lm := &OpenAI{}
+	lm := &openAI{}
 	if !lm.SupportsTools() {
 		t.Error("expected SupportsTools to return true")
 	}
@@ -98,7 +98,7 @@ func TestOpenAI_Generate_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -170,7 +170,7 @@ func TestOpenAI_Generate_WithTools(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -205,7 +205,7 @@ func TestOpenAI_Generate_ErrorResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -231,7 +231,7 @@ func TestOpenAI_Generate_NoChoices(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		BaseURL: server.URL,
 		Client:  &http.Client{},
@@ -244,7 +244,7 @@ func TestOpenAI_Generate_NoChoices(t *testing.T) {
 }
 
 func TestOpenAI_BuildRequest(t *testing.T) {
-	lm := &OpenAI{Model: "gpt-4"}
+	lm := &openAI{Model: "gpt-4"}
 
 	tests := []struct {
 		name     string
@@ -403,7 +403,7 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 }
 
 func TestOpenAI_ConvertMessages(t *testing.T) {
-	lm := &OpenAI{}
+	lm := &openAI{}
 
 	tests := []struct {
 		name     string
@@ -474,7 +474,7 @@ func TestOpenAI_ConvertMessages(t *testing.T) {
 }
 
 func TestOpenAI_ConvertTool(t *testing.T) {
-	lm := &OpenAI{}
+	lm := &openAI{}
 	tool := core.NewTool("test_tool", "A test tool", nil)
 	tool.AddParameter("param1", "string", "First param", true)
 	tool.AddEnumParameter("param2", "Second param", []string{"a", "b"}, false)
@@ -518,7 +518,7 @@ func TestOpenAI_ConvertTool(t *testing.T) {
 }
 
 func TestOpenAI_ParseResponse_InvalidToolArgs(t *testing.T) {
-	lm := &OpenAI{}
+	lm := &openAI{}
 	resp := &openAIResponse{
 		Choices: []struct {
 			Index        int           `json:"index"`
@@ -585,7 +585,7 @@ func TestOpenAI_Generate_WithToolChoice(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -627,7 +627,7 @@ func TestOpenAI_Generate_ToolChoiceNone(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		BaseURL: server.URL,
 		Client:  &http.Client{},
@@ -709,7 +709,7 @@ func TestOpenAI_Generate_CacheHit(t *testing.T) {
 		},
 	}
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey: "test-key",
 		Model:  "gpt-4",
 		Cache:  cache,
@@ -751,7 +751,7 @@ func TestOpenAI_Generate_CacheSet(t *testing.T) {
 	options := core.DefaultGenerateOptions()
 	expectedKey := core.GenerateCacheKey("gpt-4", messages, options)
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -787,7 +787,7 @@ func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -845,7 +845,7 @@ func TestOpenAI_Generate_ParseResponseError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -895,7 +895,7 @@ func TestOpenAI_Stream_HappyPath(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -960,7 +960,7 @@ func TestOpenAI_Stream_NonOKStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -1003,7 +1003,7 @@ func TestOpenAI_Stream_InvalidJSONChunk(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -1049,7 +1049,7 @@ func TestOpenAI_Stream_SkipsNonDataLines(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -1101,7 +1101,7 @@ func TestOpenAI_Stream_EmptyChoices(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -1163,7 +1163,7 @@ func TestOpenAI_InitRegistration(t *testing.T) {
 	}
 
 	// Test direct construction
-	lm2 := NewOpenAI("gpt-4-test")
+	lm2 := newOpenAI("gpt-4-test")
 
 	if lm2 == nil {
 		t.Fatal("NewOpenAI returned nil")
@@ -1173,8 +1173,8 @@ func TestOpenAI_InitRegistration(t *testing.T) {
 		t.Errorf("expected model gpt-4-test, got %s", lm2.Model)
 	}
 
-	if lm2.BaseURL != DefaultBaseURL {
-		t.Errorf("expected BaseURL %s, got %s", DefaultBaseURL, lm2.BaseURL)
+	if lm2.BaseURL != defaultBaseURL {
+		t.Errorf("expected BaseURL %s, got %s", defaultBaseURL, lm2.BaseURL)
 	}
 
 	if lm2.Client == nil {
@@ -1183,7 +1183,7 @@ func TestOpenAI_InitRegistration(t *testing.T) {
 }
 
 func TestOpenAI_ExtractMetadata(t *testing.T) {
-	lm := &OpenAI{}
+	lm := &openAI{}
 
 	tests := []struct {
 		name     string
@@ -1288,7 +1288,7 @@ func TestOpenAI_Generate_SaveRawExchange(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,
@@ -1328,7 +1328,7 @@ func TestOpenAI_Generate_WithMetadata(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lm := &OpenAI{
+	lm := &openAI{
 		APIKey:  "test-key",
 		Model:   "gpt-4",
 		BaseURL: server.URL,

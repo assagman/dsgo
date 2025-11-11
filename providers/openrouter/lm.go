@@ -21,16 +21,16 @@ import (
 
 func init() {
 	core.RegisterLM("openrouter", func(model string) core.LM {
-		return NewOpenRouter(model)
+		return newOpenRouter(model)
 	})
 }
 
 const (
-	DefaultBaseURL = "https://openrouter.ai/api/v1"
+	defaultBaseURL = "https://openrouter.ai/api/v1"
 )
 
-// OpenRouter implements the LM interface for OpenRouter models
-type OpenRouter struct {
+// openRouter implements the LM interface for OpenRouter models
+type openRouter struct {
 	APIKey   string
 	Model    string
 	BaseURL  string
@@ -40,13 +40,13 @@ type OpenRouter struct {
 	Cache    core.Cache
 }
 
-// NewOpenRouter creates a new OpenRouter LM
-func NewOpenRouter(model string) *OpenRouter {
+// newOpenRouter creates a new OpenRouter LM
+func newOpenRouter(model string) *openRouter {
 	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	return &OpenRouter{
+	return &openRouter{
 		APIKey:   apiKey,
 		Model:    model,
-		BaseURL:  DefaultBaseURL,
+		BaseURL:  defaultBaseURL,
 		Client:   &http.Client{},
 		SiteName: os.Getenv("OPENROUTER_SITE_NAME"),
 		SiteURL:  os.Getenv("OPENROUTER_SITE_URL"),
@@ -54,27 +54,27 @@ func NewOpenRouter(model string) *OpenRouter {
 }
 
 // Name returns the model name
-func (o *OpenRouter) Name() string {
+func (o *openRouter) Name() string {
 	return o.Model
 }
 
 // SupportsJSON indicates OpenRouter supports native JSON mode
-func (o *OpenRouter) SupportsJSON() bool {
+func (o *openRouter) SupportsJSON() bool {
 	return true
 }
 
 // SupportsTools indicates OpenRouter supports tool calling
-func (o *OpenRouter) SupportsTools() bool {
+func (o *openRouter) SupportsTools() bool {
 	return true
 }
 
 // SetCache sets the cache instance for this LM
-func (o *OpenRouter) SetCache(cache core.Cache) {
+func (o *openRouter) SetCache(cache core.Cache) {
 	o.Cache = cache
 }
 
 // Generate generates a response from OpenRouter
-func (o *OpenRouter) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (o *openRouter) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
 
 	// Calculate prompt length for logging
@@ -215,7 +215,7 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []core.Message, opti
 	return result, nil
 }
 
-func (o *OpenRouter) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
+func (o *openRouter) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
 	req := map[string]any{
 		"model":    o.Model,
 		"messages": o.convertMessages(messages),
@@ -286,7 +286,7 @@ func (o *OpenRouter) buildRequest(messages []core.Message, options *core.Generat
 	return req
 }
 
-func (o *OpenRouter) convertMessages(messages []core.Message) []map[string]any {
+func (o *openRouter) convertMessages(messages []core.Message) []map[string]any {
 	converted := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
 		m := map[string]any{
@@ -327,7 +327,7 @@ func (o *OpenRouter) convertMessages(messages []core.Message) []map[string]any {
 	return converted
 }
 
-func (o *OpenRouter) convertTool(tool *core.Tool) map[string]any {
+func (o *openRouter) convertTool(tool *core.Tool) map[string]any {
 	properties := make(map[string]any)
 	required := []string{}
 
@@ -360,7 +360,7 @@ func (o *OpenRouter) convertTool(tool *core.Tool) map[string]any {
 	}
 }
 
-func (o *OpenRouter) parseResponse(resp *openRouterResponse) (*core.GenerateResult, error) {
+func (o *openRouter) parseResponse(resp *openRouterResponse) (*core.GenerateResult, error) {
 	if len(resp.Choices) == 0 {
 		// VERBOSE DEBUG for no choices error
 		if debugEnv := os.Getenv("DSGO_DEBUG_PARSE"); debugEnv == "1" || debugEnv == "true" {
@@ -405,7 +405,7 @@ func (o *OpenRouter) parseResponse(resp *openRouterResponse) (*core.GenerateResu
 }
 
 // extractMetadata extracts provider-specific metadata from HTTP response headers
-func (o *OpenRouter) extractMetadata(headers http.Header) map[string]any {
+func (o *openRouter) extractMetadata(headers http.Header) map[string]any {
 	metadata := make(map[string]any)
 
 	// Cache detection (OpenRouter uses Cloudflare)
@@ -437,7 +437,7 @@ func (o *OpenRouter) extractMetadata(headers http.Header) map[string]any {
 }
 
 // Stream generates a streaming response from OpenRouter
-func (o *OpenRouter) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+func (o *openRouter) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
 	chunkChan := make(chan core.Chunk)
 	errChan := make(chan error, 1)
 

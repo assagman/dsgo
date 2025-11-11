@@ -21,16 +21,16 @@ import (
 
 func init() {
 	core.RegisterLM("openai", func(model string) core.LM {
-		return NewOpenAI(model)
+		return newOpenAI(model)
 	})
 }
 
 const (
-	DefaultBaseURL = "https://api.openai.com/v1"
+	defaultBaseURL = "https://api.openai.com/v1"
 )
 
-// OpenAI implements the LM interface for OpenAI models
-type OpenAI struct {
+// openAI implements the LM interface for OpenAI models
+type openAI struct {
 	APIKey  string
 	Model   string
 	BaseURL string
@@ -38,39 +38,39 @@ type OpenAI struct {
 	Cache   core.Cache
 }
 
-// NewOpenAI creates a new OpenAI LM
-func NewOpenAI(model string) *OpenAI {
+// newOpenAI creates a new OpenAI LM
+func newOpenAI(model string) *openAI {
 	apiKey := os.Getenv("OPENAI_API_KEY")
-	return &OpenAI{
+	return &openAI{
 		APIKey:  apiKey,
 		Model:   model,
-		BaseURL: DefaultBaseURL,
+		BaseURL: defaultBaseURL,
 		Client:  &http.Client{},
 	}
 }
 
 // Name returns the model name
-func (o *OpenAI) Name() string {
+func (o *openAI) Name() string {
 	return o.Model
 }
 
 // SupportsJSON indicates OpenAI supports native JSON mode
-func (o *OpenAI) SupportsJSON() bool {
+func (o *openAI) SupportsJSON() bool {
 	return true
 }
 
 // SupportsTools indicates OpenAI supports tool calling
-func (o *OpenAI) SupportsTools() bool {
+func (o *openAI) SupportsTools() bool {
 	return true
 }
 
 // SetCache sets the cache instance for this LM
-func (o *OpenAI) SetCache(cache core.Cache) {
+func (o *openAI) SetCache(cache core.Cache) {
 	o.Cache = cache
 }
 
 // Generate generates a response from OpenAI
-func (o *OpenAI) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (o *openAI) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
 
 	// Calculate prompt length for logging
@@ -169,7 +169,7 @@ func (o *OpenAI) Generate(ctx context.Context, messages []core.Message, options 
 	return result, nil
 }
 
-func (o *OpenAI) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
+func (o *openAI) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
 	req := map[string]any{
 		"model":    o.Model,
 		"messages": o.convertMessages(messages),
@@ -235,7 +235,7 @@ func (o *OpenAI) buildRequest(messages []core.Message, options *core.GenerateOpt
 	return req
 }
 
-func (o *OpenAI) convertMessages(messages []core.Message) []map[string]any {
+func (o *openAI) convertMessages(messages []core.Message) []map[string]any {
 	converted := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
 		m := map[string]any{
@@ -276,7 +276,7 @@ func (o *OpenAI) convertMessages(messages []core.Message) []map[string]any {
 	return converted
 }
 
-func (o *OpenAI) convertTool(tool *core.Tool) map[string]any {
+func (o *openAI) convertTool(tool *core.Tool) map[string]any {
 	properties := make(map[string]any)
 	required := []string{}
 
@@ -309,7 +309,7 @@ func (o *OpenAI) convertTool(tool *core.Tool) map[string]any {
 	}
 }
 
-func (o *OpenAI) parseResponse(resp *openAIResponse) (*core.GenerateResult, error) {
+func (o *openAI) parseResponse(resp *openAIResponse) (*core.GenerateResult, error) {
 	if len(resp.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
@@ -349,7 +349,7 @@ func (o *OpenAI) parseResponse(resp *openAIResponse) (*core.GenerateResult, erro
 }
 
 // extractMetadata extracts provider-specific metadata from HTTP response headers
-func (o *OpenAI) extractMetadata(headers http.Header) map[string]any {
+func (o *openAI) extractMetadata(headers http.Header) map[string]any {
 	metadata := make(map[string]any)
 
 	// Cache detection (OpenAI uses Cloudflare)
@@ -389,7 +389,7 @@ func (o *OpenAI) extractMetadata(headers http.Header) map[string]any {
 }
 
 // Stream generates a streaming response from OpenAI
-func (o *OpenAI) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+func (o *openAI) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
 	chunkChan := make(chan core.Chunk)
 	errChan := make(chan error, 1)
 
