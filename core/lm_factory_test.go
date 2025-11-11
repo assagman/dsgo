@@ -364,6 +364,106 @@ func TestLMFactory_WithoutCollector(t *testing.T) {
 	}
 }
 
+// TestNewLM_WithCache tests that cache is auto-wired when configured
+func TestNewLM_WithCache(t *testing.T) {
+	// Save and restore original registry
+	originalRegistry := make(map[string]LMFactory)
+	registryLock.Lock()
+	for k, v := range lmRegistry {
+		originalRegistry[k] = v
+	}
+	registryLock.Unlock()
+
+	defer func() {
+		registryLock.Lock()
+		lmRegistry = originalRegistry
+		registryLock.Unlock()
+		ResetConfig()
+	}()
+
+	// Register a test LM that supports caching
+	RegisterLM("test-provider", func(model string) LM {
+		return NewMockLM()
+	})
+
+	ctx := context.Background()
+
+	// Configure with cache
+	ResetConfig()
+	Configure(
+		WithProvider("test-provider"),
+		WithModel("test-model"),
+		WithCache(50),
+	)
+
+	// Create LM - should have cache auto-wired
+	lm, err := NewLM(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create LM: %v", err)
+	}
+
+	// Verify LM was created
+	if lm == nil {
+		t.Error("Expected LM to be created")
+	}
+
+	// Get settings to verify cache is set
+	settings := GetSettings()
+	if settings.DefaultCache == nil {
+		t.Error("Expected cache to be configured in settings")
+	}
+}
+
+// TestNewLM_WithModelStringArg tests NewLM with explicit model string
+func TestNewLM_WithModelStringArg(t *testing.T) {
+	// Save and restore original registry
+	originalRegistry := make(map[string]LMFactory)
+	registryLock.Lock()
+	for k, v := range lmRegistry {
+		originalRegistry[k] = v
+	}
+	registryLock.Unlock()
+
+	defer func() {
+		registryLock.Lock()
+		lmRegistry = originalRegistry
+		registryLock.Unlock()
+	}()
+
+	// Register providers
+	RegisterLM("openai", func(model string) LM {
+		return NewMockLM()
+	})
+	RegisterLM("openrouter", func(model string) LM {
+		return NewMockLM()
+	})
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		model     string
+		wantError bool
+	}{
+		{"explicit gpt-4", "gpt-4", false},
+		{"explicit gpt-4-turbo", "gpt-4-turbo", false},
+		{"explicit google model via openrouter", "google/gemini-2.5-flash", false},
+		{"explicit unknown model", "unknown/model", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lm, err := NewLM(ctx, tt.model)
+			if (err != nil) != tt.wantError {
+				t.Errorf("NewLM() error = %v, wantError = %v", err, tt.wantError)
+			}
+			if !tt.wantError && lm == nil {
+				t.Error("Expected LM to be created")
+			}
+		})
+	}
+}
+
 // TestDetectProvider tests the detectProvider function for auto-detection logic
 func TestDetectProvider(t *testing.T) {
 	tests := []struct {

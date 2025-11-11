@@ -176,6 +176,163 @@ func TestConfigure_Concurrent(t *testing.T) {
 	}
 }
 
+// TestWithAPIKey_MultipleProviders tests adding multiple API keys
+func TestWithAPIKey_MultipleProviders(t *testing.T) {
+	ResetConfig()
+	defer ResetConfig()
+
+	Configure(
+		WithAPIKey("openai", "key-openai"),
+		WithAPIKey("openrouter", "key-openrouter"),
+		WithAPIKey("anthropic", "key-anthropic"),
+	)
+
+	settings := GetSettings()
+
+	if len(settings.APIKey) != 3 {
+		t.Errorf("expected 3 API keys, got %d", len(settings.APIKey))
+	}
+
+	tests := []struct {
+		provider string
+		want     string
+	}{
+		{"openai", "key-openai"},
+		{"openrouter", "key-openrouter"},
+		{"anthropic", "key-anthropic"},
+	}
+
+	for _, tt := range tests {
+		if key, ok := settings.APIKey[tt.provider]; !ok || key != tt.want {
+			t.Errorf("expected key for %q to be %q, got %q (ok=%v)", tt.provider, tt.want, key, ok)
+		}
+	}
+}
+
+// TestWithAPIKey_Overwrite tests overwriting existing API keys
+func TestWithAPIKey_Overwrite(t *testing.T) {
+	ResetConfig()
+	defer ResetConfig()
+
+	Configure(WithAPIKey("openai", "old-key"))
+	Configure(WithAPIKey("openai", "new-key"))
+
+	settings := GetSettings()
+	key, ok := settings.APIKey["openai"]
+	if !ok || key != "new-key" {
+		t.Errorf("expected overwritten key to be 'new-key', got %q", key)
+	}
+}
+
+// TestWithCache enables caching with specific capacity
+func TestWithCache(t *testing.T) {
+	ResetConfig()
+	defer ResetConfig()
+
+	Configure(WithCache(100))
+
+	settings := GetSettings()
+	if settings.DefaultCache == nil {
+		t.Fatal("expected cache to be set")
+	}
+
+	// Test cache functionality
+	result := &GenerateResult{Content: "test"}
+	result.Usage.TotalTokens = 50
+
+	// Cache should work
+	testKey := "test-key-123"
+	if _, found := settings.DefaultCache.Get(testKey); found {
+		t.Error("expected cache to be empty initially")
+	}
+
+	settings.DefaultCache.Set(testKey, result)
+
+	if cached, found := settings.DefaultCache.Get(testKey); !found {
+		t.Error("expected to retrieve cached value")
+	} else if cached.Content != "test" {
+		t.Errorf("expected cached content to be 'test', got %q", cached.Content)
+	}
+}
+
+// TestWithCacheTTL sets cache TTL and affects cache recreation
+func TestWithCacheTTL(t *testing.T) {
+	ResetConfig()
+	defer ResetConfig()
+
+	ttl := 5 * time.Second
+
+	Configure(
+		WithCache(50),
+		WithCacheTTL(ttl),
+	)
+
+	settings := GetSettings()
+	if settings.CacheTTL != ttl {
+		t.Errorf("expected TTL to be %v, got %v", ttl, settings.CacheTTL)
+	}
+
+	if settings.DefaultCache == nil {
+		t.Fatal("expected cache to be set")
+	}
+}
+
+// TestWithCacheTTL_UpdatesTTL tests updating TTL on existing cache
+func TestWithCacheTTL_UpdatesTTL(t *testing.T) {
+	ResetConfig()
+	defer ResetConfig()
+
+	Configure(WithCache(50))
+
+	settings := GetSettings()
+	oldCache := settings.DefaultCache
+
+	newTTL := 10 * time.Second
+	Configure(WithCacheTTL(newTTL))
+
+	settings = GetSettings()
+	if settings.CacheTTL != newTTL {
+		t.Errorf("expected TTL to be updated to %v, got %v", newTTL, settings.CacheTTL)
+	}
+
+	// Cache should be recreated
+	if settings.DefaultCache == oldCache {
+		t.Error("expected cache to be recreated with new TTL")
+	}
+}
+
+// TestWithCacheTTL_WithoutExistingCache tests setting TTL without an existing cache
+func TestWithCacheTTL_WithoutExistingCache(t *testing.T) {
+	ResetConfig()
+	defer ResetConfig()
+
+	ttl := 5 * time.Second
+	Configure(WithCacheTTL(ttl))
+
+	settings := GetSettings()
+	if settings.CacheTTL != ttl {
+		t.Errorf("expected TTL to be set to %v, got %v", ttl, settings.CacheTTL)
+	}
+	// Cache should not be created if only TTL is set
+	if settings.DefaultCache != nil {
+		t.Error("expected cache to not be created when only TTL is set")
+	}
+}
+
+// TestWithCollector sets custom collector
+func TestWithCollector(t *testing.T) {
+	ResetConfig()
+	defer ResetConfig()
+
+	collector := NewMemoryCollector(100)
+	Configure(WithCollector(collector))
+
+	settings := GetSettings()
+	if settings.Collector != collector {
+		t.Error("expected collector to be set")
+	}
+}
+
 // TestStripProviderPrefix tests the stripProviderPrefix helper function
 func TestStripProviderPrefix(t *testing.T) {
 	tests := []struct {

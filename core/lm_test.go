@@ -301,3 +301,95 @@ func setEnv(key, value string) {
 func unsetEnv(key string) {
 	_ = os.Unsetenv(key)
 }
+
+func TestParseInt(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  int
+	}{
+		{"valid positive int", "42", 42},
+		{"valid zero", "0", 0},
+		{"valid negative int", "-123", -123},
+		{"leading zeros", "00042", 42},
+		{"large number", "999999999", 999999999},
+		{"empty string", "", 0},
+		{"invalid letters", "abc", 0},
+		{"mixed alphanumeric", "12x34", 0},
+		{"float string", "3.14", 0},
+		{"whitespace", "  ", 0},
+		{"tabs", "\t123", 0},
+		{"newlines", "123\n", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseInt(tt.input)
+			if got != tt.want {
+				t.Errorf("parseInt(%q) = %d, want %d", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseFloat(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  float64
+	}{
+		{"valid integer", "42", 42.0},
+		{"valid float", "3.14", 3.14},
+		{"valid zero", "0", 0.0},
+		{"valid negative", "-123.45", -123.45},
+		{"scientific notation", "1e2", 100.0},
+		{"scientific negative exponent", "1.5e-1", 0.15},
+		{"leading zeros", "00042.5", 42.5},
+		{"large number", "999999999.999", 999999999.999},
+		{"empty string", "", 0.0},
+		{"invalid letters", "abc", 0.0},
+		{"mixed alphanumeric", "12.3x", 0.0},
+		{"multiple dots", "1.2.3", 0.0},
+		{"whitespace", "  ", 0.0},
+		{"tabs and number", "\t123.45", 0.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseFloat(tt.input)
+			if got != tt.want {
+				t.Errorf("parseFloat(%q) = %f, want %f", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetEnv(t *testing.T) {
+	tests := []struct {
+		name    string
+		envKey  string
+		envVal  string
+		want    string
+		cleanup bool
+	}{
+		{"existing var", "TEST_GETENV_VAR", "test_value", "test_value", true},
+		{"nonexistent var", "NONEXISTENT_VAR_DSGO_TEST", "", "", false},
+		{"empty string value", "TEST_EMPTY_VAR", "", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envVal != "" || tt.cleanup {
+				_ = os.Setenv(tt.envKey, tt.envVal)
+				defer func() {
+					_ = os.Unsetenv(tt.envKey)
+				}()
+			}
+
+			got := getEnv(tt.envKey)
+			if got != tt.want {
+				t.Errorf("getEnv(%q) = %q, want %q", tt.envKey, got, tt.want)
+			}
+		})
+	}
+}

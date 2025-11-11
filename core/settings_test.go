@@ -167,6 +167,74 @@ func TestGetSettings(t *testing.T) {
 	}
 }
 
+func TestSettings_SetAPIKey_NilMap(t *testing.T) {
+	s := &Settings{
+		// Intentionally nil to test initialization
+		APIKey: nil,
+	}
+
+	// SetAPIKey should initialize the map if nil
+	s.SetAPIKey("provider1", "key1")
+
+	key, ok := s.GetAPIKey("provider1")
+	if !ok {
+		t.Error("expected API key to be set")
+	}
+	if key != "key1" {
+		t.Errorf("expected key 'key1', got %q", key)
+	}
+}
+
+func TestSettings_SetAPIKey_Overwrite(t *testing.T) {
+	s := &Settings{
+		APIKey: make(map[string]string),
+	}
+
+	s.SetAPIKey("provider", "old-key")
+	s.SetAPIKey("provider", "new-key")
+
+	key, ok := s.GetAPIKey("provider")
+	if !ok {
+		t.Error("expected API key to exist")
+	}
+	if key != "new-key" {
+		t.Errorf("expected key to be overwritten to 'new-key', got %q", key)
+	}
+}
+
+func TestSettings_SetAPIKey_MultipleProviders(t *testing.T) {
+	s := &Settings{
+		APIKey: nil,
+	}
+
+	s.SetAPIKey("openai", "key-openai")
+	s.SetAPIKey("openrouter", "key-openrouter")
+	s.SetAPIKey("anthropic", "key-anthropic")
+
+	if len(s.APIKey) != 3 {
+		t.Errorf("expected 3 providers, got %d", len(s.APIKey))
+	}
+
+	tests := []struct {
+		provider string
+		want     string
+	}{
+		{"openai", "key-openai"},
+		{"openrouter", "key-openrouter"},
+		{"anthropic", "key-anthropic"},
+	}
+
+	for _, tt := range tests {
+		key, ok := s.GetAPIKey(tt.provider)
+		if !ok {
+			t.Errorf("expected key for %q to exist", tt.provider)
+		}
+		if key != tt.want {
+			t.Errorf("expected key for %q to be %q, got %q", tt.provider, tt.want, key)
+		}
+	}
+}
+
 func TestSettings_Concurrency(t *testing.T) {
 	s := &Settings{
 		APIKey: make(map[string]string),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -2978,5 +2979,817 @@ func TestChatAdapter_Parse_JSONField(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestChatAdapter_HeuristicExtract_StoryFieldLongContent tests story field extraction path for long content
+func TestChatAdapter_HeuristicExtract_StoryFieldLongContent(t *testing.T) {
+	adapter := NewChatAdapter()
+
+	// Test the story field path with content > 100 chars
+	content := "Once upon a time, there was a kingdom far away, filled with magic and wonder. The people lived in harmony, and the forests were ancient and deep. The mountains rose high above the clouds."
+	result := adapter.heuristicExtract(content, "story", FieldTypeString)
+	// Story field with long content should return the full content
+	if result == "" {
+		t.Errorf("heuristicExtract() for long story should return content, got empty")
+	}
+}
+
+// TestChatAdapter_HeuristicExtract_TitleFieldFirstLine tests title field extraction path
+func TestChatAdapter_HeuristicExtract_TitleFieldFirstLine(t *testing.T) {
+	adapter := NewChatAdapter()
+
+	// Test the title field path - first non-empty, non-marker, <200 char line
+	content := "The Great Adventure\nMore content below"
+	result := adapter.heuristicExtract(content, "title", FieldTypeString)
+	if result != "The Great Adventure" {
+		t.Errorf("heuristicExtract() for title field = %q, want %q", result, "The Great Adventure")
+	}
+}
+
+// TestChatAdapter_HeuristicExtract_TitleFieldSkipsMarkers tests title field skips marker lines
+func TestChatAdapter_HeuristicExtract_TitleFieldSkipsMarkers(t *testing.T) {
+	adapter := NewChatAdapter()
+
+	// Test the title field path - skip lines with ##
+	content := "[[ ## marker ## ]]\nThe Real Title\nMore content"
+	result := adapter.heuristicExtract(content, "title", FieldTypeString)
+	if result != "The Real Title" {
+		t.Errorf("heuristicExtract() for title field = %q, want %q", result, "The Real Title")
+	}
+}
+
+// TestChatAdapter_HeuristicExtract_ReActParagraphFallback tests ReAct fallback paragraph extraction
+func TestChatAdapter_HeuristicExtract_ReActParagraphFallback(t *testing.T) {
+	adapter := NewChatAdapter()
+
+	// Test ReAct structure with fallback to last paragraph
+	content := `Thought: I need to find information
+Action: Search
+
+This is the final answer with substantial content that exceeds 20 characters.`
+	result := adapter.heuristicExtract(content, "answer", FieldTypeString)
+	if result != "This is the final answer with substantial content that exceeds 20 characters." {
+		t.Errorf("heuristicExtract() ReAct fallback = %q, want %q", result, "This is the final answer with substantial content that exceeds 20 characters.")
+	}
+}
+
+// TestChatAdapter_HeuristicExtract_SynonymAnswer tests synonym expansion for answer field
+func TestChatAdapter_HeuristicExtract_SynonymAnswer(t *testing.T) {
+	adapter := NewChatAdapter()
+
+	// Test synonym expansion - "result" should work for "answer" field
+	content := "Result: 42"
+	result := adapter.heuristicExtract(content, "answer", FieldTypeString)
+	if result != "42" {
+		t.Errorf("heuristicExtract() with synonym = %q, want %q", result, "42")
+	}
+}
+
+// TestChatAdapter_HeuristicExtract_SynonymExplanation tests synonym expansion for explanation field
+func TestChatAdapter_HeuristicExtract_SynonymExplanation(t *testing.T) {
+	adapter := NewChatAdapter()
+
+	// Test synonym expansion - "reasoning" should work for "explanation" field
+	content := "Reasoning: The logic is sound"
+	result := adapter.heuristicExtract(content, "explanation", FieldTypeString)
+	if result != "The logic is sound" {
+		t.Errorf("heuristicExtract() with synonym = %q, want %q", result, "The logic is sound")
+	}
+}
+
+// TestChatAdapter_HeuristicExtract_SynonymSummary tests synonym expansion for summary field
+func TestChatAdapter_HeuristicExtract_SynonymSummary(t *testing.T) {
+	adapter := NewChatAdapter()
+
+	// Test synonym expansion - "synopsis" should work for "summary" field
+	content := "Synopsis: Brief overview"
+	result := adapter.heuristicExtract(content, "summary", FieldTypeString)
+	if result != "Brief overview" {
+		t.Errorf("heuristicExtract() with synonym = %q, want %q", result, "Brief overview")
+	}
+}
+
+// TestChatAdapter_HeuristicExtract_ReActFinalAnswerMarker tests ReAct final answer marker detection
+func TestChatAdapter_HeuristicExtract_ReActFinalAnswerMarker(t *testing.T) {
+	adapter := NewChatAdapter()
+
+	// Test ReAct "Action: None (Final Answer)" marker
+	content := `Thought: Process
+Action: None (Final Answer)
+The answer is here`
+	result := adapter.heuristicExtract(content, "answer", FieldTypeString)
+	if result != "The answer is here" {
+		t.Errorf("heuristicExtract() for ReAct final answer = %q, want %q", result, "The answer is here")
+	}
+}
+
+// TestTwoStepAdapter_FormatHistory_NilHistory tests FormatHistory with nil history
+func TestTwoStepAdapter_FormatHistory_NilHistory(t *testing.T) {
+	adapter := NewTwoStepAdapter(nil)
+
+	messages := adapter.FormatHistory(nil)
+
+	if messages == nil {
+		t.Error("FormatHistory(nil) should return empty slice, not nil")
+	}
+	if len(messages) != 0 {
+		t.Errorf("FormatHistory(nil) should return empty slice, got %d messages", len(messages))
+	}
+}
+
+// TestTwoStepAdapter_FormatHistory_EmptyHistory tests FormatHistory with empty history
+func TestTwoStepAdapter_FormatHistory_EmptyHistory(t *testing.T) {
+	adapter := NewTwoStepAdapter(nil)
+	history := NewHistory()
+
+	messages := adapter.FormatHistory(history)
+
+	if messages == nil {
+		t.Error("FormatHistory(empty) should return empty slice, not nil")
+	}
+	if len(messages) != 0 {
+		t.Errorf("FormatHistory(empty) should return empty slice, got %d messages", len(messages))
+	}
+}
+
+// TestChatAdapter_FormatHistory_EmptyHistory tests ChatAdapter FormatHistory with empty history
+func TestChatAdapter_FormatHistory_EmptyHistory(t *testing.T) {
+	adapter := NewChatAdapter()
+	history := NewHistory()
+
+	messages := adapter.FormatHistory(history)
+
+	if messages == nil {
+		t.Error("FormatHistory(empty) should return empty slice, not nil")
+	}
+	if len(messages) != 0 {
+		t.Errorf("FormatHistory(empty) should return empty slice, got %d messages", len(messages))
+	}
+}
+
+// TestChatAdapter_FormatHistory_WithMessages tests ChatAdapter FormatHistory with actual messages
+func TestChatAdapter_FormatHistory_WithMessages(t *testing.T) {
+	adapter := NewChatAdapter()
+	history := NewHistory()
+	history.Add(Message{Role: "user", Content: "Hello"})
+	history.Add(Message{Role: "assistant", Content: "Hi there"})
+
+	messages := adapter.FormatHistory(history)
+
+	if len(messages) != 2 {
+		t.Errorf("Expected 2 messages, got %d", len(messages))
+	}
+}
+
+// TestJSONAdapter_FormatHistory_EmptyHistory tests JSONAdapter FormatHistory with empty history
+func TestJSONAdapter_FormatHistory_EmptyHistory(t *testing.T) {
+	adapter := NewJSONAdapter()
+	history := NewHistory()
+
+	messages := adapter.FormatHistory(history)
+
+	if messages == nil {
+		t.Error("FormatHistory(empty) should return empty slice, not nil")
+	}
+	if len(messages) != 0 {
+		t.Errorf("FormatHistory(empty) should return empty slice, got %d messages", len(messages))
+	}
+}
+
+// TestJSONAdapter_FormatHistory_WithMessages tests JSONAdapter FormatHistory with actual messages
+func TestJSONAdapter_FormatHistory_WithMessages(t *testing.T) {
+	adapter := NewJSONAdapter()
+	history := NewHistory()
+	history.Add(Message{Role: "user", Content: "Question"})
+	history.Add(Message{Role: "assistant", Content: "Response"})
+
+	messages := adapter.FormatHistory(history)
+
+	if len(messages) != 2 {
+		t.Errorf("Expected 2 messages, got %d", len(messages))
+	}
+}
+
+// TestFallbackAdapter_FormatHistory_EmptyHistory tests FallbackAdapter with empty history
+func TestFallbackAdapter_FormatHistory_EmptyHistory_EdgeCase(t *testing.T) {
+	adapter := NewFallbackAdapter()
+	history := NewHistory()
+
+	messages := adapter.FormatHistory(history)
+
+	if messages == nil {
+		t.Error("FormatHistory(empty) should return empty slice, not nil")
+	}
+	if len(messages) != 0 {
+		t.Errorf("FormatHistory(empty) should return empty slice, got %d messages", len(messages))
+	}
+}
+
+// TestTwoStepAdapter_Format_NoDescription tests Format without signature description
+func TestTwoStepAdapter_Format_NoDescription(t *testing.T) {
+	adapter := NewTwoStepAdapter(nil)
+	sig := NewSignature("")
+	sig.AddInput("question", FieldTypeString, "A question")
+	sig.AddOutput("answer", FieldTypeString, "The answer")
+
+	messages, err := adapter.Format(sig, map[string]any{"question": "What is 2+2?"}, nil)
+	if err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Errorf("Expected 1 message, got %d", len(messages))
+	}
+	// Should contain the input and output sections even without description
+	if !strings.Contains(messages[0].Content, "Inputs") {
+		t.Error("Expected 'Inputs' section in message")
+	}
+	if !strings.Contains(messages[0].Content, "Please Address") {
+		t.Error("Expected 'Please Address' section in message")
+	}
+}
+
+// TestTwoStepAdapter_Format_NoInputFields tests Format without input fields
+func TestTwoStepAdapter_Format_NoInputFields(t *testing.T) {
+	adapter := NewTwoStepAdapter(nil)
+	sig := NewSignature("Generate a response")
+	sig.AddOutput("answer", FieldTypeString, "The answer")
+
+	messages, err := adapter.Format(sig, map[string]any{}, nil)
+	if err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Errorf("Expected 1 message, got %d", len(messages))
+	}
+	// Should skip the Inputs section entirely
+	if strings.Contains(messages[0].Content, "--- Inputs ---") {
+		t.Error("Should not have 'Inputs' section when no input fields")
+	}
+}
+
+// TestTwoStepAdapter_Format_NoOutputFields tests Format without output fields
+func TestTwoStepAdapter_Format_NoOutputFields(t *testing.T) {
+	adapter := NewTwoStepAdapter(nil)
+	sig := NewSignature("Process input")
+	sig.AddInput("data", FieldTypeString, "Some data")
+
+	messages, err := adapter.Format(sig, map[string]any{"data": "test"}, nil)
+	if err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Errorf("Expected 1 message, got %d", len(messages))
+	}
+	// Should skip the "Please Address" section
+	if strings.Contains(messages[0].Content, "Please Address") {
+		t.Error("Should not have 'Please Address' section when no output fields")
+	}
+}
+
+// TestTwoStepAdapter_Format_WithDemosAndOutputs tests Format with demos that have outputs
+func TestTwoStepAdapter_Format_WithDemosAndOutputs(t *testing.T) {
+	adapter := NewTwoStepAdapter(nil)
+	sig := NewSignature("Q&A")
+	sig.AddInput("question", FieldTypeString, "Question")
+	sig.AddOutput("answer", FieldTypeString, "Answer")
+
+	demos := []Example{
+		{
+			Inputs:  map[string]any{"question": "What is AI?"},
+			Outputs: map[string]any{"answer": "AI is artificial intelligence"},
+		},
+	}
+
+	messages, err := adapter.Format(sig, map[string]any{"question": "What is Go?"}, demos)
+	if err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Errorf("Expected 1 message, got %d", len(messages))
+	}
+	if !strings.Contains(messages[0].Content, "Examples") {
+		t.Error("Expected 'Examples' section when demos provided")
+	}
+	if !strings.Contains(messages[0].Content, "Response") {
+		t.Error("Expected 'Response' section in examples")
+	}
+}
+
+// TestTwoStepAdapter_Format_FieldsWithAndWithoutDescription tests field description handling
+func TestTwoStepAdapter_Format_FieldsWithAndWithoutDescription(t *testing.T) {
+	adapter := NewTwoStepAdapter(nil)
+	sig := NewSignature("Mixed")
+	sig.AddInput("input1", FieldTypeString, "")
+	sig.AddInput("input2", FieldTypeString, "This is described")
+	sig.AddOutput("output1", FieldTypeString, "")
+	sig.AddOutput("output2", FieldTypeString, "This is also described")
+
+	messages, err := adapter.Format(sig, map[string]any{"input1": "val1", "input2": "val2"}, nil)
+	if err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+
+	content := messages[0].Content
+	// Should handle both with and without descriptions
+	if !strings.Contains(content, "input1:") {
+		t.Error("Should include input1 (without description)")
+	}
+	if !strings.Contains(content, "input2") || !strings.Contains(content, "This is described") {
+		t.Error("Should include input2 with description")
+	}
+	if !strings.Contains(content, "output1") {
+		t.Error("Should include output1")
+	}
+	if !strings.Contains(content, "output2") || !strings.Contains(content, "This is also described") {
+		t.Error("Should include output2 with description")
+	}
+}
+
+// TestJSONAdapter_Parse_SingleStringFieldFallback tests fallback when no JSON found with single string field
+func TestJSONAdapter_Parse_SingleStringFieldFallback(t *testing.T) {
+	adapter := NewJSONAdapter()
+	sig := NewSignature("Response")
+	sig.AddOutput("response", FieldTypeString, "Response text")
+
+	// Content that has no JSON but should fall back to string
+	content := "This is a plain text response with no JSON structure."
+
+	outputs, err := adapter.Parse(sig, content)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	if outputs == nil {
+		t.Fatal("Expected non-nil outputs")
+	}
+
+	response, ok := outputs["response"]
+	if !ok {
+		t.Error("Expected 'response' field in outputs")
+	}
+
+	if response != content {
+		t.Errorf("Expected fallback content %q, got %q", content, response)
+	}
+}
+
+// TestJSONAdapter_Parse_NoJSONMultipleFieldsError tests error when no JSON with multiple fields
+func TestJSONAdapter_Parse_NoJSONMultipleFieldsError(t *testing.T) {
+	adapter := NewJSONAdapter()
+	sig := NewSignature("Multiple fields")
+	sig.AddOutput("field1", FieldTypeString, "Field 1")
+	sig.AddOutput("field2", FieldTypeString, "Field 2")
+
+	content := "Plain text with no JSON at all"
+
+	_, err := adapter.Parse(sig, content)
+	if err == nil {
+		t.Error("Expected error when no JSON and multiple fields required")
+	}
+}
+
+// TestToTitle_EmptyString tests toTitle with empty string
+func TestToTitle_EmptyString(t *testing.T) {
+	result := toTitle("")
+	if result != "" {
+		t.Errorf("toTitle(\"\") should return empty string, got %q", result)
+	}
+}
+
+// TestToTitle_SingleChar tests toTitle with single character
+func TestToTitle_SingleChar(t *testing.T) {
+	result := toTitle("a")
+	if result != "A" {
+		t.Errorf("toTitle(\"a\") = %q, want %q", result, "A")
+	}
+}
+
+// TestToTitle_AlreadyUppercase tests toTitle with already uppercase
+func TestToTitle_AlreadyUppercase(t *testing.T) {
+	result := toTitle("ABC")
+	if result != "ABC" {
+		t.Errorf("toTitle(\"ABC\") = %q, want %q", result, "ABC")
+	}
+}
+
+// TestToTitle_WithUnicode tests toTitle with unicode characters
+func TestToTitle_WithUnicode(t *testing.T) {
+	result := toTitle("über")
+	if result != "Über" {
+		t.Errorf("toTitle(\"über\") = %q, want %q", result, "Über")
+	}
+}
+
+// TestStripMarkers_ComprehensiveMarkers tests StripMarkers with various marker patterns
+func TestStripMarkers_ComprehensiveMarkers(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "marker at start",
+			input:    "[[ ## field ## ]] text",
+			expected: "text",
+		},
+		{
+			name:     "marker in middle",
+			input:    "text [[ ## field ## ]] more text",
+			expected: "text  more text",
+		},
+		{
+			name:     "partial marker at start",
+			input:    "## ]] text",
+			expected: "text",
+		},
+		{
+			name:     "multiple markers",
+			input:    "[[ ## f1 ## ]] text [[ ## f2 ## ]] more",
+			expected: "text  more",
+		},
+		{
+			name:     "no markers",
+			input:    "plain text",
+			expected: "plain text",
+		},
+		{
+			name:     "marker with spaces",
+			input:    "[[ ##  field  ## ]] text",
+			expected: "text",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := StripMarkers(tt.input)
+			if result != tt.expected {
+				t.Errorf("StripMarkers(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestCoerceOutputs_IntTypeConversion tests integer type conversions
+func TestCoerceOutputs_IntTypeConversion(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("count", FieldTypeInt, "Count")
+
+	tests := []struct {
+		name     string
+		input    any
+		expected any
+	}{
+		{"string to int", "42", 42},
+		{"float64 to int", 42.7, 42},
+		{"numeric in string", "High (95%)", 95},
+		{"invalid string", "not a number", "not a number"}, // kept as-is
+		{"int as-is", 42, 42},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputs := map[string]any{"count": tt.input}
+			result := coerceOutputs(sig, outputs, false)
+			if result["count"] != tt.expected {
+				t.Errorf("coerceOutputs() = %v (%T), want %v (%T)", result["count"], result["count"], tt.expected, tt.expected)
+			}
+		})
+	}
+}
+
+// TestCoerceOutputs_FloatTypeConversion tests float type conversions
+func TestCoerceOutputs_FloatTypeConversion(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("score", FieldTypeFloat, "Score")
+
+	tests := []struct {
+		name     string
+		input    any
+		expected any
+	}{
+		{"string to float", "0.95", 0.95},
+		{"int to float", 42, 42.0},
+		{"numeric in string", "Confidence (0.95)", 0.95},
+		{"invalid string", "not a number", "not a number"},
+		{"float as-is", 0.95, 0.95},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputs := map[string]any{"score": tt.input}
+			result := coerceOutputs(sig, outputs, false)
+			if result["score"] != tt.expected {
+				t.Errorf("coerceOutputs() = %v, want %v", result["score"], tt.expected)
+			}
+		})
+	}
+}
+
+// TestCoerceOutputs_BoolTypeConversion tests bool type conversions
+func TestCoerceOutputs_BoolTypeConversion(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("enabled", FieldTypeBool, "Enabled")
+
+	tests := []struct {
+		name     string
+		input    any
+		expected any
+	}{
+		{"string true", "true", true},
+		{"string false", "false", false},
+		{"string True", "True", true},
+		{"string False", "False", false},
+		{"string 1", "1", true},
+		{"string 0", "0", false},
+		{"invalid string", "maybe", "maybe"},
+		{"bool as-is", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputs := map[string]any{"enabled": tt.input}
+			result := coerceOutputs(sig, outputs, false)
+			if result["enabled"] != tt.expected {
+				t.Errorf("coerceOutputs() = %v (%T), want %v (%T)", result["enabled"], result["enabled"], tt.expected, tt.expected)
+			}
+		})
+	}
+}
+
+// TestCoerceOutputs_JSONTypeConversion tests JSON type conversions
+func TestCoerceOutputs_JSONTypeConversion(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("data", FieldTypeJSON, "Data")
+
+	tests := []struct {
+		name     string
+		input    any
+		wantType string
+	}{
+		{"valid JSON object", `{"key": "value"}`, "map"},
+		{"valid JSON array", `[1, 2, 3]`, "slice"},
+		{"invalid JSON", `{not valid}`, "string"},
+		{"empty string", "", "string"},
+		{"non-string", 42, "int"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputs := map[string]any{"data": tt.input}
+			result := coerceOutputs(sig, outputs, false)
+			value := result["data"]
+
+			switch tt.wantType {
+			case "map":
+				if _, ok := value.(map[string]any); !ok {
+					t.Errorf("expected map[string]any, got %T", value)
+				}
+			case "slice":
+				if _, ok := value.([]any); !ok {
+					t.Errorf("expected []any, got %T", value)
+				}
+			case "string":
+				if _, ok := value.(string); !ok {
+					t.Errorf("expected string, got %T", value)
+				}
+			case "int":
+				if _, ok := value.(int); !ok {
+					t.Errorf("expected int, got %T", value)
+				}
+			}
+		})
+	}
+}
+
+// TestCoerceOutputs_ArrayToStringCoercion tests array to string coercion
+func TestCoerceOutputs_ArrayToStringCoercion(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("items", FieldTypeString, "Items")
+
+	inputs := map[string]any{
+		"items": []any{"apple", "banana", "cherry"},
+	}
+
+	// With allowArrayToString=true
+	resultWithAllow := coerceOutputs(sig, inputs, true)
+	if str, ok := resultWithAllow["items"].(string); !ok || str != "apple\nbanana\ncherry" {
+		t.Errorf("With allowArrayToString=true: expected 'apple\\nbanana\\ncherry', got %v", resultWithAllow["items"])
+	}
+
+	// With allowArrayToString=false
+	resultNoAllow := coerceOutputs(sig, inputs, false)
+	if _, ok := resultNoAllow["items"].([]any); !ok {
+		t.Errorf("With allowArrayToString=false: expected []any, got %T", resultNoAllow["items"])
+	}
+}
+
+// TestCoerceOutputs_UnknownField tests handling of unknown fields
+func TestCoerceOutputs_UnknownField(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("known", FieldTypeString, "Known field")
+
+	inputs := map[string]any{
+		"known":   "value",
+		"unknown": "also a value",
+	}
+
+	result := coerceOutputs(sig, inputs, false)
+
+	if result["known"] != "value" {
+		t.Errorf("expected known field to be present, got %v", result["known"])
+	}
+
+	if result["unknown"] != "also a value" {
+		t.Errorf("expected unknown field to be kept as-is, got %v", result["unknown"])
+	}
+}
+
+// TestNormalizeOutputKeys_AliasMapping tests synonym mapping in NormalizeOutputKeys
+func TestNormalizeOutputKeys_AliasMapping(t *testing.T) {
+	sig := NewSignature("QA")
+	sig.AddOutput("answer", FieldTypeString, "Answer")
+
+	tests := []struct {
+		name             string
+		input            map[string]any
+		shouldHaveKey    string
+		shouldNotHaveKey string
+	}{
+		{
+			name:             "result synonym",
+			input:            map[string]any{"result": "test"},
+			shouldHaveKey:    "answer",
+			shouldNotHaveKey: "result",
+		},
+		{
+			name:             "final synonym",
+			input:            map[string]any{"final": "test"},
+			shouldHaveKey:    "answer",
+			shouldNotHaveKey: "final",
+		},
+		{
+			name:             "response synonym",
+			input:            map[string]any{"response": "test"},
+			shouldHaveKey:    "answer",
+			shouldNotHaveKey: "response",
+		},
+		{
+			name:             "unknown field",
+			input:            map[string]any{"unknown": "test"},
+			shouldHaveKey:    "unknown",
+			shouldNotHaveKey: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NormalizeOutputKeys(sig, tt.input)
+
+			if _, ok := result[tt.shouldHaveKey]; !ok {
+				t.Errorf("expected %q to be in result, got keys: %v", tt.shouldHaveKey, mapKeys(result))
+			}
+
+			if tt.shouldNotHaveKey != "" {
+				if _, ok := result[tt.shouldNotHaveKey]; ok {
+					t.Errorf("expected %q to NOT be in result, got keys: %v", tt.shouldNotHaveKey, mapKeys(result))
+				}
+			}
+		})
+	}
+}
+
+// Helper function to get map keys for error messages
+func mapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// TestNormalizeOutputKeys_StringTrimming tests that string values are trimmed
+func TestNormalizeOutputKeys_StringTrimming(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("answer", FieldTypeString, "Answer")
+
+	inputs := map[string]any{
+		"answer": "  spaces on both sides  ",
+	}
+
+	result := NormalizeOutputKeys(sig, inputs)
+
+	if result["answer"] != "spaces on both sides" {
+		t.Errorf("expected trimmed string, got %q", result["answer"])
+	}
+}
+
+// TestJSONAdapter_Parse_NoJSONFound tests parsing when no JSON found with single string output
+func TestJSONAdapter_Parse_NoJSONFound(t *testing.T) {
+	adapter := NewJSONAdapter()
+	sig := NewSignature("Test")
+	sig.AddOutput("answer", FieldTypeString, "Answer")
+
+	// Plain text without JSON - should use fallback
+	content := "This is just plain text"
+
+	result, err := adapter.Parse(sig, content)
+	if err != nil {
+		t.Errorf("expected fallback for single string field, got error: %v", err)
+	}
+
+	if result["answer"] != "This is just plain text" {
+		t.Errorf("expected content fallback, got %v", result["answer"])
+	}
+}
+
+// TestJSONAdapter_Parse_NoJSONMultipleFields tests parse failure with multiple fields
+func TestJSONAdapter_Parse_NoJSONMultipleFields(t *testing.T) {
+	adapter := NewJSONAdapter()
+	sig := NewSignature("Test")
+	sig.AddOutput("a1", FieldTypeString, "A1")
+	sig.AddOutput("a2", FieldTypeString, "A2")
+
+	content := "plain text with no JSON"
+
+	result, err := adapter.Parse(sig, content)
+	if err == nil {
+		t.Error("expected error with multiple output fields and no JSON")
+	}
+	if result != nil {
+		t.Error("expected nil result on error")
+	}
+}
+
+// TestJSONAdapter_Parse_JSONRepair tests JSON repair path
+func TestJSONAdapter_Parse_JSONRepair(t *testing.T) {
+	adapter := NewJSONAdapter()
+	sig := NewSignature("Test")
+	sig.AddOutput("ans", FieldTypeString, "Answer")
+
+	// Malformed but repairable JSON with single quotes that needs repair
+	// When ExtractJSON fails to find valid JSON, and signature has multiple fields,
+	// it falls back to single string field handling
+	// So we test with proper JSON that's invalid in a different way
+	content := `{"ans": "value with 'quotes'"}`
+
+	result, err := adapter.Parse(sig, content)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	if result["ans"] != "value with 'quotes'" {
+		t.Errorf("expected 'value with 'quotes'', got %v", result["ans"])
+	}
+}
+
+// TestChatAdapter_Parse_WithFieldMarkers tests field marker extraction
+func TestChatAdapter_Parse_WithFieldMarkers(t *testing.T) {
+	adapter := NewChatAdapter()
+	sig := NewSignature("Test")
+	sig.AddOutput("thinking", FieldTypeString, "Thinking")
+	sig.AddOutput("answer", FieldTypeString, "Answer")
+
+	content := `[[ ## thinking ## ]]
+Let me think
+[[ ## answer ## ]]
+Result`
+
+	result, err := adapter.Parse(sig, content)
+	if err != nil {
+		t.Errorf("expected no error with markers, got: %v", err)
+	}
+
+	if result == nil {
+		t.Error("expected result map")
+	}
+}
+
+// TestChatAdapter_Format_WithExamples tests format with demos
+func TestChatAdapter_Format_WithExamples(t *testing.T) {
+	adapter := NewChatAdapter()
+	sig := NewSignature("Test")
+	sig.AddInput("q", FieldTypeString, "Question")
+	sig.AddOutput("a", FieldTypeString, "Answer")
+
+	demos := []Example{
+		{
+			Inputs:  map[string]any{"q": "Q1"},
+			Outputs: map[string]any{"a": "A1"},
+		},
+	}
+
+	messages, err := adapter.Format(sig, map[string]any{"q": "Q2"}, demos)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	if len(messages) < 2 {
+		t.Errorf("expected at least 2 messages, got %d", len(messages))
 	}
 }

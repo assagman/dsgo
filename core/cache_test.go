@@ -3,6 +3,7 @@ package core
 import (
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestNewLMCache(t *testing.T) {
@@ -1175,5 +1176,210 @@ func BenchmarkLMCache_ConcurrentEviction(b *testing.B) {
 			}(j)
 		}
 		wg.Wait()
+	}
+}
+
+// TestLMCache_TTLExpiration tests that cached entries expire after TTL
+func TestLMCache_TTLExpiration(t *testing.T) {
+	// Create cache with 100ms TTL
+	ttl := 100 * time.Millisecond
+	cache := NewLMCacheWithTTL(10, ttl)
+
+	result := &GenerateResult{
+		Content: "test response",
+		Usage:   Usage{TotalTokens: 100},
+	}
+
+	cache.Set("key1", result)
+
+	// Get immediately - should hit
+	retrieved, ok := cache.Get("key1")
+	if !ok {
+		t.Fatal("Expected cache hit immediately after Set")
+	}
+	if retrieved.Content != "test response" {
+		t.Errorf("Expected 'test response', got '%s'", retrieved.Content)
+	}
+
+	// Wait for TTL to expire
+	time.Sleep(ttl + 50*time.Millisecond)
+
+	// Get after expiration - should miss
+	_, ok = cache.Get("key1")
+	if ok {
+		t.Error("Expected cache miss after TTL expiration")
+	}
+
+	// Verify entry was removed from cache
+	if cache.Size() != 0 {
+		t.Errorf("Expected empty cache after expiration, got size %d", cache.Size())
+	}
+}
+
+// TestLMCache_TTLDisabled tests that TTL=0 means no expiration
+func TestLMCache_TTLDisabled(t *testing.T) {
+	// Create cache with no TTL (0 duration)
+	cache := NewLMCacheWithTTL(10, 0)
+
+	result := &GenerateResult{Content: "test"}
+
+	cache.Set("key1", result)
+
+	// Sleep for a bit
+	time.Sleep(100 * time.Millisecond)
+
+	// Should still be in cache
+	retrieved, ok := cache.Get("key1")
+	if !ok {
+		t.Fatal("Expected cache hit even after delay with TTL=0")
+	}
+	if retrieved.Content != "test" {
+		t.Errorf("Expected 'test', got '%s'", retrieved.Content)
+	}
+}
+
+// TestLMCache_TTLPartialExpiration tests that only expired entries are removed
+func TestLMCache_TTLPartialExpiration(t *testing.T) {
+	ttl := 100 * time.Millisecond
+	cache := NewLMCacheWithTTL(10, ttl)
+
+	// Set first entry
+	cache.Set("key1", &GenerateResult{Content: "1"})
+
+	// Wait half the TTL
+	time.Sleep(ttl / 2)
+
+	// Set second entry (will expire later)
+	cache.Set("key2", &GenerateResult{Content: "2"})
+
+	// Wait another 75ms (key1 now expired, key2 still valid)
+	time.Sleep(75 * time.Millisecond)
+
+	// key1 should be expired
+	_, ok1 := cache.Get("key1")
+	if ok1 {
+		t.Error("Expected key1 to be expired")
+	}
+
+	// key2 should still be valid
+	_, ok2 := cache.Get("key2")
+	if !ok2 {
+		t.Error("Expected key2 to still be cached")
+	}
+}
+
+// TestLMCache_TTLUpdateRefreshesExpiration tests that updating an entry extends TTL
+func TestLMCache_TTLUpdateRefreshesExpiration(t *testing.T) {
+	ttl := 100 * time.Millisecond
+	cache := NewLMCacheWithTTL(10, ttl)
+
+	result := &GenerateResult{Content: "test"}
+
+	// Set initial entry
+	cache.Set("key1", result)
+
+	// Wait half the TTL
+	time.Sleep(ttl / 2)
+
+	// Update the entry (should refresh TTL)
+	updatedResult := &GenerateResult{Content: "updated"}
+	cache.Set("key1", updatedResult)
+
+	// Wait another half of TTL
+	time.Sleep(ttl / 2)
+
+	// Entry should still exist (TTL was refreshed)
+	retrieved, ok := cache.Get("key1")
+	if !ok {
+		t.Error("Expected cache hit after TTL refresh")
+	}
+	if retrieved.Content != "updated" {
+		t.Errorf("Expected 'updated', got '%s'", retrieved.Content)
+	}
+
+	// Wait for full TTL from last update
+	time.Sleep(ttl + 10*time.Millisecond)
+
+	// Now it should be expired
+	_, ok = cache.Get("key1")
+	if ok {
+		t.Error("Expected cache miss after full TTL from last update")
+	}
+}
+
+// TestLMCache_TTLStatsWithExpiration tests that stats are correct with TTL expiration
+func TestLMCache_TTLStatsWithExpiration(t *testing.T) {
+	ttl := 100 * time.Millisecond
+	cache := NewLMCacheWithTTL(10, ttl)
+
+	cache.Set("key1", &GenerateResult{Content: "1"})
+
+	// Immediate hit
+	cache.Get("key1")
+	stats := cache.Stats()
+	if stats.Hits != 1 {
+		t.Errorf("Expected 1 hit, got %d", stats.Hits)
+	}
+	if stats.Size != 1 {
+		t.Errorf("Expected size 1, got %d", stats.Size)
+	}
+
+	// Wait for expiration
+	time.Sleep(ttl + 50*time.Millisecond)
+
+	// Miss on expired entry
+	cache.Get("key1")
+	stats = cache.Stats()
+	if stats.Hits != 1 {
+		t.Errorf("Expected 1 hit (unchanged), got %d", stats.Hits)
+	}
+	if stats.Misses != 1 {
+		t.Errorf("Expected 1 miss, got %d", stats.Misses)
+	}
+	if stats.Size != 0 {
+		t.Errorf("Expected size 0 after expiration, got %d", stats.Size)
+	}
+}
+
+func TestLMCache_Capacity(t *testing.T) {
+	tests := []struct {
+		name             string
+		requestCapacity  int
+		expectedCapacity int
+	}{
+		{"positive capacity", 100, 100},
+		{"large capacity", 10000, 10000},
+		{"zero becomes default", 0, 1000},
+		{"negative becomes default", -50, 1000},
+		{"capacity 1", 1, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cache := NewLMCache(tt.requestCapacity)
+			if cache.Capacity() != tt.expectedCapacity {
+				t.Errorf("Capacity() = %d, want %d", cache.Capacity(), tt.expectedCapacity)
+			}
+		})
+	}
+}
+
+func TestLMCache_CapacityWithTTL(t *testing.T) {
+	cache := NewLMCacheWithTTL(200, 5*time.Second)
+	if cache.Capacity() != 200 {
+		t.Errorf("Capacity() = %d, want 200", cache.Capacity())
+	}
+}
+
+func TestLMCache_CapacityMultipleCalls(t *testing.T) {
+	cache := NewLMCache(150)
+
+	// Capacity should remain consistent across multiple calls
+	cap1 := cache.Capacity()
+	cap2 := cache.Capacity()
+	cap3 := cache.Capacity()
+
+	if cap1 != 150 || cap2 != 150 || cap3 != 150 {
+		t.Errorf("Capacity should be consistent: got %d, %d, %d", cap1, cap2, cap3)
 	}
 }

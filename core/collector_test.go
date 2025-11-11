@@ -552,6 +552,96 @@ func TestCompositeCollectorErrors(t *testing.T) {
 	})
 }
 
+// TestJSONLCollector_CloseWithoutFile tests closing a collector that was never initialized with a file
+func TestJSONLCollector_CloseWithoutFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test.jsonl")
+
+	collector, err := NewJSONLCollector(path)
+	if err != nil {
+		t.Fatalf("NewJSONLCollector failed: %v", err)
+	}
+
+	// First close should succeed
+	err = collector.Close()
+	if err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	// Verify file was closed and we can't write
+	entry := &HistoryEntry{ID: "test", Model: "gpt-4"}
+	err = collector.Collect(entry)
+	if err == nil {
+		t.Error("Expected error when writing after close, got nil")
+	}
+}
+
+// TestJSONLCollector_CloseCalledTwice tests that Close can be called multiple times safely
+func TestJSONLCollector_CloseCalledTwice(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test.jsonl")
+
+	collector, err := NewJSONLCollector(path)
+	if err != nil {
+		t.Fatalf("NewJSONLCollector failed: %v", err)
+	}
+
+	// First close
+	err1 := collector.Close()
+
+	// Second close should also work (file is already nil)
+	err2 := collector.Close()
+
+	// Both calls should not panic - we just verify they return without panicking
+	_ = err1
+	_ = err2
+}
+
+// TestJSONLCollector_CloseAfterCollect tests that Close works after collecting entries
+func TestJSONLCollector_CloseAfterCollect(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test.jsonl")
+
+	collector, err := NewJSONLCollector(path)
+	if err != nil {
+		t.Fatalf("NewJSONLCollector failed: %v", err)
+	}
+	defer func() {
+		_ = collector.Close()
+	}()
+
+	// Add entries
+	for i := 0; i < 3; i++ {
+		entry := &HistoryEntry{
+			ID:    "test-" + string(rune('0'+i)),
+			Model: "gpt-4",
+		}
+		if err := collector.Collect(entry); err != nil {
+			t.Fatalf("Collect failed: %v", err)
+		}
+	}
+
+	if collector.Count() != 3 {
+		t.Errorf("Expected 3 entries, got %d", collector.Count())
+	}
+
+	// Close should succeed
+	err = collector.Close()
+	if err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	// Verify file exists and is valid JSON lines
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+
+	if len(data) == 0 {
+		t.Error("File should contain data after Close")
+	}
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {

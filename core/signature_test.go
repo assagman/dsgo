@@ -888,6 +888,20 @@ func TestSignature_validateFieldType_DirectCalls(t *testing.T) {
 		value   any
 		wantErr bool
 	}{
+		// Nil value cases
+		{"nil required", Field{Name: "f", Type: FieldTypeString}, nil, true},
+		{"nil optional", Field{Name: "f", Type: FieldTypeString, Optional: true}, nil, false},
+
+		// String/Class/Image/Datetime cases
+		{"string as string", Field{Name: "f", Type: FieldTypeString}, "hello", false},
+		{"string as int", Field{Name: "f", Type: FieldTypeString}, 42, true},
+		{"class as string", Field{Name: "f", Type: FieldTypeClass}, "positive", false},
+		{"class as int", Field{Name: "f", Type: FieldTypeClass}, 42, true},
+		{"image as string", Field{Name: "f", Type: FieldTypeImage}, "url", false},
+		{"image as int", Field{Name: "f", Type: FieldTypeImage}, 42, true},
+		{"datetime as string", Field{Name: "f", Type: FieldTypeDatetime}, "2024-01-01", false},
+		{"datetime as int", Field{Name: "f", Type: FieldTypeDatetime}, 42, true},
+
 		// Int type - test each case individually
 		{"int as int", Field{Name: "f", Type: FieldTypeInt}, int(42), false},
 		{"int as int8", Field{Name: "f", Type: FieldTypeInt}, int8(42), false},
@@ -895,6 +909,8 @@ func TestSignature_validateFieldType_DirectCalls(t *testing.T) {
 		{"int as int32", Field{Name: "f", Type: FieldTypeInt}, int32(42), false},
 		{"int as int64", Field{Name: "f", Type: FieldTypeInt}, int64(42), false},
 		{"int as float64", Field{Name: "f", Type: FieldTypeInt}, float64(42.0), false},
+		{"int as string", Field{Name: "f", Type: FieldTypeInt}, "42", true},
+		{"int as bool", Field{Name: "f", Type: FieldTypeInt}, true, true},
 
 		// Float type - test each int case
 		{"float as float32", Field{Name: "f", Type: FieldTypeFloat}, float32(3.14), false},
@@ -904,11 +920,20 @@ func TestSignature_validateFieldType_DirectCalls(t *testing.T) {
 		{"float as int16", Field{Name: "f", Type: FieldTypeFloat}, int16(42), false},
 		{"float as int32", Field{Name: "f", Type: FieldTypeFloat}, int32(42), false},
 		{"float as int64", Field{Name: "f", Type: FieldTypeFloat}, int64(42), false},
+		{"float as string", Field{Name: "f", Type: FieldTypeFloat}, "3.14", true},
+		{"float as bool", Field{Name: "f", Type: FieldTypeFloat}, true, true},
+
+		// Bool type
+		{"bool as bool", Field{Name: "f", Type: FieldTypeBool}, true, false},
+		{"bool as int", Field{Name: "f", Type: FieldTypeBool}, 1, true},
+		{"bool as string", Field{Name: "f", Type: FieldTypeBool}, "true", true},
 
 		// JSON type - test each case
 		{"json as map", Field{Name: "f", Type: FieldTypeJSON}, map[string]any{"key": "val"}, false},
 		{"json as slice", Field{Name: "f", Type: FieldTypeJSON}, []int{1, 2, 3}, false},
 		{"json as string", Field{Name: "f", Type: FieldTypeJSON}, `{"json":"string"}`, false},
+		{"json as int", Field{Name: "f", Type: FieldTypeJSON}, 42, true},
+		{"json as bool", Field{Name: "f", Type: FieldTypeJSON}, true, true},
 	}
 
 	for _, tt := range tests {
