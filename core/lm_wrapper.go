@@ -309,9 +309,6 @@ func (w *LMWrapper) extractProviderFromModel() string {
 	if strings.Contains(name, "llama") || strings.Contains(name, "meta") {
 		return "meta"
 	}
-	if strings.Contains(name, "llama") || strings.Contains(name, "meta") {
-		return "meta"
-	}
 
 	// Default to unknown
 	return "unknown"
