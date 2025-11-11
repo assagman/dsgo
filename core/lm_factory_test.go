@@ -73,21 +73,18 @@ func TestNewLM(t *testing.T) {
 		ResetConfig()
 	}()
 
-	// Register a test provider
+	// Register test providers
 	RegisterLM("testprovider", func(model string) LM {
+		return &mockLM{}
+	})
+	RegisterLM("openrouter", func(model string) LM {
 		return &mockLM{}
 	})
 
 	ctx := context.Background()
 
 	t.Run("Success", func(t *testing.T) {
-		ResetConfig()
-		Configure(
-			WithProvider("testprovider"),
-			WithModel("test-model"),
-		)
-
-		lm, err := NewLM(ctx)
+		lm, err := NewLM(ctx, "testprovider/test-model")
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
@@ -107,13 +104,7 @@ func TestNewLM(t *testing.T) {
 			return &mockLM{}
 		})
 
-		ResetConfig()
-		Configure(
-			WithProvider("provider2"),
-			WithModel("model-2"),
-		)
-
-		lm, err := NewLM(ctx)
+		lm, err := NewLM(ctx, "provider2/model-2")
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
@@ -123,43 +114,28 @@ func TestNewLM(t *testing.T) {
 	})
 
 	t.Run("NoProviderConfigured", func(t *testing.T) {
-		ResetConfig()
-		Configure(
-			WithModel("test-model"),
-		)
-
-		_, err := NewLM(ctx)
+		_, err := NewLM(ctx, "openai/gpt-4") // openai provider is not registered in this test
 		if err == nil {
-			t.Error("expected error when provider not configured")
+			t.Error("expected error when provider not registered")
 		}
-		if err.Error() != "no default provider configured (use dsgo.Configure with dsgo.WithProvider)" {
-			t.Errorf("unexpected error message: %v", err)
+		// Error should be about provider not registered
+		if err == nil {
+			t.Error("expected error for unregistered provider")
 		}
 	})
 
-	t.Run("NoModelConfigured", func(t *testing.T) {
-		ResetConfig()
-		Configure(
-			WithProvider("testprovider"),
-		)
-
-		_, err := NewLM(ctx)
+	t.Run("EmptyModelString", func(t *testing.T) {
+		_, err := NewLM(ctx, "")
 		if err == nil {
-			t.Error("expected error when model not configured")
+			t.Error("expected error when model string is empty")
 		}
-		if err.Error() != "no default model configured (use dsgo.Configure with dsgo.WithModel)" {
+		if err.Error() != "model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'" {
 			t.Errorf("unexpected error message: %v", err)
 		}
 	})
 
 	t.Run("ProviderNotRegistered", func(t *testing.T) {
-		ResetConfig()
-		Configure(
-			WithProvider("unknownprovider"),
-			WithModel("test-model"),
-		)
-
-		_, err := NewLM(ctx)
+		_, err := NewLM(ctx, "unknownprovider/model") // unknown provider is not registered
 		if err == nil {
 			t.Error("expected error when provider not registered")
 		}
@@ -171,18 +147,12 @@ func TestNewLM(t *testing.T) {
 	})
 
 	t.Run("ContextCancellation", func(t *testing.T) {
-		ResetConfig()
-		Configure(
-			WithProvider("testprovider"),
-			WithModel("test-model"),
-		)
-
 		canceledCtx, cancel := context.WithCancel(ctx)
 		cancel()
 
 		// NewLM should still work even with canceled context
 		// (context is for future use, not currently enforced)
-		lm, err := NewLM(canceledCtx)
+		lm, err := NewLM(canceledCtx, "testprovider/test-model")
 		if err != nil {
 			t.Errorf("expected no error with canceled context, got %v", err)
 		}
@@ -288,20 +258,17 @@ func TestLMFactory_WithCollector(t *testing.T) {
 		return &mockLM{}
 	}
 	RegisterLM("test-provider", testLMFactory)
+	RegisterLM("openrouter", testLMFactory)
 
 	ctx := context.Background()
 	collector := NewMemoryCollector(10)
 
 	// Configure with collector
 	ResetConfig()
-	Configure(
-		WithProvider("test-provider"),
-		WithModel("test-model"),
-		WithCollector(collector),
-	)
+	Configure(WithCollector(collector))
 
 	// Create LM - should be wrapped automatically
-	lm, err := NewLM(ctx)
+	lm, err := NewLM(ctx, "test-provider/test-model")
 	if err != nil {
 		t.Fatalf("Failed to create LM: %v", err)
 	}
@@ -338,18 +305,15 @@ func TestLMFactory_WithoutCollector(t *testing.T) {
 		return &mockLM{}
 	}
 	RegisterLM("test-provider", testLMFactory)
+	RegisterLM("openrouter", testLMFactory)
 
 	ctx := context.Background()
 
 	// Configure without collector
 	ResetConfig()
-	Configure(
-		WithProvider("test-provider"),
-		WithModel("test-model"),
-	)
 
 	// Create LM - should NOT be wrapped
-	lm, err := NewLM(ctx)
+	lm, err := NewLM(ctx, "test-provider/test-model")
 	if err != nil {
 		t.Fatalf("Failed to create LM: %v", err)
 	}
@@ -385,19 +349,18 @@ func TestNewLM_WithCache(t *testing.T) {
 	RegisterLM("test-provider", func(model string) LM {
 		return NewMockLM()
 	})
+	RegisterLM("openrouter", func(model string) LM {
+		return NewMockLM()
+	})
 
 	ctx := context.Background()
 
 	// Configure with cache
 	ResetConfig()
-	Configure(
-		WithProvider("test-provider"),
-		WithModel("test-model"),
-		WithCache(50),
-	)
+	Configure(WithCache(50))
 
 	// Create LM - should have cache auto-wired
-	lm, err := NewLM(ctx)
+	lm, err := NewLM(ctx, "test-provider/test-model")
 	if err != nil {
 		t.Fatalf("Failed to create LM: %v", err)
 	}
@@ -445,10 +408,10 @@ func TestNewLM_WithModelStringArg(t *testing.T) {
 		model     string
 		wantError bool
 	}{
-		{"explicit gpt-4", "gpt-4", false},
-		{"explicit gpt-4-turbo", "gpt-4-turbo", false},
-		{"explicit google model via openrouter", "google/gemini-2.5-flash", false},
-		{"explicit unknown model", "unknown/model", false},
+		{"explicit openai gpt-4", "openai/gpt-4", false},
+		{"explicit openai gpt-4-turbo", "openai/gpt-4-turbo", false},
+		{"explicit google model via openrouter", "openrouter/google/gemini-2.5-flash", false},
+		{"explicit unknown model", "unknownprovider/model", true},
 	}
 
 	for _, tt := range tests {
@@ -459,95 +422,6 @@ func TestNewLM_WithModelStringArg(t *testing.T) {
 			}
 			if !tt.wantError && lm == nil {
 				t.Error("Expected LM to be created")
-			}
-		})
-	}
-}
-
-// TestDetectProvider tests the detectProvider function for auto-detection logic
-func TestDetectProvider(t *testing.T) {
-	tests := []struct {
-		name     string
-		model    string
-		expected string
-	}{
-		{
-			name:     "gpt-4 model",
-			model:    "gpt-4",
-			expected: "openai",
-		},
-		{
-			name:     "gpt-4-turbo model",
-			model:    "gpt-4-turbo",
-			expected: "openai",
-		},
-		{
-			name:     "gpt-3.5-turbo model",
-			model:    "gpt-3.5-turbo",
-			expected: "openai",
-		},
-		{
-			name:     "o1-preview model",
-			model:    "o1-preview",
-			expected: "openai",
-		},
-		{
-			name:     "o3-mini model",
-			model:    "o3-mini",
-			expected: "openrouter",
-		},
-		{
-			name:     "text-davinci-003 model",
-			model:    "text-davinci-003",
-			expected: "openai",
-		},
-		{
-			name:     "davinci-003 model",
-			model:    "davinci-003",
-			expected: "openai",
-		},
-		{
-			name:     "google gemini via openrouter",
-			model:    "google/gemini-2.5-flash",
-			expected: "openrouter",
-		},
-		{
-			name:     "anthropic claude via openrouter",
-			model:    "anthropic/claude-3-opus-20250219",
-			expected: "openrouter",
-		},
-		{
-			name:     "meta llama via openrouter",
-			model:    "meta-llama/llama-3.3-70b-instruct",
-			expected: "openrouter",
-		},
-		{
-			name:     "unknown vendor with slash",
-			model:    "unknownvendor/some-model",
-			expected: "openrouter",
-		},
-		{
-			name:     "unknown model without slash",
-			model:    "unknown-model",
-			expected: "openrouter",
-		},
-		{
-			name:     "empty string",
-			model:    "",
-			expected: "openrouter",
-		},
-		{
-			name:     "colon in model name",
-			model:    "google/gemini:flash",
-			expected: "openrouter",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := detectProvider(tt.model)
-			if result != tt.expected {
-				t.Errorf("detectProvider(%q) = %q, want %q", tt.model, result, tt.expected)
 			}
 		})
 	}

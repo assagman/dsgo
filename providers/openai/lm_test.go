@@ -1148,8 +1148,8 @@ func TestOpenAI_InitRegistration(t *testing.T) {
 
 	_ = os.Setenv("OPENAI_API_KEY", "test-registration-key")
 
-	// Get LM through the registered factory (gpt- prefix auto-detects openai provider)
-	lm, err := core.NewLM(context.Background(), "gpt-4-registration")
+	// Get LM through the registered factory
+	lm, err := core.NewLM(context.Background(), "openai/gpt-4-registration")
 	if err != nil {
 		t.Fatalf("NewLM failed: %v", err)
 	}

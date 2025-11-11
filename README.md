@@ -41,8 +41,6 @@ Create a `.env` file in your project directory:
 
 ```bash
 # .env
-DSGO_PROVIDER=openai
-DSGO_MODEL=gpt-4o-mini
 OPENAI_API_KEY=sk-your-api-key-here
 ```
 
@@ -342,13 +340,10 @@ flowchart TD
 
 #### 🔑 Provider Configuration
 ```bash
-# Primary provider
-DSGO_PROVIDER=openai              # openai, openrouter, custom
-DSGO_MODEL=gpt-4                   # Model name
-
 # API Keys (provider-specific)
 OPENAI_API_KEY=sk-...             # OpenAI API key
 OPENROUTER_API_KEY=sk-or-v1-...   # OpenRouter API key
+ANTHROPIC_API_KEY=sk-ant-...      # Anthropic API key
 ```
 
 #### ⚙️ Runtime Options
@@ -500,7 +495,6 @@ go get github.com/assagman/dsgo
 
 # Set up environment (optional, can use code config)
 export OPENAI_API_KEY="sk-..."
-export DSGO_MODEL="gpt-4o-mini"
 ```
 
 ### Step 2: Choose Your Use Case

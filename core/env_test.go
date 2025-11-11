@@ -8,8 +8,6 @@ import (
 
 func TestLoadEnv(t *testing.T) {
 	setupEnv := func() {
-		_ = os.Setenv("DSGO_PROVIDER", "openai")
-		_ = os.Setenv("DSGO_MODEL", "gpt-4")
 		_ = os.Setenv("DSGO_TIMEOUT", "45")
 		_ = os.Setenv("DSGO_MAX_RETRIES", "5")
 		_ = os.Setenv("DSGO_TRACING", "true")
@@ -19,8 +17,6 @@ func TestLoadEnv(t *testing.T) {
 	}
 
 	cleanupEnv := func() {
-		_ = os.Unsetenv("DSGO_PROVIDER")
-		_ = os.Unsetenv("DSGO_MODEL")
 		_ = os.Unsetenv("DSGO_TIMEOUT")
 		_ = os.Unsetenv("DSGO_MAX_RETRIES")
 		_ = os.Unsetenv("DSGO_TRACING")
@@ -43,12 +39,6 @@ func TestLoadEnv(t *testing.T) {
 
 		settings := GetSettings()
 
-		if settings.DefaultProvider != "openai" {
-			t.Errorf("expected provider 'openai', got '%s'", settings.DefaultProvider)
-		}
-		if settings.DefaultModel != "gpt-4" {
-			t.Errorf("expected model 'gpt-4', got '%s'", settings.DefaultModel)
-		}
 		if settings.DefaultTimeout != 45*time.Second {
 			t.Errorf("expected timeout 45s, got %v", settings.DefaultTimeout)
 		}
@@ -115,9 +105,6 @@ func TestLoadEnv(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
 
-		_ = os.Setenv("DSGO_PROVIDER", "openai")
-		_ = os.Setenv("DSGO_MODEL", "gpt-4")
-
 		ResetConfig()
 		Configure(
 			WithProvider("openrouter"),
@@ -127,10 +114,10 @@ func TestLoadEnv(t *testing.T) {
 		settings := GetSettings()
 
 		if settings.DefaultProvider != "openrouter" {
-			t.Errorf("expected options to override env, got provider '%s'", settings.DefaultProvider)
+			t.Errorf("expected provider to be set, got provider '%s'", settings.DefaultProvider)
 		}
 		if settings.DefaultModel != "google/gemini-2.5-flash" {
-			t.Errorf("expected options to override env, got model '%s'", settings.DefaultModel)
+			t.Errorf("expected model to be set, got model '%s'", settings.DefaultModel)
 		}
 	})
 

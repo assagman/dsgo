@@ -153,7 +153,7 @@ func TestInit_RegistersLM(t *testing.T) {
 		core.WithModel("test-model"),
 	)
 
-	lm, err := core.NewLM(ctx)
+	lm, err := core.NewLM(ctx, "openrouter/test-model")
 	if err != nil {
 		t.Fatalf("expected LM to be created, got error: %v", err)
 	}

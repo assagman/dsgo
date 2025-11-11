@@ -23,42 +23,30 @@ func RegisterLM(provider string, factory LMFactory) {
 	lmRegistry[provider] = factory
 }
 
-// NewLM creates a new LM instance with automatic provider detection.
-// It can work in two modes:
-// 1. With model parameter: auto-detects provider from model name (e.g., "google/gemini-2.5-flash" uses openrouter)
-// 2. Without model (empty string): uses DefaultProvider and DefaultModel from global settings
+// NewLM creates a new LM instance with explicit provider specification in model string.
+// Users must provide a valid model string that includes provider as first part.
 //
-// The method automatically:
-// - Strips provider prefixes (e.g., "openrouter/google/gemini" -> "google/gemini")
-// - Detects the correct provider (openai for gpt-*, openrouter for vendor/model format)
-// - Wraps with LMWrapper if a Collector is configured for observability
+// The model string format is: "provider/model" or "provider/org/model"
+// - First part (before first slash) = provider name
+// - Remaining parts = model name (may contain slashes)
 //
 // Examples:
-//   - NewLM(ctx, "google/gemini-2.5-flash") -> auto-uses openrouter
-//   - NewLM(ctx, "gpt-4") -> auto-uses openai
-//   - NewLM(ctx, "") -> uses global settings
-func NewLM(ctx context.Context, model ...string) (LM, error) {
-	settings := GetSettings()
-
-	var targetModel string
-	var provider string
-
-	// Determine model and provider
-	if len(model) > 0 && model[0] != "" {
-		// Model specified - auto-detect provider
-		targetModel = stripProviderPrefix(model[0])
-		provider = detectProvider(targetModel)
-	} else {
-		// Use global settings
-		if settings.DefaultProvider == "" {
-			return nil, fmt.Errorf("no default provider configured (use dsgo.Configure with dsgo.WithProvider)")
-		}
-		if settings.DefaultModel == "" {
-			return nil, fmt.Errorf("no default model configured (use dsgo.Configure with dsgo.WithModel)")
-		}
-		provider = settings.DefaultProvider
-		targetModel = settings.DefaultModel
+//   - NewLM(ctx, "openai/gpt-4o") -> uses openai provider with model "gpt-4o"
+//   - NewLM(ctx, "openrouter/z-ai/glm-4.6") -> uses openrouter provider with model "z-ai/glm-4.6"
+//   - NewLM(ctx, "openrouter/google/gemini-2.5-flash") -> uses openrouter provider with model "google/gemini-2.5-flash"
+func NewLM(ctx context.Context, model string) (LM, error) {
+	if model == "" {
+		return nil, fmt.Errorf("model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'")
 	}
+
+	// Parse provider and model from model string
+	parts := strings.SplitN(model, "/", 2)
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("model string must include provider: format 'provider/model' (e.g., 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6')")
+	}
+
+	provider := parts[0]
+	targetModel := parts[1]
 
 	// Get factory for provider
 	registryLock.RLock()
@@ -73,6 +61,7 @@ func NewLM(ctx context.Context, model ...string) (LM, error) {
 	baseLM := factory(targetModel)
 
 	// Auto-wire cache if configured
+	settings := GetSettings()
 	if settings.DefaultCache != nil {
 		// Use type assertion to check if provider supports SetCache
 		if cacheableLM, ok := baseLM.(interface{ SetCache(Cache) }); ok {
@@ -98,25 +87,4 @@ func getRegisteredProviders() []string {
 		providers = append(providers, p)
 	}
 	return providers
-}
-
-// detectProvider automatically detects which provider to use based on the model name.
-// Returns the provider name that should be used.
-func detectProvider(model string) string {
-	// OpenAI models (gpt-*, o1-*, etc.)
-	if strings.HasPrefix(model, "gpt-") ||
-		strings.HasPrefix(model, "o1-") ||
-		strings.HasPrefix(model, "text-") ||
-		strings.HasPrefix(model, "davinci-") {
-		return "openai"
-	}
-
-	// All other models (with vendor prefix like "google/", "anthropic/", etc.) use openrouter
-	// This includes: google/gemini-*, anthropic/claude-*, meta-llama/*, etc.
-	if strings.Contains(model, "/") {
-		return "openrouter"
-	}
-
-	// Default to openrouter for unknown models
-	return "openrouter"
 }

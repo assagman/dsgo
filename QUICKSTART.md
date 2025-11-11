@@ -29,8 +29,6 @@ Set up your API keys and provider:
 
 ```bash
 export OPENAI_API_KEY=sk-...
-export DSGO_PROVIDER=openai
-export DSGO_MODEL=gpt-4o-mini
 ```
 
 Or configure programmatically:
@@ -45,8 +43,6 @@ import (
 
 func main() {
     dsgo.Configure(
-        dsgo.WithProvider("openai"),
-        dsgo.WithModel("gpt-4o-mini"),
         dsgo.WithAPIKey("sk-..."),
     )
 }
