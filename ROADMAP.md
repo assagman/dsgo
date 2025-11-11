@@ -64,10 +64,8 @@
 ### Phase 9: Additional Providers
 - ✅ **OpenAI** - Complete
 - ✅ **OpenRouter** - Complete
-- [ ] **9.1: Anthropic** - Claude 3, tool calling, vision (LOW priority)
-- [ ] **9.2: Google AI** - Gemini direct API (LOW priority)
-- [ ] **9.3: Mistral AI** - Model support (LOW priority)
-- [ ] **9.4: Cohere** - Command models (LOW priority)
+- [ ] **9.1: Groq** - Fast inference models (HIGH priority)
+- [ ] **9.2: Cerebras** - High-speed inference (MEDIUM priority)
 
 ### Phase 10: Advanced Infrastructure
 - ⏳ **10.1: Enhanced Caching** - TTL expiry, disk cache, auto-wiring (HIGH)

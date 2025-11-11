@@ -82,7 +82,7 @@ func TestConfigure(t *testing.T) {
 		ResetConfig()
 		Configure(
 			WithProvider("openrouter"),
-			WithModel("google/gemini-2.5-flash"),
+			WithModel("meta-llama/llama-3.3-70b-instruct"),
 			WithTimeout(60*time.Second),
 			WithAPIKey("openrouter", "or-key"),
 			WithMaxRetries(7),
@@ -93,8 +93,8 @@ func TestConfigure(t *testing.T) {
 		if settings.DefaultProvider != "openrouter" {
 			t.Errorf("expected provider 'openrouter', got '%s'", settings.DefaultProvider)
 		}
-		if settings.DefaultModel != "google/gemini-2.5-flash" {
-			t.Errorf("expected model 'google/gemini-2.5-flash', got '%s'", settings.DefaultModel)
+		if settings.DefaultModel != "meta-llama/llama-3.3-70b-instruct" {
+			t.Errorf("expected model 'meta-llama/llama-3.3-70b-instruct', got '%s'", settings.DefaultModel)
 		}
 		if settings.DefaultTimeout != 60*time.Second {
 			t.Errorf("expected timeout 60s, got %v", settings.DefaultTimeout)
@@ -184,13 +184,12 @@ func TestWithAPIKey_MultipleProviders(t *testing.T) {
 	Configure(
 		WithAPIKey("openai", "key-openai"),
 		WithAPIKey("openrouter", "key-openrouter"),
-		WithAPIKey("anthropic", "key-anthropic"),
 	)
 
 	settings := GetSettings()
 
-	if len(settings.APIKey) != 3 {
-		t.Errorf("expected 3 API keys, got %d", len(settings.APIKey))
+	if len(settings.APIKey) != 2 {
+		t.Errorf("expected 2 API keys, got %d", len(settings.APIKey))
 	}
 
 	tests := []struct {
@@ -199,7 +198,6 @@ func TestWithAPIKey_MultipleProviders(t *testing.T) {
 	}{
 		{"openai", "key-openai"},
 		{"openrouter", "key-openrouter"},
-		{"anthropic", "key-anthropic"},
 	}
 
 	for _, tt := range tests {
@@ -342,8 +340,8 @@ func TestStripProviderPrefix(t *testing.T) {
 	}{
 		{
 			name:     "openrouter prefix",
-			input:    "openrouter/google/gemini-2.5-flash",
-			expected: "google/gemini-2.5-flash",
+			input:    "openrouter/meta-llama/llama-3.3-70b-instruct",
+			expected: "meta-llama/llama-3.3-70b-instruct",
 		},
 		{
 			name:     "openai prefix",
@@ -351,19 +349,14 @@ func TestStripProviderPrefix(t *testing.T) {
 			expected: "gpt-4",
 		},
 		{
-			name:     "anthropic prefix",
-			input:    "anthropic/claude-3-opus",
-			expected: "claude-3-opus",
-		},
-		{
 			name:     "no prefix",
 			input:    "gpt-4-turbo",
 			expected: "gpt-4-turbo",
 		},
 		{
-			name:     "google prefix without openrouter",
-			input:    "google/gemini-flash",
-			expected: "google/gemini-flash",
+			name:     "meta prefix without openrouter",
+			input:    "meta-llama/llama-3.3-70b-instruct",
+			expected: "meta-llama/llama-3.3-70b-instruct",
 		},
 		{
 			name:     "empty string",

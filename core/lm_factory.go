@@ -33,7 +33,7 @@ func RegisterLM(provider string, factory LMFactory) {
 // Examples:
 //   - NewLM(ctx, "openai/gpt-4o") -> uses openai provider with model "gpt-4o"
 //   - NewLM(ctx, "openrouter/z-ai/glm-4.6") -> uses openrouter provider with model "z-ai/glm-4.6"
-//   - NewLM(ctx, "openrouter/google/gemini-2.5-flash") -> uses openrouter provider with model "google/gemini-2.5-flash"
+//   - NewLM(ctx, "openrouter/meta-llama/llama-3.3-70b-instruct") -> uses openrouter provider with model "meta-llama/llama-3.3-70b-instruct"
 func NewLM(ctx context.Context, model string) (LM, error) {
 	if model == "" {
 		return nil, fmt.Errorf("model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'")

@@ -33,22 +33,22 @@
 
 ```bash
 cd examples/01-hello-chat
-EXAMPLES_DEFAULT_MODEL="anthropic/claude-3.5-sonnet" go run main.go
+EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 ```
 
 ### With different model
 ```bash
-EXAMPLES_DEFAULT_MODEL="anthropic/claude-3-haiku" go run main.go
+EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-pro" go run main.go
 ```
 
 ### With verbose logging
 ```bash
-DSGO_LOG=pretty EXAMPLES_DEFAULT_MODEL="anthropic/claude-3.5-sonnet" go run main.go
+DSGO_LOG=pretty EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 ```
 
 ### With JSON events
 ```bash
-DSGO_LOG=events EXAMPLES_DEFAULT_MODEL="anthropic/claude-3.5-sonnet" go run main.go > events.jsonl
+DSGO_LOG=events EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go > events.jsonl
 ```
 
 ## Expected Output

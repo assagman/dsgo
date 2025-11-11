@@ -35,19 +35,6 @@ var defaultPricing = map[string]ModelPricing{
 		PromptPrice:     3.00,
 		CompletionPrice: 12.00,
 	},
-	// Anthropic models
-	"anthropic/claude-sonnet-4.5": {
-		PromptPrice:     3,
-		CompletionPrice: 15,
-	},
-	"anthropic/claude-haiku-4.5": {
-		PromptPrice:     1,
-		CompletionPrice: 5,
-	},
-	"anthropic/claude-4.5-haiku": {
-		PromptPrice:     0.25,
-		CompletionPrice: 1.25,
-	},
 	// DeepSeek models
 	"deepseek/deepseek-v3.1-terminus": {
 		PromptPrice:     0.23,
@@ -62,11 +49,6 @@ var defaultPricing = map[string]ModelPricing{
 	"minimax/minimax-m2:free": {
 		PromptPrice:     0.00,
 		CompletionPrice: 0.00,
-	},
-	// Google models
-	"google/gemini-2.5-flash": {
-		PromptPrice:     0.075,
-		CompletionPrice: 0.30,
 	},
 	// Meta models
 	"meta/llama-3.1-405b": {

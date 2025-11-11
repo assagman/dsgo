@@ -110,9 +110,9 @@ func ResetConfig() {
 }
 
 // stripProviderPrefix removes known provider prefixes from model names.
-// For example: "openrouter/google/gemini-2.5-flash" -> "google/gemini-2.5-flash"
+// For example: "openrouter/meta-llama/llama-3.3-70b-instruct" -> "meta-llama/llama-3.3-70b-instruct"
 func stripProviderPrefix(model string) string {
-	prefixes := []string{"openrouter/", "openai/", "anthropic/"}
+	prefixes := []string{"openrouter/", "openai/"}
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(model, prefix) {
 			return strings.TrimPrefix(model, prefix)

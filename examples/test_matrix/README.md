@@ -139,7 +139,7 @@ Reason: 16.1% failure rate exceeds 15.0% threshold (45/280 failed)
 Override the default model used for testing:
 
 ```bash
-export EXAMPLES_DEFAULT_MODEL="openrouter/anthropic/claude-haiku-4.5"
+export EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash"
 go run examples/test_matrix/main.go
 ```
 
@@ -159,7 +159,6 @@ The test matrix includes 12 models spanning different performance tiers:
 ### Tier 1 (High Performance)
 - `openrouter/google/gemini-2.5-flash` ⭐ (default)
 - `openrouter/google/gemini-2.5-pro`
-- `openrouter/anthropic/claude-haiku-4.5`
 - `openrouter/qwen/qwen3-235b-a22b-2507`
 
 ### Tier 2 (Good Performance)

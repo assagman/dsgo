@@ -13,7 +13,6 @@ func TestLoadEnv(t *testing.T) {
 		_ = os.Setenv("DSGO_TRACING", "true")
 		_ = os.Setenv("DSGO_OPENAI_API_KEY", "test-openai-key")
 		_ = os.Setenv("DSGO_OPENROUTER_API_KEY", "test-openrouter-key")
-		_ = os.Setenv("DSGO_ANTHROPIC_API_KEY", "test-anthropic-key")
 	}
 
 	cleanupEnv := func() {
@@ -23,10 +22,8 @@ func TestLoadEnv(t *testing.T) {
 		_ = os.Unsetenv("DSGO_CACHE_TTL")
 		_ = os.Unsetenv("DSGO_OPENAI_API_KEY")
 		_ = os.Unsetenv("DSGO_OPENROUTER_API_KEY")
-		_ = os.Unsetenv("DSGO_ANTHROPIC_API_KEY")
 		_ = os.Unsetenv("OPENAI_API_KEY")
 		_ = os.Unsetenv("OPENROUTER_API_KEY")
-		_ = os.Unsetenv("ANTHROPIC_API_KEY")
 	}
 
 	t.Run("LoadAllEnvVars", func(t *testing.T) {
@@ -55,9 +52,6 @@ func TestLoadEnv(t *testing.T) {
 		if key, ok := settings.APIKey["openrouter"]; !ok || key != "test-openrouter-key" {
 			t.Errorf("expected OpenRouter API key 'test-openrouter-key', got '%s'", key)
 		}
-		if key, ok := settings.APIKey["anthropic"]; !ok || key != "test-anthropic-key" {
-			t.Errorf("expected Anthropic API key 'test-anthropic-key', got '%s'", key)
-		}
 	})
 
 	t.Run("FallbackAPIKeys", func(t *testing.T) {
@@ -66,7 +60,6 @@ func TestLoadEnv(t *testing.T) {
 
 		_ = os.Setenv("OPENAI_API_KEY", "fallback-openai-key")
 		_ = os.Setenv("OPENROUTER_API_KEY", "fallback-openrouter-key")
-		_ = os.Setenv("ANTHROPIC_API_KEY", "fallback-anthropic-key")
 
 		ResetConfig()
 		Configure()
@@ -78,9 +71,6 @@ func TestLoadEnv(t *testing.T) {
 		}
 		if key, ok := settings.APIKey["openrouter"]; !ok || key != "fallback-openrouter-key" {
 			t.Errorf("expected OpenRouter API key 'fallback-openrouter-key', got '%s'", key)
-		}
-		if key, ok := settings.APIKey["anthropic"]; !ok || key != "fallback-anthropic-key" {
-			t.Errorf("expected Anthropic API key 'fallback-anthropic-key', got '%s'", key)
 		}
 	})
 
@@ -108,7 +98,7 @@ func TestLoadEnv(t *testing.T) {
 		ResetConfig()
 		Configure(
 			WithProvider("openrouter"),
-			WithModel("google/gemini-2.5-flash"),
+			WithModel("meta-llama/llama-3.3-70b-instruct"),
 		)
 
 		settings := GetSettings()
@@ -116,7 +106,7 @@ func TestLoadEnv(t *testing.T) {
 		if settings.DefaultProvider != "openrouter" {
 			t.Errorf("expected provider to be set, got provider '%s'", settings.DefaultProvider)
 		}
-		if settings.DefaultModel != "google/gemini-2.5-flash" {
+		if settings.DefaultModel != "meta-llama/llama-3.3-70b-instruct" {
 			t.Errorf("expected model to be set, got model '%s'", settings.DefaultModel)
 		}
 	})

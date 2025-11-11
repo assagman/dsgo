@@ -602,7 +602,7 @@ Don't create intermediate docs like:
 
 **Providers**: 2/4 planned
 - OpenAI ✅, OpenRouter ✅
-- Anthropic (planned), Google (planned)
+- Groq (planned), Cerebras (planned)
 
 **Overall DSPy Parity**: ~70%
 

@@ -15,7 +15,6 @@ import (
 //   - DSGO_CACHE_TTL: Cache time-to-live duration (e.g., "5m", "1h", "30s")
 //   - DSGO_OPENAI_API_KEY: OpenAI API key
 //   - DSGO_OPENROUTER_API_KEY: OpenRouter API key
-//   - DSGO_ANTHROPIC_API_KEY: Anthropic API key
 func loadEnv() {
 
 	if timeoutStr := os.Getenv("DSGO_TIMEOUT"); timeoutStr != "" {
@@ -48,20 +47,12 @@ func loadEnv() {
 		globalSettings.APIKey["openrouter"] = apiKey
 	}
 
-	if apiKey := os.Getenv("DSGO_ANTHROPIC_API_KEY"); apiKey != "" {
-		globalSettings.APIKey["anthropic"] = apiKey
-	}
-
 	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" && globalSettings.APIKey["openai"] == "" {
 		globalSettings.APIKey["openai"] = apiKey
 	}
 
 	if apiKey := os.Getenv("OPENROUTER_API_KEY"); apiKey != "" && globalSettings.APIKey["openrouter"] == "" {
 		globalSettings.APIKey["openrouter"] = apiKey
-	}
-
-	if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" && globalSettings.APIKey["anthropic"] == "" {
-		globalSettings.APIKey["anthropic"] = apiKey
 	}
 
 	// Parse DSGO_CACHE_TTL (e.g., "5m", "1h", "30s")

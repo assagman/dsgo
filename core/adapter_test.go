@@ -2128,7 +2128,7 @@ func TestChatAdapterPartialOutput(t *testing.T) {
 		missingField string
 	}{
 		{
-			name: "gemini cutoff before summary field",
+			name: "llama cutoff before summary field",
 			content: `[[ ## explanation ## ]]
 Photosynthesis is the process by which plants convert light energy into chemical energy.
 This complex process occurs at the molecular level within specialized organelles called chloroplasts.

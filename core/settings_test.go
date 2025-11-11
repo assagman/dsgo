@@ -209,9 +209,8 @@ func TestSettings_SetAPIKey_MultipleProviders(t *testing.T) {
 
 	s.SetAPIKey("openai", "key-openai")
 	s.SetAPIKey("openrouter", "key-openrouter")
-	s.SetAPIKey("anthropic", "key-anthropic")
 
-	if len(s.APIKey) != 3 {
+	if len(s.APIKey) != 2 {
 		t.Errorf("expected 3 providers, got %d", len(s.APIKey))
 	}
 
@@ -221,7 +220,6 @@ func TestSettings_SetAPIKey_MultipleProviders(t *testing.T) {
 	}{
 		{"openai", "key-openai"},
 		{"openrouter", "key-openrouter"},
-		{"anthropic", "key-anthropic"},
 	}
 
 	for _, tt := range tests {

@@ -36,39 +36,39 @@
 
 ```bash
 cd examples/07-cache-ttl
-EXAMPLES_DEFAULT_MODEL="anthropic/claude-3-haiku" go run main.go
+EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 ```
 
 ### With different TTL (via environment)
 
 ```bash
 # 10 minute TTL
-DSGO_CACHE_TTL=10m EXAMPLES_DEFAULT_MODEL="anthropic/claude-3-haiku" go run main.go
+DSGO_CACHE_TTL=10m EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 
 # 1 hour TTL
-DSGO_CACHE_TTL=1h EXAMPLES_DEFAULT_MODEL="anthropic/claude-3-haiku" go run main.go
+DSGO_CACHE_TTL=1h EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 
 # No expiration (cache until capacity)
-DSGO_CACHE_TTL=0 EXAMPLES_DEFAULT_MODEL="anthropic/claude-3-haiku" go run main.go
+DSGO_CACHE_TTL=0 EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 ```
 
 ### With verbose logging
 
 ```bash
-DSGO_LOG=pretty EXAMPLES_DEFAULT_MODEL="anthropic/claude-3-haiku" go run main.go
+DSGO_LOG=pretty EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 ```
 
 ### With JSON events
 
 ```bash
-DSGO_LOG=events EXAMPLES_DEFAULT_MODEL="anthropic/claude-3-haiku" go run main.go > events.jsonl
+DSGO_LOG=events EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go > events.jsonl
 ```
 
 ## Expected Output
 
 ```
 === Cache Configuration ===
-Model: anthropic/claude-3-haiku
+Model: openrouter/google/gemini-2.5-flash
 Cache enabled: true
 Cache capacity: 100 entries
 Cache TTL: 5s

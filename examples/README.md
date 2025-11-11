@@ -12,16 +12,16 @@ cp .env.local.example .env.local  # Add your OPENROUTER_API_KEY and EXAMPLES_DEF
 
 # Run any example (EXAMPLES_DEFAULT_MODEL must be set)
 cd 01-hello-chat
-EXAMPLES_DEFAULT_MODEL="anthropic/claude-3.5-sonnet" go run main.go
+EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 
 # Use a different model
-EXAMPLES_DEFAULT_MODEL="anthropic/claude-3-haiku" go run main.go
+EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-pro" go run main.go
 
 # Enable verbose logging
-DSGO_LOG=pretty EXAMPLES_DEFAULT_MODEL="anthropic/claude-3.5-sonnet" go run main.go
+DSGO_LOG=pretty EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go
 
 # Save events to file
-DSGO_LOG=events EXAMPLES_DEFAULT_MODEL="anthropic/claude-3.5-sonnet" go run main.go > events.jsonl
+DSGO_LOG=events EXAMPLES_DEFAULT_MODEL="openrouter/google/gemini-2.5-flash" go run main.go > events.jsonl
 
 # Use custom .env file location
 DSGO_ENV_FILE_PATH="/path/to/custom.env" go run main.go
@@ -186,7 +186,7 @@ All examples support structured event logging:
 
 **Required:**
 ```bash
-EXAMPLES_DEFAULT_MODEL=anthropic/claude-3.5-sonnet  # Required: Model to use (any OpenRouter model)
+EXAMPLES_DEFAULT_MODEL=openrouter/google/gemini-2.5-flash  # Required: Model to use (any OpenRouter model)
 ```
 
 **Optional:**

@@ -41,7 +41,7 @@
 ### Provider Fallback
 ```go
 primaryLM := openai.NewOpenAI(apiKey)
-fallbackLM := openrouter.NewOpenRouter(apiKey, "anthropic/claude-3-haiku")
+fallbackLM := openrouter.NewOpenRouter(apiKey, "openrouter/google/gemini-2.5-flash")
 
 // Use primary, fallback automatically on failure
 // (simplified - full fallback requires wrapper implementation)

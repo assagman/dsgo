@@ -15,7 +15,7 @@ type Settings struct {
 	// DefaultProvider is the default provider name (e.g., "openai", "openrouter").
 	DefaultProvider string
 
-	// DefaultModel is the default model identifier (e.g., "gpt-4", "google/gemini-2.5-flash").
+	// DefaultModel is the default model identifier (e.g., "gpt-4", "meta-llama/llama-3.3-70b-instruct").
 	DefaultModel string
 
 	// DefaultTimeout is the default timeout for LM calls.

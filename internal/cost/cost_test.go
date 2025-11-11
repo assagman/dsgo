@@ -28,11 +28,11 @@ func TestCalculate(t *testing.T) {
 			wantCost:         0.0125, // (10000 * 0.5 + 5000 * 1.5) / 1M = 0.0125
 		},
 		{
-			name:             "gemini-flash",
-			model:            "google/gemini-2.5-flash",
+			name:             "llama-3.1-70b",
+			model:            "meta/llama-3.1-70b",
 			promptTokens:     100000,
 			completionTokens: 50000,
-			wantCost:         0.022500, // (100000 * 0.075 + 50000 * 0.30) / 1M = 0.0225
+			wantCost:         0.055000, // (100000 * 0.35 + 50000 * 0.40) / 1M = 0.055
 		},
 		{
 			name:             "zero tokens",

@@ -121,17 +121,15 @@ func (b *breaker) isTripped() bool {
 
 // Available models
 var allModels = []string{
-	"openrouter/google/gemini-2.5-flash",
-	"openrouter/google/gemini-2.5-pro",
-	"openrouter/anthropic/claude-haiku-4.5",
 	"openrouter/qwen/qwen3-235b-a22b-2507",
 	"openrouter/z-ai/glm-4.6:exacto",
 	"openrouter/minimax/minimax-m2",
 	"openrouter/openai/gpt-oss-120b:exacto",
 	"openrouter/deepseek/deepseek-v3.1-terminus:exacto",
 	"openrouter/moonshotai/kimi-k2-0905:exacto",
-	"openrouter/google/gemini-2.0-flash-lite-001",
 	"openrouter/meta-llama/llama-3.3-70b-instruct",
+	"openrouter/mistralai/mistral-large",
+	"openrouter/anthropic/claude-3.5-sonnet",
 }
 
 // Test examples
@@ -713,7 +711,7 @@ func getDefaultModel() string {
 	if m := os.Getenv("EXAMPLES_DEFAULT_MODEL"); m != "" {
 		return m
 	}
-	return "openrouter/google/gemini-2.5-flash"
+	return "openrouter/qwen/qwen3-235b-a22b-2507"
 }
 
 func shortModel(model string) string {

@@ -410,7 +410,7 @@ func TestNewLM_WithModelStringArg(t *testing.T) {
 	}{
 		{"explicit openai gpt-4", "openai/gpt-4", false},
 		{"explicit openai gpt-4-turbo", "openai/gpt-4-turbo", false},
-		{"explicit google model via openrouter", "openrouter/google/gemini-2.5-flash", false},
+		{"explicit meta model via openrouter", "openrouter/meta-llama/llama-3.3-70b-instruct", false},
 		{"explicit unknown model", "unknownprovider/model", true},
 	}
 

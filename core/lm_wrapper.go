@@ -306,11 +306,8 @@ func (w *LMWrapper) extractProviderFromModel() string {
 	if strings.Contains(name, "gpt") || strings.Contains(name, "openai") {
 		return "openai"
 	}
-	if strings.Contains(name, "claude") || strings.Contains(name, "anthropic") {
-		return "anthropic"
-	}
-	if strings.Contains(name, "gemini") || strings.Contains(name, "google") {
-		return "google"
+	if strings.Contains(name, "llama") || strings.Contains(name, "meta") {
+		return "meta"
 	}
 	if strings.Contains(name, "llama") || strings.Contains(name, "meta") {
 		return "meta"

@@ -343,7 +343,6 @@ flowchart TD
 # API Keys (provider-specific)
 OPENAI_API_KEY=sk-...             # OpenAI API key
 OPENROUTER_API_KEY=sk-or-v1-...   # OpenRouter API key
-ANTHROPIC_API_KEY=sk-ant-...      # Anthropic API key
 ```
 
 #### ⚙️ Runtime Options
