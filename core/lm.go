@@ -94,22 +94,30 @@ type LM interface {
 }
 
 // DefaultGenerateOptions returns default generation options
-// Respects environment variables:
-// - EXAMPLES_MAX_TOKENS (default: 10000)
-// - EXAMPLES_TEMPERATURE (default: 0.7)
+// Respects environment variables (DSGO_* preferred over EXAMPLES_*):
+// - DSGO_MAX_TOKENS or EXAMPLES_MAX_TOKENS (default: 10000)
+// - DSGO_TEMPERATURE or EXAMPLES_TEMPERATURE (default: 0.7)
 func DefaultGenerateOptions() *GenerateOptions {
 	maxTokens := 10000 // Default max tokens
 	temperature := 0.7
 
-	// Check environment variable overrides
-	if maxTokensStr := getEnv("EXAMPLES_MAX_TOKENS"); maxTokensStr != "" {
-		if parsed := parseInt(maxTokensStr); parsed > 0 {
+	// Prefer DSGO_* overrides, fallback to EXAMPLES_*
+	if v := getEnv("DSGO_MAX_TOKENS"); v != "" {
+		if parsed := parseInt(v); parsed > 0 {
+			maxTokens = parsed
+		}
+	} else if v := getEnv("EXAMPLES_MAX_TOKENS"); v != "" {
+		if parsed := parseInt(v); parsed > 0 {
 			maxTokens = parsed
 		}
 	}
 
-	if tempStr := getEnv("EXAMPLES_TEMPERATURE"); tempStr != "" {
-		if parsed := parseFloat(tempStr); parsed >= 0 {
+	if v := getEnv("DSGO_TEMPERATURE"); v != "" {
+		if parsed := parseFloat(v); parsed >= 0 {
+			temperature = parsed
+		}
+	} else if v := getEnv("EXAMPLES_TEMPERATURE"); v != "" {
+		if parsed := parseFloat(v); parsed >= 0 {
 			temperature = parsed
 		}
 	}
