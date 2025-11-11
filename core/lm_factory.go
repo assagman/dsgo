@@ -36,13 +36,13 @@ func RegisterLM(provider string, factory LMFactory) {
 //   - NewLM(ctx, "openrouter/meta-llama/llama-3.3-70b-instruct") -> uses openrouter provider with model "meta-llama/llama-3.3-70b-instruct"
 func NewLM(ctx context.Context, model string) (LM, error) {
 	if model == "" {
-		return nil, fmt.Errorf("model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'")
+		return nil, fmt.Errorf("model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")")
 	}
 
 	// Parse provider and model from model string
 	parts := strings.SplitN(model, "/", 2)
 	if len(parts) < 2 {
-		return nil, fmt.Errorf("model string must include provider: format 'provider/model' (e.g., 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6')")
+		return nil, fmt.Errorf("model string must include provider: format 'provider/model' (e.g., 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'). Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")")
 	}
 
 	provider := parts[0]
@@ -54,7 +54,7 @@ func NewLM(ctx context.Context, model string) (LM, error) {
 	registryLock.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("provider '%s' not registered for model '%s' (available: %v)", provider, targetModel, getRegisteredProviders())
+		return nil, fmt.Errorf("provider '%s' not registered for model '%s'. Available providers: %v. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")", provider, targetModel, getRegisteredProviders())
 	}
 
 	// Create base LM

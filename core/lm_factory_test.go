@@ -129,7 +129,7 @@ func TestNewLM(t *testing.T) {
 		if err == nil {
 			t.Error("expected error when model string is empty")
 		}
-		if err.Error() != "model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'" {
+		if err.Error() != "model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")" {
 			t.Errorf("unexpected error message: %v", err)
 		}
 	})
