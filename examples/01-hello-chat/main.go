@@ -5,54 +5,16 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/observe"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 // Demonstrates: Predict, Chat adapter, Streaming, History
 // Story: Personal assistant that remembers context and streams responses
 
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(2)
-	}
-	envFilePath := ""
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, "examples", ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	// If not found in examples/, check cwd/.env.local
-	if envFilePath == "" {
-		candidate := filepath.Join(cwd, ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-		}
-	}
-	if envFilePath == "" {
-		fmt.Printf("Could not find .env.local file\n")
-		os.Exit(3)
-	}
-	err = godotenv.Load(envFilePath)
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(3)
-	}
-
 	ctx := context.Background()
 	ctx, runSpan := observe.Start(ctx, observe.SpanKindRun, "chat_assistant", map[string]interface{}{
 		"scenario": "personal_assistant",
@@ -83,8 +45,8 @@ func main() {
 	predict := module.NewPredict(sig, lm).
 		WithHistory(history).
 		WithOptions(&dsgo.GenerateOptions{
-			Temperature: 0.9,   // Creative, varied responses
-			MaxTokens:   5000,  // Generous token limit for verbose models
+			Temperature: 0.9,  // Creative, varied responses
+			MaxTokens:   5000, // Generous token limit for verbose models
 		})
 
 	// Usage tracking

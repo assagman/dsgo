@@ -6,11 +6,18 @@ package dsgo
 
 import (
 	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/env"
 
 	// Import all standard providers to trigger their init() registration
 	_ "github.com/assagman/dsgo/providers/openai"
 	_ "github.com/assagman/dsgo/providers/openrouter"
 )
+
+func init() {
+	// Automatically load .env files when dsgo package is imported
+	// This provides zero-configuration environment variable loading
+	_ = env.AutoLoad()
+}
 
 // Re-export all core types
 type (

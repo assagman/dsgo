@@ -5,54 +5,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/core"
 	"github.com/assagman/dsgo/examples/observe"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 // Demonstrates: Parallel module for batch processing
 // Story: Process multiple customer reviews in parallel for sentiment analysis
 
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(2)
-	}
-	envFilePath := ""
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, "examples", ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	if envFilePath == "" {
-		candidate := filepath.Join(cwd, ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-		}
-	}
-	if envFilePath == "" {
-		fmt.Printf("Could not find .env.local file\n")
-		os.Exit(3)
-	}
-	err = godotenv.Load(envFilePath)
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(3)
-	}
-
 	ctx := context.Background()
 	ctx, runSpan := observe.Start(ctx, observe.SpanKindRun, "parallel_sentiment", map[string]interface{}{
 		"scenario": "batch_processing",
@@ -91,10 +54,10 @@ func main() {
 
 	// Create parallel module with configuration
 	parallel := module.NewParallel(predictor).
-		WithMaxWorkers(3).         // Process up to 3 reviews concurrently
-		WithMaxFailures(1).        // Allow 1 failure without stopping
-		WithReturnAll(true).       // Return all results
-		WithOnlySuccessful(true)   // Only include successful results
+		WithMaxWorkers(3).       // Process up to 3 reviews concurrently
+		WithMaxFailures(1).      // Allow 1 failure without stopping
+		WithReturnAll(true).     // Return all results
+		WithOnlySuccessful(true) // Only include successful results
 
 	// Prepare batch inputs using map-of-slices pattern
 	batchInputs := map[string]any{
@@ -112,18 +75,18 @@ func main() {
 
 	// Display results
 	fmt.Printf("Successfully processed %d/%d reviews\n\n", len(result.Completions), len(reviews))
-	
+
 	sentimentCounts := map[string]int{"positive": 0, "neutral": 0, "negative": 0}
-	
+
 	for i, completion := range result.Completions {
 		sentiment, _ := completion["sentiment"].(string)
 		reason, _ := completion["reason"].(string)
-		
+
 		fmt.Printf("Review %d:\n", i+1)
 		fmt.Printf("  Text: %s\n", reviews[i])
 		fmt.Printf("  Sentiment: %s\n", sentiment)
 		fmt.Printf("  Reason: %s\n\n", reason)
-		
+
 		sentimentCounts[sentiment]++
 	}
 
@@ -141,7 +104,7 @@ func main() {
 		result.Usage.CompletionTokens)
 	fmt.Printf("Total cost: $%.6f\n", result.Usage.Cost)
 	fmt.Printf("Latency: %dms\n", result.Usage.Latency)
-	
+
 	// Extract parallel metrics
 	if metrics, ok := result.Outputs["__parallel_metrics"].(module.ParallelMetrics); ok {
 		fmt.Printf("\nParallel execution:\n")

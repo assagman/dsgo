@@ -5,56 +5,18 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/core"
 	"github.com/assagman/dsgo/examples/observe"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 // Demonstrates: ChainOfThought, BestOfN, Refine, Few-shot learning
 // Story: Email drafting with reasoning, quality selection, and refinement
 
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(2)
-	}
-	envFilePath := ""
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, "examples", ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	// If not found in examples/, check cwd/.env.local
-	if envFilePath == "" {
-		candidate := filepath.Join(cwd, ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-		}
-	}
-	if envFilePath == "" {
-		fmt.Printf("Could not find .env.local file\n")
-		os.Exit(3)
-	}
-	err = godotenv.Load(envFilePath)
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(3)
-	}
-
 	ctx := context.Background()
 	ctx, runSpan := observe.Start(ctx, observe.SpanKindRun, "email_drafter", map[string]interface{}{
 		"scenario": "quality_optimization",
@@ -94,8 +56,8 @@ func main() {
 	fmt.Println("\n=== Step A: Create Outline (ChainOfThought + Few-shot) ===")
 	fmt.Printf("Using %d example(s) for style guidance\n", emailExamples.Len())
 	stepACtx, stepASpan := observe.Start(ctx, observe.SpanKindModule, "stepA_outline", map[string]interface{}{
-		"module":    "cot",
-		"few_shot":  emailExamples.Len(),
+		"module":   "cot",
+		"few_shot": emailExamples.Len(),
 	})
 
 	outlineSig := dsgo.NewSignature("Create a structured outline for an email").
@@ -109,7 +71,7 @@ func main() {
 	for i, ex := range examplePtrs {
 		examples[i] = *ex
 	}
-	
+
 	cot := module.NewChainOfThought(outlineSig, lm).WithDemos(examples)
 
 	outlineResult, err := cot.Forward(stepACtx, map[string]interface{}{
@@ -132,8 +94,8 @@ func main() {
 	// Step B: BestOfN for opening section
 	fmt.Println("\n=== Step B: Generate Best Opening (BestOfN N=5) ===")
 	stepBCtx, stepBSpan := observe.Start(ctx, observe.SpanKindModule, "stepB_bestof", map[string]interface{}{
-		"module":      "bestofn",
-		"n":           5,
+		"module": "bestofn",
+		"n":      5,
 	})
 
 	openingSig := dsgo.NewSignature("Write an email opening paragraph").
@@ -148,7 +110,7 @@ func main() {
 			return 0.0, nil
 		}
 		words := len(strings.Fields(opening))
-		
+
 		// Penalize overly long openings
 		lengthScore := 1.0
 		if words > 50 {
@@ -170,8 +132,8 @@ func main() {
 	openingPredict := module.NewPredict(openingSig, lm)
 	bestof := module.NewBestOfN(openingPredict, 5).
 		WithScorer(scorer).
-		WithThreshold(0.85).  // Early-stop if score >= 0.85
-		WithReturnAll(true)   // Return all candidates for analysis
+		WithThreshold(0.85). // Early-stop if score >= 0.85
+		WithReturnAll(true)  // Return all candidates for analysis
 
 	bestofResult, err := bestof.Forward(stepBCtx, map[string]interface{}{
 		"outline": outline,
@@ -184,7 +146,7 @@ func main() {
 	opening, _ := bestofResult.GetString("opening")
 	candidateCount := len(bestofResult.Completions)
 	stoppedEarly := candidateCount < 5
-	
+
 	fmt.Printf("Generated %d candidate(s), stopped early: %v\n", candidateCount, stoppedEarly)
 	fmt.Printf("Best score: %.2f\n\n", bestofResult.Score)
 	fmt.Printf("Best opening:\n%s\n", opening)

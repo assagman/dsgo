@@ -6,55 +6,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/observe"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 // Demonstrates: Program, ProgramOfThought, JSON adapter, Typed signatures
 // Story: Code implementation and testing pipeline - generate, test, and refine code
 
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(2)
-	}
-	envFilePath := ""
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, "examples", ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	// If not found in examples/, check cwd/.env.local
-	if envFilePath == "" {
-		candidate := filepath.Join(cwd, ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-		}
-	}
-	if envFilePath == "" {
-		fmt.Printf("Could not find .env.local file\n")
-		os.Exit(3)
-	}
-	err = godotenv.Load(envFilePath)
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(3)
-	}
-
 	ctx := context.Background()
 	ctx, runSpan := observe.Start(ctx, observe.SpanKindRun, "itinerary_planner", map[string]interface{}{
 		"scenario": "structured_pipeline",

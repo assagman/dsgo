@@ -5,55 +5,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/observe"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 // Demonstrates: Cache configuration, TTL behavior, cache metrics
 // Story: Simple Q&A system showing cache hits, misses, and TTL expiry
 
 func main() {
-	// Load .env.local
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(2)
-	}
-	envFilePath := ""
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, "examples", ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	if envFilePath == "" {
-		candidate := filepath.Join(cwd, ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-		}
-	}
-	if envFilePath == "" {
-		fmt.Printf("Could not find .env.local file\n")
-		os.Exit(3)
-	}
-	err = godotenv.Load(envFilePath)
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(3)
-	}
-
 	ctx := context.Background()
 	ctx, runSpan := observe.Start(ctx, observe.SpanKindRun, "cache_demo", map[string]interface{}{
 		"scenario": "cache_ttl_testing",

@@ -193,7 +193,7 @@ All code must:
 - PascalCase exports, camelCase internals
 - Error handling: return `error` as last value, wrap with context
 - Table-driven tests with subtests
-- No external deps except godotenv (examples only)
+- No external deps except internal env package (examples only)
 
 ## Important Notes
 
@@ -289,7 +289,7 @@ See `ROADMAP.md` for detailed progress tracking.
 - golangci-lint v2.6.0 (required for linting)
 
 ### Examples Only
-- github.com/joho/godotenv (for .env file loading)
+- Internal env package (for .env file loading)
 
 ## Environment Variables
 

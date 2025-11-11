@@ -22,7 +22,12 @@ DSGO_LOG=pretty EXAMPLES_DEFAULT_MODEL="anthropic/claude-3.5-sonnet" go run main
 
 # Save events to file
 DSGO_LOG=events EXAMPLES_DEFAULT_MODEL="anthropic/claude-3.5-sonnet" go run main.go > events.jsonl
+
+# Use custom .env file location
+DSGO_ENV_FILE_PATH="/path/to/custom.env" go run main.go
 ```
+
+**Note**: DSGo automatically loads `.env` and `.env.local` files from the current directory (or parent directories) when you import the package. You can also set `DSGO_ENV_FILE_PATH` to specify a custom environment file location.
 
 ## Examples Overview
 
@@ -201,7 +206,23 @@ DSGO_LOG=both      # Both formats
 
 # Output file (events mode)
 DSGO_LOG_FILE=events.jsonl
+
+# Environment file location (automatic loading)
+DSGO_ENV_FILE_PATH=/path/to/custom.env  # Custom .env file path (default: auto-discover .env/.env.local)
 ```
+
+**Automatic .env Loading:**
+DSGo automatically loads environment variables from `.env` and `.env.local` files when you import the package. The framework searches for these files in:
+1. Current working directory
+2. Parent directories (walking up the tree)
+
+Files are loaded with this precedence (later files override earlier ones):
+1. `.env` (base configuration)
+2. `.env.local` (local overrides)
+
+You can also set `DSGO_ENV_FILE_PATH` to specify a custom environment file location. If the specified file doesn't exist, DSGo will return an error.
+
+If no `.env` files are found, DSGo continues normally and it's your responsibility to set required environment variables.
 
 ### Event Types
 

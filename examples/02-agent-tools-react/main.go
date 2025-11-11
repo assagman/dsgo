@@ -5,56 +5,18 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/examples/observe"
 	"github.com/assagman/dsgo/module"
-	"github.com/joho/godotenv"
 )
 
 // Demonstrates: ReAct, Tools, Typed signatures, JSON adapter
 // Story: Travel helper agent with search, currency converter, timezone tools
 
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(2)
-	}
-	envFilePath := ""
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, "examples", ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	// If not found in examples/, check cwd/.env.local
-	if envFilePath == "" {
-		candidate := filepath.Join(cwd, ".env.local")
-		if _, err := os.Stat(candidate); err == nil {
-			envFilePath = candidate
-		}
-	}
-	if envFilePath == "" {
-		fmt.Printf("Could not find .env.local file\n")
-		os.Exit(3)
-	}
-	err = godotenv.Load(envFilePath)
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(3)
-	}
-
 	ctx := context.Background()
 	ctx, runSpan := observe.Start(ctx, observe.SpanKindRun, "travel_agent", map[string]interface{}{
 		"scenario": "multi_tool_agent",
@@ -75,7 +37,7 @@ func main() {
 			// Simulate search
 			time.Sleep(100 * time.Millisecond)
 			results := map[string]interface{}{
-				"query":   query,
+				"query": query,
 				"results": []string{
 					"Barcelona weekend trips: avg $450-650 (flights+hotel)",
 					"Peak season: June-August, shoulder: Apr-May, Sep-Oct",
@@ -106,11 +68,11 @@ func main() {
 			converted := amount * (rates[to] / rates[from])
 
 			return map[string]interface{}{
-				"amount":   amount,
-				"from":     from,
-				"to":       to,
-				"result":   fmt.Sprintf("%.2f", converted),
-				"rate":     rates[to] / rates[from],
+				"amount": amount,
+				"from":   from,
+				"to":     to,
+				"result": fmt.Sprintf("%.2f", converted),
+				"rate":   rates[to] / rates[from],
 			}, nil
 		},
 	).
@@ -131,7 +93,7 @@ func main() {
 			// Simulate timezone lookup
 			offsets := map[string]int{"barcelona": 1, "paris": 1, "london": 0, "new york": -5}
 			cityLower := strings.ToLower(city)
-			
+
 			var offset int
 			for k, v := range offsets {
 				if strings.Contains(cityLower, k) {
@@ -142,9 +104,9 @@ func main() {
 
 			now := time.Now().UTC().Add(time.Duration(offset) * time.Hour)
 			return map[string]interface{}{
-				"city":       city,
-				"time":       now.Format("15:04"),
-				"timezone":   fmt.Sprintf("UTC%+d", offset),
+				"city":        city,
+				"time":        now.Format("15:04"),
+				"timezone":    fmt.Sprintf("UTC%+d", offset),
 				"day_of_week": now.Format("Monday"),
 			}, nil
 		},
@@ -161,7 +123,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create LM: %v", err)
 	}
-	
+
 	sig := dsgo.NewSignature("You are a helpful travel assistant. Use tools to find accurate information.").
 		AddInput("question", dsgo.FieldTypeString, "User's travel question").
 		AddOutput("answer", dsgo.FieldTypeString, "Detailed answer with cited sources")
