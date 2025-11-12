@@ -9,17 +9,18 @@ import (
 	"github.com/assagman/dsgo/internal/ids"
 )
 
-// LMWrapper wraps an LM to add observability (cost, latency, history collection)
-type LMWrapper struct {
+// lmWrapper wraps an LM to add observability (cost, latency, history collection)
+type lmWrapper struct {
 	lm         LM
 	collector  Collector
 	calculator *cost.Calculator
 	sessionID  string
+	provider   string // Store provider name to avoid guessing
 }
 
-// NewLMWrapper creates a new LM wrapper with observability features
-func NewLMWrapper(lm LM, collector Collector) LM {
-	return &LMWrapper{
+// newLMWrapper creates a new LM wrapper with observability features
+func newLMWrapper(lm LM, collector Collector) LM {
+	return &lmWrapper{
 		lm:         lm,
 		collector:  collector,
 		calculator: cost.NewCalculator(),
@@ -27,9 +28,20 @@ func NewLMWrapper(lm LM, collector Collector) LM {
 	}
 }
 
-// NewLMWrapperWithSession creates a new LM wrapper with a custom session ID
-func NewLMWrapperWithSession(lm LM, collector Collector, sessionID string) LM {
-	return &LMWrapper{
+// newLMWrapperWithProvider creates a new LM wrapper with observability features and explicit provider
+func newLMWrapperWithProvider(lm LM, collector Collector, provider string) LM {
+	return &lmWrapper{
+		lm:         lm,
+		collector:  collector,
+		calculator: cost.NewCalculator(),
+		sessionID:  ids.NewUUID(),
+		provider:   provider,
+	}
+}
+
+// newLMWrapperWithSession creates a new LM wrapper with a custom session ID
+func newLMWrapperWithSession(lm LM, collector Collector, sessionID string) LM {
+	return &lmWrapper{
 		lm:         lm,
 		collector:  collector,
 		calculator: cost.NewCalculator(),
@@ -38,7 +50,7 @@ func NewLMWrapperWithSession(lm LM, collector Collector, sessionID string) LM {
 }
 
 // Generate wraps the underlying LM's Generate with observability
-func (w *LMWrapper) Generate(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+func (w *lmWrapper) Generate(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
 	startTime := time.Now()
 	entryID := ids.NewUUID()
 
@@ -66,7 +78,7 @@ func (w *LMWrapper) Generate(ctx context.Context, messages []Message, options *G
 }
 
 // Stream wraps the underlying LM's Stream with observability
-func (w *LMWrapper) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
+func (w *lmWrapper) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
 	startTime := time.Now()
 	entryID := ids.NewUUID()
 
@@ -179,22 +191,22 @@ func (w *LMWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 }
 
 // Name returns the underlying LM's name
-func (w *LMWrapper) Name() string {
+func (w *lmWrapper) Name() string {
 	return w.lm.Name()
 }
 
 // SupportsJSON returns whether the underlying LM supports JSON
-func (w *LMWrapper) SupportsJSON() bool {
+func (w *lmWrapper) SupportsJSON() bool {
 	return w.lm.SupportsJSON()
 }
 
 // SupportsTools returns whether the underlying LM supports tools
-func (w *LMWrapper) SupportsTools() bool {
+func (w *lmWrapper) SupportsTools() bool {
 	return w.lm.SupportsTools()
 }
 
 // buildHistoryEntry constructs a complete HistoryEntry
-func (w *LMWrapper) buildHistoryEntry(
+func (w *lmWrapper) buildHistoryEntry(
 	entryID string,
 	startTime time.Time,
 	messages []Message,
@@ -263,7 +275,7 @@ func (w *LMWrapper) buildHistoryEntry(
 }
 
 // buildRequestMeta constructs request metadata
-func (w *LMWrapper) buildRequestMeta(messages []Message, options *GenerateOptions) RequestMeta {
+func (w *lmWrapper) buildRequestMeta(messages []Message, options *GenerateOptions) RequestMeta {
 	promptLength := 0
 	for _, msg := range messages {
 		promptLength += len(msg.Content)
@@ -286,8 +298,13 @@ func (w *LMWrapper) buildRequestMeta(messages []Message, options *GenerateOption
 	return meta
 }
 
-// getProvider returns the provider name, preferring settings.DefaultProvider
-func (w *LMWrapper) getProvider() string {
+// getProvider returns the provider name, preferring the explicitly set provider
+func (w *lmWrapper) getProvider() string {
+	// Use explicitly set provider if available
+	if w.provider != "" {
+		return w.provider
+	}
+
 	// Use global settings if available
 	settings := GetSettings()
 	if settings.DefaultProvider != "" {
@@ -299,7 +316,7 @@ func (w *LMWrapper) getProvider() string {
 }
 
 // extractProviderFromModel attempts to extract provider name from LM name
-func (w *LMWrapper) extractProviderFromModel() string {
+func (w *lmWrapper) extractProviderFromModel() string {
 	name := strings.ToLower(w.lm.Name())
 
 	// Common provider patterns

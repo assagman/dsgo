@@ -69,9 +69,9 @@ func NewLM(ctx context.Context, model string) (LM, error) {
 		}
 	}
 
-	// Automatically wrap with LMWrapper if a Collector is configured
+	// Automatically wrap with lmWrapper if a Collector is configured
 	if settings.Collector != nil {
-		return NewLMWrapper(baseLM, settings.Collector), nil
+		return newLMWrapperWithProvider(baseLM, settings.Collector, provider), nil
 	}
 
 	return baseLM, nil

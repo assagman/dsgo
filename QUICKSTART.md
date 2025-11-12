@@ -550,7 +550,7 @@ fallbackPredictor := module.NewPredict(sig, lm).WithAdapter(
 
 ### Observability
 
-Track all LLM interactions:
+Track all LLM interactions automatically when a collector is configured:
 
 ```go
 type ProductionCollector struct{}
@@ -561,6 +561,7 @@ func (c *ProductionCollector) Collect(entry dsgo.HistoryEntry) {
         entry.Usage.Cost, entry.Usage.Latency)
 }
 
+// Observability is automatically enabled when a collector is configured
 dsgo.Configure(dsgo.WithCollector(&ProductionCollector{}))
 ```
 

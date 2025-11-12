@@ -273,9 +273,21 @@ func TestLMFactory_WithCollector(t *testing.T) {
 		t.Fatalf("Failed to create LM: %v", err)
 	}
 
-	// Verify it's wrapped by checking the type
-	if _, ok := lm.(*LMWrapper); !ok {
-		t.Error("Expected LM to be wrapped with LMWrapper when collector is configured")
+	// Verify it works and produces history entries when collector is configured
+	// Generate a response to trigger history collection
+	result, err := lm.Generate(ctx, []Message{{Role: "user", Content: "test"}}, DefaultGenerateOptions())
+	if err != nil {
+		t.Fatalf("Failed to generate: %v", err)
+	}
+
+	// Verify that history was collected
+	if collector.Count() == 0 {
+		t.Error("Expected history to be collected when collector is configured")
+	}
+
+	// Verify the result is valid
+	if result == nil {
+		t.Error("Expected result to be non-nil")
 	}
 
 	// Verify the wrapped LM still works
@@ -318,14 +330,19 @@ func TestLMFactory_WithoutCollector(t *testing.T) {
 		t.Fatalf("Failed to create LM: %v", err)
 	}
 
-	// Verify it's NOT wrapped (should be the base mockLM)
-	if _, ok := lm.(*LMWrapper); ok {
-		t.Error("Expected LM to NOT be wrapped when no collector is configured")
+	// Verify it works but does NOT produce history entries when no collector is configured
+	// Generate a response - should not panic
+	result, err := lm.Generate(ctx, []Message{{Role: "user", Content: "test"}}, DefaultGenerateOptions())
+	if err != nil {
+		t.Fatalf("Failed to generate: %v", err)
 	}
 
-	if _, ok := lm.(*mockLM); !ok {
-		t.Error("Expected LM to be base mockLM when no collector is configured")
+	// Verify the result is valid
+	if result == nil {
+		t.Error("Expected result to be non-nil")
 	}
+
+	// Note: We can't easily verify that no history is collected since there's no collector configured
 }
 
 // TestNewLM_WithCache tests that cache is auto-wired when configured

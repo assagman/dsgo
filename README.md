@@ -368,6 +368,8 @@ DSGO_COLLECTOR=memory              # Default collector
 DSGO_REQUEST_ID_HEADER=X-Request-ID # Header for request IDs
 ```
 
+> **Note**: Observability is automatically enabled when a collector is configured via `Configure(WithCollector(...))` or the `DSGO_COLLECTOR` environment variable. There's no need to manually wrap LMs with observability wrappers.
+
 ### Loading Priority
 
 1. **`.env` file** (if present in working directory)
@@ -653,6 +655,7 @@ func (c *AuditCollector) Collect(entry core.HistoryEntry) {
 }
 
 // Configure with custom collector
+// Observability is automatically enabled when a collector is configured
 dsgo.Configure(dsgo.WithCollector(&AuditCollector{logFile: auditLog}))
 ```
 
