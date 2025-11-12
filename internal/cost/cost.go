@@ -50,6 +50,11 @@ var defaultPricing = map[string]ModelPricing{
 		PromptPrice:     0.00,
 		CompletionPrice: 0.00,
 	},
+	// Google models
+	"google/gemini-2.5-flash": {
+		PromptPrice:     0.30,
+		CompletionPrice: 2.50,
+	},
 	// Meta models
 	"meta/llama-3.1-405b": {
 		PromptPrice:     2.70,
