@@ -1461,3 +1461,166 @@ func BenchmarkSignature_ConcurrentValidation(b *testing.B) {
 		wg.Wait()
 	}
 }
+
+func TestSignatureToOpenAIJSONSchema(t *testing.T) {
+	tests := []struct {
+		name     string
+		sig      *Signature
+		validate func(t *testing.T, schema map[string]any)
+	}{
+		{
+			name: "basic fields with OpenAI compliance",
+			sig: NewSignature("Test signature").
+				AddOutput("name", FieldTypeString, "Person's name").
+				AddOutput("age", FieldTypeInt, "Person's age").
+				AddOptionalOutput("email", FieldTypeString, "Email address"), // optional
+			validate: func(t *testing.T, schema map[string]any) {
+				// Check root level compliance
+				if schema["type"] != "object" {
+					t.Errorf("expected type object, got %v", schema["type"])
+				}
+				if schema["additionalProperties"] != false {
+					t.Errorf("expected additionalProperties false, got %v", schema["additionalProperties"])
+				}
+
+				// OpenAI requires ALL properties in required array
+				required, ok := schema["required"].([]string)
+				if !ok {
+					t.Fatal("expected required array")
+				}
+				if len(required) != 3 { // including optional field
+					t.Errorf("expected 3 required fields for OpenAI, got %d", len(required))
+				}
+
+				props, ok := schema["properties"].(map[string]any)
+				if !ok {
+					t.Fatal("expected properties map")
+				}
+
+				// Check each property has correct type
+				nameProp, ok := props["name"].(map[string]any)
+				if !ok || nameProp["type"] != "string" {
+					t.Error("name property should be string")
+				}
+
+				ageProp, ok := props["age"].(map[string]any)
+				if !ok || ageProp["type"] != "integer" {
+					t.Error("age property should be integer")
+				}
+			},
+		},
+		{
+			name: "JSON field with OpenAI compliance",
+			sig: NewSignature("JSON test").
+				AddOutput("data", FieldTypeJSON, "JSON data"),
+			validate: func(t *testing.T, schema map[string]any) {
+				props, ok := schema["properties"].(map[string]any)
+				if !ok {
+					t.Fatal("expected properties map")
+				}
+
+				dataProp, ok := props["data"].(map[string]any)
+				if !ok {
+					t.Fatal("expected data property")
+				}
+
+				// JSON fields should have additionalProperties: false
+				if dataProp["additionalProperties"] != false {
+					t.Errorf("JSON field should have additionalProperties false, got %v", dataProp["additionalProperties"])
+				}
+
+				// Should have required array for OpenAI compliance
+				if _, hasRequired := dataProp["required"]; !hasRequired {
+					t.Error("JSON field should have required array for OpenAI compliance")
+				}
+			},
+		},
+		{
+			name: "class field with enum",
+			sig: NewSignature("Classification").
+				AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "Sentiment"),
+			validate: func(t *testing.T, schema map[string]any) {
+				props, ok := schema["properties"].(map[string]any)
+				if !ok {
+					t.Fatal("expected properties map")
+				}
+
+				sentimentProp, ok := props["sentiment"].(map[string]any)
+				if !ok {
+					t.Fatal("expected sentiment property")
+				}
+
+				if sentimentProp["type"] != "string" {
+					t.Errorf("expected string type, got %v", sentimentProp["type"])
+				}
+
+				enum, ok := sentimentProp["enum"].([]string)
+				if !ok {
+					t.Error("expected enum array")
+				}
+				if len(enum) != 3 {
+					t.Errorf("expected 3 enum values, got %d", len(enum))
+				}
+			},
+		},
+		{
+			name: "empty signature",
+			sig:  NewSignature("Empty"),
+			validate: func(t *testing.T, schema map[string]any) {
+				if schema["type"] != "object" {
+					t.Errorf("expected type object, got %v", schema["type"])
+				}
+				if schema["additionalProperties"] != false {
+					t.Errorf("expected additionalProperties false, got %v", schema["additionalProperties"])
+				}
+				// OpenAI schema always includes required array, even if empty
+				required, hasRequired := schema["required"]
+				if !hasRequired {
+					t.Error("empty signature should have required array (even if empty)")
+				}
+				if requiredArr, ok := required.([]string); ok && len(requiredArr) != 0 {
+					t.Error("empty signature should have empty required array")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := tt.sig.SignatureToOpenAIJSONSchema()
+			if schema == nil {
+				t.Fatal("expected schema, got nil")
+			}
+			tt.validate(t, schema)
+		})
+	}
+}
+
+func TestSignatureToOpenAIJSONSchema_DifferenceFromStandard(t *testing.T) {
+	sig := NewSignature("Test").
+		AddOutput("required_field", FieldTypeString, "Required field").
+		AddOptionalOutput("optional_field", FieldTypeString, "Optional field")
+
+	standardSchema := sig.SignatureToJSONSchema()
+	openaiSchema := sig.SignatureToOpenAIJSONSchema()
+
+	// Both should have additionalProperties: false
+	if standardSchema["additionalProperties"] != false {
+		t.Error("Standard schema should have additionalProperties false")
+	}
+	if openaiSchema["additionalProperties"] != false {
+		t.Error("OpenAI schema should have additionalProperties false")
+	}
+
+	// Standard schema should only have required fields in required array
+	standardRequired, _ := standardSchema["required"].([]string)
+	if len(standardRequired) != 1 {
+		t.Errorf("Standard schema should have 1 required field, got %d", len(standardRequired))
+	}
+
+	// OpenAI schema should have ALL fields in required array
+	openaiRequired, _ := openaiSchema["required"].([]string)
+	if len(openaiRequired) != 2 {
+		t.Errorf("OpenAI schema should have 2 required fields, got %d", len(openaiRequired))
+	}
+}

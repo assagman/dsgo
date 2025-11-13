@@ -73,6 +73,11 @@ func (o *openAI) SupportsTools() bool {
 	return true
 }
 
+// IsOpenAI indicates this is an OpenAI provider
+func (o *openAI) IsOpenAI() bool {
+	return true
+}
+
 // SetCache sets the cache instance for this LM
 func (o *openAI) SetCache(cache core.Cache) {
 	o.Cache = cache

@@ -205,6 +205,11 @@ func (w *lmWrapper) SupportsTools() bool {
 	return w.lm.SupportsTools()
 }
 
+// IsOpenAI returns whether the underlying LM is OpenAI
+func (w *lmWrapper) IsOpenAI() bool {
+	return w.lm.IsOpenAI()
+}
+
 // buildHistoryEntry constructs a complete HistoryEntry
 func (w *lmWrapper) buildHistoryEntry(
 	entryID string,

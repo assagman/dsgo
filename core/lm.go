@@ -91,6 +91,10 @@ type LM interface {
 
 	// SupportsTools indicates if the LM supports tool/function calling
 	SupportsTools() bool
+
+	// IsOpenAI indicates if the LM is OpenAI or OpenAI-compatible
+	// This is used to determine if OpenAI-specific JSON schema requirements apply
+	IsOpenAI() bool
 }
 
 // DefaultGenerateOptions returns default generation options

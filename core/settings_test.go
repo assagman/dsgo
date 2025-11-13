@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-type mockLM struct{}
+type settingsMockLM struct{}
 
-func (m *mockLM) Generate(ctx context.Context, messages []Message, opts *GenerateOptions) (*GenerateResult, error) {
+func (m *settingsMockLM) Generate(ctx context.Context, messages []Message, opts *GenerateOptions) (*GenerateResult, error) {
 	return &GenerateResult{Content: "test"}, nil
 }
 
-func (m *mockLM) Stream(ctx context.Context, messages []Message, opts *GenerateOptions) (<-chan Chunk, <-chan error) {
+func (m *settingsMockLM) Stream(ctx context.Context, messages []Message, opts *GenerateOptions) (<-chan Chunk, <-chan error) {
 	chunks := make(chan Chunk)
 	errs := make(chan error)
 	close(chunks)
@@ -20,16 +20,20 @@ func (m *mockLM) Stream(ctx context.Context, messages []Message, opts *GenerateO
 	return chunks, errs
 }
 
-func (m *mockLM) Name() string {
+func (m *settingsMockLM) Name() string {
 	return "mock"
 }
 
-func (m *mockLM) SupportsJSON() bool {
+func (m *settingsMockLM) SupportsJSON() bool {
 	return true
 }
 
-func (m *mockLM) SupportsTools() bool {
-	return true
+func (m *settingsMockLM) SupportsTools() bool {
+	return false
+}
+
+func (m *settingsMockLM) IsOpenAI() bool {
+	return false
 }
 
 func TestSettings_SetAndGet(t *testing.T) {
@@ -60,7 +64,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 	})
 
 	t.Run("SetDefaultLM", func(t *testing.T) {
-		var lm LM = &mockLM{}
+		var lm LM = &settingsMockLM{}
 		s.SetDefaultLM(lm)
 		if s.DefaultLM == nil {
 			t.Error("expected LM to be set")

@@ -422,3 +422,75 @@ func (s *Signature) SignatureToJSONSchema() map[string]any {
 
 	return schema
 }
+
+// SignatureToOpenAIJSONSchema generates an OpenAI-compliant JSON schema
+// This addresses OpenAI's strict requirements:
+// 1. All objects must have "additionalProperties": false
+// 2. All properties must be listed in "required" array (even optional ones for OpenAI)
+// 3. These requirements apply recursively to all nested objects
+func (s *Signature) SignatureToOpenAIJSONSchema() map[string]any {
+	properties := make(map[string]any)
+	required := []string{}
+
+	for _, field := range s.OutputFields {
+		prop := make(map[string]any)
+
+		// Map DSGo field types to JSON schema types
+		switch field.Type {
+		case FieldTypeString, FieldTypeImage, FieldTypeDatetime:
+			prop["type"] = "string"
+		case FieldTypeInt:
+			prop["type"] = "integer"
+		case FieldTypeFloat:
+			prop["type"] = "number"
+		case FieldTypeBool:
+			prop["type"] = "boolean"
+		case FieldTypeJSON:
+			// For JSON fields, create a generic object schema that allows any structure
+			// but still enforces OpenAI's requirements
+			prop["type"] = "object"
+			prop["properties"] = map[string]any{}
+			prop["additionalProperties"] = false
+			// OpenAI requires at least one property in objects, so add a generic value field
+			prop["properties"] = map[string]any{
+				"value": map[string]any{
+					"type":        "string",
+					"description": "Generic value field for JSON content",
+				},
+			}
+			prop["required"] = []string{"value"}
+		case FieldTypeClass:
+			prop["type"] = "string"
+			if len(field.Classes) > 0 {
+				prop["enum"] = field.Classes
+			}
+		default:
+			prop["type"] = "string" // Fallback to string
+		}
+
+		// Add description if present
+		if field.Description != "" {
+			prop["description"] = field.Description
+		}
+
+		properties[field.Name] = prop
+
+		// OpenAI requires ALL properties to be in required array
+		// even if they're logically optional in DSGo
+		required = append(required, field.Name)
+	}
+
+	schema := map[string]any{
+		"type":                 "object",
+		"properties":           properties,
+		"additionalProperties": false,    // Required for OpenAI strict mode
+		"required":             required, // OpenAI requires all properties
+	}
+
+	// Add description if present
+	if s.Description != "" {
+		schema["description"] = s.Description
+	}
+
+	return schema
+}

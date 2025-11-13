@@ -548,6 +548,8 @@ fallbackPredictor := module.NewPredict(sig, lm).WithAdapter(
 )
 ```
 
+> **OpenAI Compatibility**: DSGo automatically detects OpenAI providers and uses OpenAI-compliant JSON schemas. No manual configuration needed - structured outputs work seamlessly with GPT models.
+
 ### Observability
 
 Track all LLM interactions automatically when a collector is configured:

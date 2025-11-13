@@ -78,7 +78,12 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 	options.ResponseFormat = "json"
 	// Auto-generate JSON schema from signature for structured outputs
 	if options.ResponseSchema == nil {
-		options.ResponseSchema = pot.Signature.SignatureToJSONSchema()
+		// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+		if pot.LM.IsOpenAI() {
+			options.ResponseSchema = pot.Signature.SignatureToOpenAIJSONSchema()
+		} else {
+			options.ResponseSchema = pot.Signature.SignatureToJSONSchema()
+		}
 	}
 
 	result, err := pot.LM.Generate(ctx, messages, options)

@@ -781,6 +781,7 @@ func (m *mockStreamingLM) Stream(ctx context.Context, messages []core.Message, o
 func (m *mockStreamingLM) Name() string        { return "mock-streaming" }
 func (m *mockStreamingLM) SupportsJSON() bool  { return false }
 func (m *mockStreamingLM) SupportsTools() bool { return false }
+func (m *mockStreamingLM) IsOpenAI() bool      { return false }
 
 // TestPredict_Stream_WithJSONSchemaAutoGen tests streaming with auto-generated JSON schema
 func TestPredict_Stream_WithJSONSchemaAutoGen(t *testing.T) {
@@ -961,6 +962,10 @@ func (m *MockLMForFallback) SupportsJSON() bool {
 }
 
 func (m *MockLMForFallback) SupportsTools() bool {
+	return false
+}
+
+func (m *MockLMForFallback) IsOpenAI() bool {
 	return false
 }
 

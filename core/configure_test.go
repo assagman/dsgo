@@ -1,9 +1,41 @@
 package core
 
 import (
+	"context"
 	"testing"
 	"time"
 )
+
+// mockLM for testing
+type mockLM struct{}
+
+func (m *mockLM) Generate(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+	return &GenerateResult{Content: "mock"}, nil
+}
+
+func (m *mockLM) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
+	chunkChan := make(chan Chunk, 1)
+	errChan := make(chan error, 1)
+	close(chunkChan)
+	close(errChan)
+	return chunkChan, errChan
+}
+
+func (m *mockLM) Name() string {
+	return "mock"
+}
+
+func (m *mockLM) SupportsJSON() bool {
+	return true
+}
+
+func (m *mockLM) SupportsTools() bool {
+	return false
+}
+
+func (m *mockLM) IsOpenAI() bool {
+	return false
+}
 
 func TestConfigure(t *testing.T) {
 	ResetConfig()

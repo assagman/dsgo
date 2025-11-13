@@ -105,7 +105,12 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
-				options.ResponseSchema = p.Signature.SignatureToJSONSchema()
+				// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+				if p.LM.IsOpenAI() {
+					options.ResponseSchema = p.Signature.SignatureToOpenAIJSONSchema()
+				} else {
+					options.ResponseSchema = p.Signature.SignatureToJSONSchema()
+				}
 			}
 		}
 	}
@@ -229,7 +234,12 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
-				options.ResponseSchema = p.Signature.SignatureToJSONSchema()
+				// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+				if p.LM.IsOpenAI() {
+					options.ResponseSchema = p.Signature.SignatureToOpenAIJSONSchema()
+				} else {
+					options.ResponseSchema = p.Signature.SignatureToJSONSchema()
+				}
 			}
 		}
 	}

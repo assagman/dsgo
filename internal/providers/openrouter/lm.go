@@ -77,6 +77,11 @@ func (o *openRouter) SupportsTools() bool {
 	return true
 }
 
+// IsOpenAI indicates this is not an OpenAI provider (OpenRouter is compatible but not strict)
+func (o *openRouter) IsOpenAI() bool {
+	return false
+}
+
 // SetCache sets the cache instance for this LM
 func (o *openRouter) SetCache(cache core.Cache) {
 	o.Cache = cache

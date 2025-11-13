@@ -160,7 +160,12 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, 
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
-				options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+				// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+				if r.LM.IsOpenAI() {
+					options.ResponseSchema = r.Signature.SignatureToOpenAIJSONSchema()
+				} else {
+					options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+				}
 			}
 		}
 	}
@@ -269,7 +274,12 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, 
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
-				options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+				// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+				if r.LM.IsOpenAI() {
+					options.ResponseSchema = r.Signature.SignatureToOpenAIJSONSchema()
+				} else {
+					options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+				}
 			}
 		}
 	}

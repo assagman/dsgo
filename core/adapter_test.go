@@ -1624,6 +1624,10 @@ func (m *mockExtractionLM) SupportsTools() bool {
 	return false
 }
 
+func (m *mockExtractionLM) IsOpenAI() bool {
+	return false
+}
+
 func (m *mockExtractionLM) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
 	chunkChan := make(chan Chunk, 1)
 	errChan := make(chan error, 1)

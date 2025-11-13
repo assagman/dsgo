@@ -157,7 +157,12 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				options.ResponseFormat = "json"
 				// Auto-generate JSON schema from signature for structured outputs
 				if options.ResponseSchema == nil {
-					options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+					// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+					if r.LM.IsOpenAI() {
+						options.ResponseSchema = r.Signature.SignatureToOpenAIJSONSchema()
+					} else {
+						options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+					}
 				}
 			}
 		} else {
@@ -174,7 +179,12 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				options.ResponseFormat = "json"
 				// Auto-generate JSON schema from signature for structured outputs
 				if options.ResponseSchema == nil {
-					options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+					// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+					if r.LM.IsOpenAI() {
+						options.ResponseSchema = r.Signature.SignatureToOpenAIJSONSchema()
+					} else {
+						options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+					}
 				}
 			}
 		}
@@ -732,7 +742,12 @@ func (r *ReAct) runExtract(ctx context.Context, messages []core.Message, inputs 
 	if r.LM.SupportsJSON() {
 		options.ResponseFormat = "json"
 		if options.ResponseSchema == nil {
-			options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+			// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+			if r.LM.IsOpenAI() {
+				options.ResponseSchema = r.Signature.SignatureToOpenAIJSONSchema()
+			} else {
+				options.ResponseSchema = r.Signature.SignatureToJSONSchema()
+			}
 		}
 	}
 

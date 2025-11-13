@@ -87,7 +87,12 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 			options.ResponseFormat = "json"
 			// Auto-generate JSON schema from signature for structured outputs
 			if options.ResponseSchema == nil {
-				options.ResponseSchema = cot.Signature.SignatureToJSONSchema()
+				// Use OpenAI-compliant schema for OpenAI providers to avoid strict mode errors
+				if cot.LM.IsOpenAI() {
+					options.ResponseSchema = cot.Signature.SignatureToOpenAIJSONSchema()
+				} else {
+					options.ResponseSchema = cot.Signature.SignatureToJSONSchema()
+				}
 			}
 		}
 	}

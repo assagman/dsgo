@@ -55,6 +55,10 @@ func (m *mockWrapperLM) SupportsTools() bool {
 	return m.supportsTools
 }
 
+func (m *mockWrapperLM) IsOpenAI() bool {
+	return false
+}
+
 func TestNewLMWrapper(t *testing.T) {
 	mock := &mockWrapperLM{name: "test-model"}
 	memCollector := NewMemoryCollector(10)
@@ -1181,6 +1185,10 @@ func (m *mockStreamSuccessLM) SupportsTools() bool {
 	return false
 }
 
+func (m *mockStreamSuccessLM) IsOpenAI() bool {
+	return false
+}
+
 // mockStreamErrorLM is a mock that returns an error during streaming
 type mockStreamErrorLM struct {
 	name string
@@ -1213,6 +1221,10 @@ func (m *mockStreamErrorLM) SupportsJSON() bool {
 }
 
 func (m *mockStreamErrorLM) SupportsTools() bool {
+	return false
+}
+
+func (m *mockStreamErrorLM) IsOpenAI() bool {
 	return false
 }
 
@@ -1265,4 +1277,8 @@ func (m *mockStreamToolCallsLM) SupportsJSON() bool {
 
 func (m *mockStreamToolCallsLM) SupportsTools() bool {
 	return true
+}
+
+func (m *mockStreamToolCallsLM) IsOpenAI() bool {
+	return false
 }

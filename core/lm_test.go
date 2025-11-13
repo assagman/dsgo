@@ -37,6 +37,10 @@ func (m *MockLM) SupportsTools() bool {
 	return m.SupportsToolsVal
 }
 
+func (m *MockLM) IsOpenAI() bool {
+	return false
+}
+
 func (m *MockLM) Stream(ctx context.Context, messages []Message, options *GenerateOptions) (<-chan Chunk, <-chan error) {
 	chunkChan := make(chan Chunk, 1)
 	errChan := make(chan error, 1)

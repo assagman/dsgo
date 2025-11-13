@@ -11,6 +11,7 @@ type MockLM struct {
 	NameValue        string
 	SupportsJSONVal  bool
 	SupportsToolsVal bool
+	IsOpenAIVAl      bool
 }
 
 func (m *MockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
@@ -33,6 +34,10 @@ func (m *MockLM) SupportsJSON() bool {
 
 func (m *MockLM) SupportsTools() bool {
 	return m.SupportsToolsVal
+}
+
+func (m *MockLM) IsOpenAI() bool {
+	return m.IsOpenAIVAl
 }
 
 func (m *MockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {

@@ -44,6 +44,10 @@ func (m *mockLM) SupportsTools() bool {
 	return false
 }
 
+func (m *mockLM) IsOpenAI() bool {
+	return false
+}
+
 func TestNewFunc(t *testing.T) {
 	type Input struct {
 		Text string `dsgo:"input,desc=Input text"`
