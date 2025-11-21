@@ -1,0 +1,12 @@
+{
+  "$schema": "https://charm.land/crush.json",
+  "options": {
+    "initialize_as": "AGENTS.md"
+  },
+  "lsp": {
+    "go": {
+      "command": "$HOME/.local/share/nvim/mason/packages/gopls/gopls",
+      "args": ["serve"]
+    }
+  }
+}
