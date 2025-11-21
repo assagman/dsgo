@@ -366,7 +366,7 @@ func (a *JSONAdapter) coerceTypes(sig *Signature, outputs map[string]any) map[st
 }
 
 // formatDemos formats few-shot examples for inclusion in prompts
-func (a *JSONAdapter) formatDemos(sig *Signature, demos []Example) ([]Message, error) {
+func (a *JSONAdapter) formatDemos(_ *Signature, demos []Example) ([]Message, error) {
 	var messages []Message
 
 	for i, demo := range demos {
@@ -684,7 +684,7 @@ func (a *ChatAdapter) Parse(sig *Signature, content string) (map[string]any, err
 }
 
 // heuristicExtract attempts to extract a field value using simple heuristics when markers aren't found
-func (a *ChatAdapter) heuristicExtract(content string, fieldName string, fieldType FieldType) string {
+func (a *ChatAdapter) heuristicExtract(content string, fieldName string, _ FieldType) string {
 	// Try common field name synonyms
 	synonyms := map[string][]string{
 		"answer":      {"answer", "final answer", "final_answer", "result", "output", "solution", "conclusion", "response"},
@@ -796,8 +796,7 @@ func (a *ChatAdapter) heuristicExtract(content string, fieldName string, fieldTy
 
 	// For "title" field, try first non-empty line
 	if strings.ToLower(fieldName) == "title" {
-		lines := strings.Split(content, "\n")
-		for _, line := range lines {
+		for line := range strings.SplitSeq(content, "\n") {
 			line = strings.TrimSpace(line)
 			// Skip empty lines and lines that look like markers
 			if line != "" && !strings.Contains(line, "##") && len(line) < 200 {

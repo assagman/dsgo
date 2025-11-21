@@ -1,6 +1,7 @@
 package core
 
 import (
+	"maps"
 	"sync"
 	"time"
 )
@@ -55,9 +56,7 @@ func GetSettings() Settings {
 	defer globalSettings.mu.RUnlock()
 
 	apiKeyCopy := make(map[string]string, len(globalSettings.APIKey))
-	for k, v := range globalSettings.APIKey {
-		apiKeyCopy[k] = v
-	}
+	maps.Copy(apiKeyCopy, globalSettings.APIKey)
 
 	return Settings{
 		DefaultLM:       globalSettings.DefaultLM,

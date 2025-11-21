@@ -114,8 +114,8 @@ func ResetConfig() {
 func stripProviderPrefix(model string) string {
 	prefixes := []string{"openrouter/", "openai/"}
 	for _, prefix := range prefixes {
-		if strings.HasPrefix(model, prefix) {
-			return strings.TrimPrefix(model, prefix)
+		if after, found := strings.CutPrefix(model, prefix); found {
+			return after
 		}
 	}
 	return model
