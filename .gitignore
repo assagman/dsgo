@@ -45,3 +45,6 @@ example_execution_results.txt
 
 # opencode
 .opencode
+
+# Benchmark artifacts (./examples/benchmark.go output)
+benchmark_artifacts/
