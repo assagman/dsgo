@@ -8,5 +8,27 @@
       "command": "$HOME/.local/share/nvim/mason/packages/gopls/gopls",
       "args": ["serve"]
     }
+  },
+  "mcp": {
+    "tavily": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["-y", "tavily-mcp@latest"],
+      "timeout": 300,
+      "disabled": false,
+      "headers": {
+        "Authorization": "Bearer $TAVILY_API_KEY"
+      }
+    },
+    "exa": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["-y", "exa-mcp-server"],
+      "timeout": 300,
+      "disabled": false,
+      "headers": {
+        "Authorization": "Bearer $EXA_API_KEY"
+      }
+    }
   }
 }
