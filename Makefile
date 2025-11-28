@@ -1,16 +1,44 @@
-.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks test-matrix test-matrix-quick test-matrix-sample fmt-fix check-lint all-with-examples help
+.PHONY: test build fmt vet lint check check-eof verify clean all install-hooks test-matrix test-matrix-quick test-matrix-sample fmt-fix check-lint all-with-examples help integration integration-quick integration-compose integration-providers integration-performance integration-coverage
 
-PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts)
+PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts | grep -v /integration)
+INTEGRATION_PACKAGES := $$(go list ./integration)
 
 all: clean check check-lint test
 
 all-with-examples: clean check check-eof test test-matrix-quick
 
 test:
-	@echo "Running comprehensive tests (race detector + coverage)..."
+	@echo "Running unit tests (race detector + coverage, excluding integration tests)..."
 	@go test -race -covermode=atomic -coverpkg=./... -coverprofile=coverage.out $(PACKAGES) || exit 1
 	@printf "\nCoverage: "
 	@go tool cover -func=coverage.out | grep total | awk '{print $$3}'
+
+# Integration tests
+integration:
+	@echo "Running all integration tests..."
+	@go test -v -race ./integration/... || exit 1
+
+integration-quick:
+	@echo "Running core integration tests..."
+	@go test -v -run "TestModule|TestAdapter" ./integration/... || exit 1
+
+integration-compose:
+	@echo "Running module composition tests..."
+	@go test -v -run "TestComposition|TestSequential|TestParallel" ./integration/... || exit 1
+
+integration-providers:
+	@echo "Running provider integration tests..."
+	@go test -v -run "TestProvider" ./integration/... || exit 1
+
+integration-performance:
+	@echo "Running performance benchmarks..."
+	@go test -v -bench=. -benchmem ./integration/... || exit 1
+
+integration-coverage:
+	@echo "Running integration tests with coverage of main codebase..."
+	@go test -race -covermode=atomic -coverpkg=./core/...,./module/...,./internal/...,./logging/... -coverprofile=integration_coverage.out ./integration/... || exit 1
+	@printf "\nIntegration Test Coverage (of main codebase): "
+	@go tool cover -func=integration_coverage.out | grep total | awk '{print $$3}'
 
 # Quick test: single model (default)
 test-matrix-quick:
@@ -65,11 +93,18 @@ install-hooks:
 
 help:
 	@printf "DSGo Makefile - Available targets:\n\n"
-	@printf "Testing:\n"
-	@printf "  make test                - Run all tests with race detector and coverage\n"
+	@printf "Unit Tests (excluded from integration tests):\n"
+	@printf "  make test                - Run all unit tests with race detector and coverage\n"
 	@printf "  make test-matrix-quick   - Test examples with 1 model (fast)\n"
 	@printf "  make test-matrix-sample N=3 - Test examples with N random models\n"
 	@printf "  make test-matrix         - Test examples with all models (comprehensive)\n\n"
+	@printf "Integration Tests (separate from unit coverage):\n"
+	@printf "  make integration         - Run all integration tests\n"
+	@printf "  make integration-quick   - Run core integration tests\n"
+	@printf "  make integration-compose - Run module composition tests\n"
+	@printf "  make integration-providers - Run provider integration tests\n"
+	@printf "  make integration-performance - Run performance benchmarks\n"
+	@printf "  make integration-coverage - Run integration tests with separate coverage\n\n"
 	@printf "Code Quality:\n"
 	@printf "  make fmt                 - Check code formatting\n"
 	@printf "  make fmt-fix             - Auto-fix code formatting\n"
@@ -85,5 +120,5 @@ help:
 	@printf "  make clean               - Remove coverage files and test cache\n"
 	@printf "  make install-hooks       - Install git pre-commit hooks\n\n"
 	@printf "Common Workflows:\n"
-	@printf "  make all                 - Clean, check, lint, and test\n"
+	@printf "  make all                 - Clean, check, lint, and unit test\n"
 	@printf "  make all-with-examples   - Above + test examples\n"
