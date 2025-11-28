@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 // ScoringFunction evaluates the quality of a prediction

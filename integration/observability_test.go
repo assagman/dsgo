@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 type contextKey string
@@ -18,23 +18,23 @@ const requestIDKey contextKey = "request_id"
 
 // TestMemoryCollector_BasicCollection tests basic collection functionality
 func TestMemoryCollector_BasicCollection(t *testing.T) {
-	collector := core.NewMemoryCollector(10)
+	collector := dsgo.NewMemoryCollector(10)
 
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:        "test-1",
 		Timestamp: time.Now(),
 		Provider:  "openai",
 		Model:     "gpt-4o",
-		Request: core.RequestMeta{
+		Request: dsgo.RequestMeta{
 			PromptLength: 50,
 			MessageCount: 1,
 			HasTools:     false,
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content:        "Hello world",
 			ResponseLength: 11,
 		},
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 5,
 			TotalTokens:      15,
@@ -66,15 +66,15 @@ func TestMemoryCollector_BasicCollection(t *testing.T) {
 // TestMemoryCollector_RingBuffer tests ring buffer behavior with overflow
 func TestMemoryCollector_RingBuffer(t *testing.T) {
 	const capacity = 3
-	collector := core.NewMemoryCollector(capacity)
+	collector := dsgo.NewMemoryCollector(capacity)
 
 	// Add more entries than capacity
 	for i := 0; i < 5; i++ {
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID:        fmt.Sprintf("test-%d", i),
 			Timestamp: time.Now(),
 			Model:     "gpt-4o",
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     10 + i,
 				CompletionTokens: 5,
 				TotalTokens:      15 + i,
@@ -128,10 +128,10 @@ func TestMemoryCollector_GetLast(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			collector := core.NewMemoryCollector(tt.bufferSize)
+			collector := dsgo.NewMemoryCollector(tt.bufferSize)
 
 			for i := 0; i < tt.numEntries; i++ {
-				entry := &core.HistoryEntry{
+				entry := &dsgo.HistoryEntry{
 					ID:    fmt.Sprintf("entry-%d", i),
 					Model: "gpt-4o",
 				}
@@ -163,7 +163,7 @@ func TestMemoryCollector_GetLast(t *testing.T) {
 
 // TestMemoryCollector_Concurrency tests thread-safe collection
 func TestMemoryCollector_Concurrency(t *testing.T) {
-	collector := core.NewMemoryCollector(1000)
+	collector := dsgo.NewMemoryCollector(1000)
 	const numGoroutines = 10
 	const entriesPerGoroutine = 100
 
@@ -172,10 +172,10 @@ func TestMemoryCollector_Concurrency(t *testing.T) {
 	for g := 0; g < numGoroutines; g++ {
 		go func(id int) {
 			for e := 0; e < entriesPerGoroutine; e++ {
-				entry := &core.HistoryEntry{
+				entry := &dsgo.HistoryEntry{
 					ID:    fmt.Sprintf("g%d-e%d", id, e),
 					Model: "gpt-4o",
-					Usage: core.Usage{
+					Usage: dsgo.Usage{
 						TotalTokens: id*entriesPerGoroutine + e,
 					},
 				}
@@ -202,9 +202,9 @@ func TestMemoryCollector_Concurrency(t *testing.T) {
 
 // TestMemoryCollector_Close tests closing the collector
 func TestMemoryCollector_Close(t *testing.T) {
-	collector := core.NewMemoryCollector(10)
+	collector := dsgo.NewMemoryCollector(10)
 
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:    "test-1",
 		Model: "gpt-4o",
 	}
@@ -237,10 +237,10 @@ func TestHistoryEntry_UsageTracking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry := &core.HistoryEntry{
+			entry := &dsgo.HistoryEntry{
 				ID:    "test-usage",
 				Model: "gpt-4o",
-				Usage: core.Usage{
+				Usage: dsgo.Usage{
 					PromptTokens:     tt.promptTokens,
 					CompletionTokens: tt.completionTokens,
 					TotalTokens:      tt.expectedTotal,
@@ -264,7 +264,7 @@ func TestHistoryEntry_UsageTracking(t *testing.T) {
 
 // TestHistoryEntry_ProviderMetadata tests provider-specific metadata
 func TestHistoryEntry_ProviderMetadata(t *testing.T) {
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:       "test-metadata",
 		Model:    "gpt-4o",
 		Provider: "openai",
@@ -291,14 +291,14 @@ func TestHistoryEntry_ProviderMetadata(t *testing.T) {
 
 // TestHistoryEntry_ErrorTracking tests error tracking in history entries
 func TestHistoryEntry_ErrorTracking(t *testing.T) {
-	errorMeta := &core.ErrorMeta{
+	errorMeta := &dsgo.ErrorMeta{
 		Message:    "Rate limit exceeded",
 		Code:       "rate_limit_exceeded",
 		Type:       "RateLimitError",
 		StatusCode: 429,
 	}
 
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:       "test-error",
 		Model:    "gpt-4o",
 		Provider: "openai",
@@ -332,10 +332,10 @@ func TestHistoryEntry_CacheMetadata(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry := &core.HistoryEntry{
+			entry := &dsgo.HistoryEntry{
 				ID:    "test-cache",
 				Model: "gpt-4o",
-				Cache: core.CacheMeta{
+				Cache: dsgo.CacheMeta{
 					Hit:    tt.hit,
 					Source: tt.source,
 					TTL:    tt.ttl,
@@ -354,20 +354,20 @@ func TestHistoryEntry_CacheMetadata(t *testing.T) {
 
 // TestHistoryEntry_JSONSerialization tests JSON marshaling
 func TestHistoryEntry_JSONSerialization(t *testing.T) {
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:        "test-json",
 		Timestamp: time.Date(2025, 11, 27, 10, 0, 0, 0, time.UTC),
 		Provider:  "openai",
 		Model:     "gpt-4o",
-		Request: core.RequestMeta{
+		Request: dsgo.RequestMeta{
 			PromptLength: 50,
 			MessageCount: 1,
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content:        "Hello",
 			ResponseLength: 5,
 		},
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 5,
 			TotalTokens:      15,
@@ -381,7 +381,7 @@ func TestHistoryEntry_JSONSerialization(t *testing.T) {
 	}
 
 	// Unmarshal back
-	var unmarshaled core.HistoryEntry
+	var unmarshaled dsgo.HistoryEntry
 	if err := json.Unmarshal(data, &unmarshaled); err != nil {
 		t.Fatalf("JSON unmarshal failed: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestHistoryEntry_JSONSerialization(t *testing.T) {
 
 // TestCollector_MultipleProviders tests tracking multiple providers
 func TestCollector_MultipleProviders(t *testing.T) {
-	collector := core.NewMemoryCollector(20)
+	collector := dsgo.NewMemoryCollector(20)
 
 	providers := []string{"openai", "openrouter"}
 	models := map[string][]string{
@@ -413,11 +413,11 @@ func TestCollector_MultipleProviders(t *testing.T) {
 	for _, provider := range providers {
 		for _, model := range models[provider] {
 			for i := 0; i < 3; i++ {
-				entry := &core.HistoryEntry{
+				entry := &dsgo.HistoryEntry{
 					ID:       fmt.Sprintf("%s-%s-%d", provider, model, i),
 					Provider: provider,
 					Model:    model,
-					Usage: core.Usage{
+					Usage: dsgo.Usage{
 						TotalTokens: 100 + entryCount,
 					},
 				}
@@ -449,7 +449,7 @@ func TestCollector_MultipleProviders(t *testing.T) {
 
 // TestCollector_EntryWithToolCalls tests entries with tool calls
 func TestCollector_EntryWithToolCalls(t *testing.T) {
-	toolCalls := []core.ToolCall{
+	toolCalls := []dsgo.ToolCall{
 		{
 			ID:   "tool-call-1",
 			Name: "search",
@@ -459,21 +459,21 @@ func TestCollector_EntryWithToolCalls(t *testing.T) {
 		},
 	}
 
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:       "test-tools",
 		Provider: "openai",
 		Model:    "gpt-4o",
-		Request: core.RequestMeta{
+		Request: dsgo.RequestMeta{
 			HasTools:  true,
 			ToolCount: 1,
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			ToolCalls:     toolCalls,
 			ToolCallCount: 1,
 		},
 	}
 
-	collector := core.NewMemoryCollector(10)
+	collector := dsgo.NewMemoryCollector(10)
 	_ = collector.Collect(entry)
 
 	retrieved := collector.GetAll()[0]
@@ -487,11 +487,11 @@ func TestCollector_EntryWithToolCalls(t *testing.T) {
 
 // TestMemoryCollector_Clear tests clearing the collector
 func TestMemoryCollector_Clear(t *testing.T) {
-	collector := core.NewMemoryCollector(10)
+	collector := dsgo.NewMemoryCollector(10)
 
 	// Add entries
 	for i := 0; i < 5; i++ {
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID:    fmt.Sprintf("test-%d", i),
 			Model: "gpt-4o",
 		}
@@ -503,7 +503,7 @@ func TestMemoryCollector_Clear(t *testing.T) {
 	}
 
 	// Clear should be done through creating a new collector
-	collector = core.NewMemoryCollector(10)
+	collector = dsgo.NewMemoryCollector(10)
 	if collector.Len() != 0 {
 		t.Errorf("Len() after recreate = %d, want 0", collector.Len())
 	}
@@ -514,16 +514,16 @@ func TestMemoryCollector_Clear(t *testing.T) {
 
 // TestMemoryCollector_JSONLOutput tests JSONL-compatible format
 func TestMemoryCollector_JSONLOutput(t *testing.T) {
-	collector := core.NewMemoryCollector(10)
+	collector := dsgo.NewMemoryCollector(10)
 
 	// Add multiple entries
 	for i := 0; i < 3; i++ {
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID:        fmt.Sprintf("entry-%d", i),
 			Timestamp: time.Now(),
 			Provider:  "openai",
 			Model:     "gpt-4o",
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				TotalTokens: 100 + i,
 			},
 		}
@@ -539,7 +539,7 @@ func TestMemoryCollector_JSONLOutput(t *testing.T) {
 		}
 
 		// Verify it's valid JSON and can be unmarshaled
-		var unmarshaled core.HistoryEntry
+		var unmarshaled dsgo.HistoryEntry
 		if err := json.Unmarshal(data, &unmarshaled); err != nil {
 			t.Fatalf("JSON unmarshal failed for entry %s: %v", entry.ID, err)
 		}
@@ -570,7 +570,7 @@ func TestRequestID_Context(t *testing.T) {
 
 // TestObservability_IntegrationFlow tests end-to-end observability flow
 func TestObservability_IntegrationFlow(t *testing.T) {
-	collector := core.NewMemoryCollector(100)
+	collector := dsgo.NewMemoryCollector(100)
 
 	// Simulate a series of LM calls
 	requests := []struct {
@@ -587,27 +587,27 @@ func TestObservability_IntegrationFlow(t *testing.T) {
 	}
 
 	for i, req := range requests {
-		var errorMeta *core.ErrorMeta
+		var errorMeta *dsgo.ErrorMeta
 		if req.status == "rate_limit" {
-			errorMeta = &core.ErrorMeta{
+			errorMeta = &dsgo.ErrorMeta{
 				Message:    "Rate limit exceeded",
 				Code:       "rate_limit_exceeded",
 				StatusCode: 429,
 			}
 		}
 
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID:        fmt.Sprintf("call-%d", i),
 			Timestamp: time.Now(),
 			Provider:  req.provider,
 			Model:     req.model,
-			Request: core.RequestMeta{
+			Request: dsgo.RequestMeta{
 				MessageCount: 1,
 			},
-			Response: core.ResponseMeta{
+			Response: dsgo.ResponseMeta{
 				Content: "response",
 			},
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				TotalTokens: req.tokens,
 			},
 			Error: errorMeta,

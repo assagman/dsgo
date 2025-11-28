@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // TestJSONAdapter_MalformedJSON_RecoveryChain tests JSON adapter with various malformed outputs
@@ -58,11 +58,11 @@ func TestJSONAdapter_MalformedJSON_RecoveryChain(t *testing.T) {
 		},
 	}
 
-	sig := core.NewSignature("test").
-		AddOutput("answer", core.FieldTypeString, "").
-		AddOutput("confidence", core.FieldTypeFloat, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("answer", dsgo.FieldTypeString, "").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "")
 
-	adapter := core.NewJSONAdapter()
+	adapter := dsgo.NewJSONAdapter()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -95,22 +95,22 @@ func TestJSONAdapter_MalformedJSON_RecoveryChain(t *testing.T) {
 func TestJSONAdapter_ComplexNesting(t *testing.T) {
 	tests := []struct {
 		name           string
-		sig            *core.Signature
+		sig            *dsgo.Signature
 		input          string
 		shouldSucceed  bool
 		expectedFields map[string]interface{}
 	}{
 		{
 			name: "Array of strings",
-			sig: core.NewSignature("test").
-				AddOutput("items", core.FieldTypeJSON, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("items", dsgo.FieldTypeJSON, ""),
 			input:         `{"items": ["apple", "banana", "cherry"]}`,
 			shouldSucceed: true,
 		},
 		{
 			name: "Array of objects",
-			sig: core.NewSignature("test").
-				AddOutput("records", core.FieldTypeJSON, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("records", dsgo.FieldTypeJSON, ""),
 			input: `{"records": [
 				{"id": 1, "name": "Alice"},
 				{"id": 2, "name": "Bob"}
@@ -119,8 +119,8 @@ func TestJSONAdapter_ComplexNesting(t *testing.T) {
 		},
 		{
 			name: "Nested objects",
-			sig: core.NewSignature("test").
-				AddOutput("config", core.FieldTypeJSON, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("config", dsgo.FieldTypeJSON, ""),
 			input: `{"config": {
 				"settings": {
 					"enabled": true,
@@ -131,8 +131,8 @@ func TestJSONAdapter_ComplexNesting(t *testing.T) {
 		},
 		{
 			name: "Mixed types in object",
-			sig: core.NewSignature("test").
-				AddOutput("data", core.FieldTypeJSON, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("data", dsgo.FieldTypeJSON, ""),
 			input: `{"data": {
 				"string": "text",
 				"number": 42,
@@ -148,7 +148,7 @@ func TestJSONAdapter_ComplexNesting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adapter := core.NewJSONAdapter()
+			adapter := dsgo.NewJSONAdapter()
 			outputs, err := adapter.Parse(tt.sig, tt.input)
 
 			if tt.shouldSucceed && err != nil {
@@ -175,10 +175,10 @@ func TestJSONAdapter_ComplexNesting(t *testing.T) {
 
 // TestJSONAdapter_LargeOutputs tests JSON adapter with very large responses
 func TestJSONAdapter_LargeOutputs(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("content", core.FieldTypeString, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("content", dsgo.FieldTypeString, "")
 
-	adapter := core.NewJSONAdapter()
+	adapter := dsgo.NewJSONAdapter()
 
 	// Generate a large string (>10KB)
 	largeContent := strings.Repeat("This is a long piece of content. ", 500)
@@ -203,11 +203,11 @@ func TestJSONAdapter_LargeOutputs(t *testing.T) {
 
 // TestChatAdapter_FieldMarkers tests Chat adapter with standard field marker format
 func TestChatAdapter_FieldMarkers(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("answer", core.FieldTypeString, "").
-		AddOutput("sources", core.FieldTypeString, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("answer", dsgo.FieldTypeString, "").
+		AddOutput("sources", dsgo.FieldTypeString, "")
 
-	adapter := core.NewChatAdapter()
+	adapter := dsgo.NewChatAdapter()
 
 	tests := []struct {
 		name      string
@@ -261,10 +261,10 @@ Search results`,
 
 // TestChatAdapter_MalformedMarkers tests Chat adapter with malformed or missing markers
 func TestChatAdapter_MalformedMarkers(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("answer", core.FieldTypeString, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("answer", dsgo.FieldTypeString, "")
 
-	adapter := core.NewChatAdapter()
+	adapter := dsgo.NewChatAdapter()
 
 	tests := []struct {
 		name               string
@@ -314,11 +314,11 @@ yes`,
 
 // TestChatAdapter_ExtraContent tests Chat adapter with extra content around field values
 func TestChatAdapter_ExtraContent(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("answer", core.FieldTypeString, "").
-		AddOutput("confidence", core.FieldTypeFloat, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("answer", dsgo.FieldTypeString, "").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "")
 
-	adapter := core.NewChatAdapter()
+	adapter := dsgo.NewChatAdapter()
 
 	tests := []struct {
 		name    string
@@ -387,9 +387,9 @@ It discusses various points.
 
 // TestTwoStepAdapter_ReasoningExtraction tests TwoStep adapter with reasoning and structured extraction
 func TestTwoStepAdapter_ReasoningExtraction(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("sentiment", core.FieldTypeString, "").
-		AddOutput("confidence", core.FieldTypeFloat, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("sentiment", dsgo.FieldTypeString, "").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "")
 
 	tests := []struct {
 		name               string
@@ -428,7 +428,7 @@ between neutral and positive. Confidence is moderate.`,
 			mockLM := &mockExtractionLM{
 				response: tt.extractionResponse,
 			}
-			adapter := core.NewTwoStepAdapter(mockLM).WithReasoning(true)
+			adapter := dsgo.NewTwoStepAdapter(mockLM).WithReasoning(true)
 
 			outputs, err := adapter.Parse(sig, tt.freeFormResponse)
 
@@ -451,11 +451,11 @@ between neutral and positive. Confidence is moderate.`,
 
 // TestFallbackAdapter_ComplexRecovery tests Fallback adapter in complex failure scenarios
 func TestFallbackAdapter_ComplexRecovery(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("answer", core.FieldTypeString, "").
-		AddOutput("score", core.FieldTypeFloat, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("answer", dsgo.FieldTypeString, "").
+		AddOutput("score", dsgo.FieldTypeFloat, "")
 
-	adapter := core.NewFallbackAdapter()
+	adapter := dsgo.NewFallbackAdapter()
 
 	tests := []struct {
 		name            string
@@ -525,18 +525,18 @@ func TestFallbackAdapter_ComplexRecovery(t *testing.T) {
 func TestAdapter_TypeCoercion_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name          string
-		sig           *core.Signature
+		sig           *dsgo.Signature
 		input         string
-		adapter       core.Adapter
+		adapter       dsgo.Adapter
 		expectedType  string
 		validateValue func(interface{}) bool
 	}{
 		{
 			name: "JSON: String number to int",
-			sig: core.NewSignature("test").
-				AddOutput("count", core.FieldTypeInt, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("count", dsgo.FieldTypeInt, ""),
 			input:        `{"count": "  42  "}`,
-			adapter:      core.NewJSONAdapter(),
+			adapter:      dsgo.NewJSONAdapter(),
 			expectedType: "int",
 			validateValue: func(v interface{}) bool {
 				count, ok := v.(int)
@@ -545,10 +545,10 @@ func TestAdapter_TypeCoercion_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "JSON: Percentage string to float",
-			sig: core.NewSignature("test").
-				AddOutput("score", core.FieldTypeFloat, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("score", dsgo.FieldTypeFloat, ""),
 			input:        `{"score": "95%"}`,
-			adapter:      core.NewJSONAdapter(),
+			adapter:      dsgo.NewJSONAdapter(),
 			expectedType: "float64",
 			validateValue: func(v interface{}) bool {
 				score, ok := v.(float64)
@@ -557,10 +557,10 @@ func TestAdapter_TypeCoercion_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "JSON: Qualitative to numeric",
-			sig: core.NewSignature("test").
-				AddOutput("confidence", core.FieldTypeFloat, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("confidence", dsgo.FieldTypeFloat, ""),
 			input:        `{"confidence": "high"}`,
-			adapter:      core.NewJSONAdapter(),
+			adapter:      dsgo.NewJSONAdapter(),
 			expectedType: "float64",
 			validateValue: func(v interface{}) bool {
 				conf, ok := v.(float64)
@@ -570,15 +570,15 @@ func TestAdapter_TypeCoercion_EdgeCases(t *testing.T) {
 	}
 
 	// Create signature with class field separately to set classes
-	classSig := core.NewSignature("test").
-		AddOutput("category", core.FieldTypeClass, "")
+	classSig := dsgo.NewSignature("test").
+		AddOutput("category", dsgo.FieldTypeClass, "")
 	classSig.OutputFields[0].Classes = []string{"positive", "negative", "neutral"}
 
 	classTests := []struct {
 		name          string
-		sig           *core.Signature
+		sig           *dsgo.Signature
 		input         string
-		adapter       core.Adapter
+		adapter       dsgo.Adapter
 		expectedType  string
 		validateValue func(interface{}) bool
 	}{
@@ -589,7 +589,7 @@ func TestAdapter_TypeCoercion_EdgeCases(t *testing.T) {
 positive
 
 Some explanation here`,
-			adapter:      core.NewChatAdapter(),
+			adapter:      dsgo.NewChatAdapter(),
 			expectedType: "string",
 			validateValue: func(v interface{}) bool {
 				cat, ok := v.(string)
@@ -629,10 +629,10 @@ Some explanation here`,
 
 // TestAdapter_Metadata_Tracking tests adapter metadata tracking
 func TestAdapter_Metadata_Tracking(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("answer", core.FieldTypeString, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("answer", dsgo.FieldTypeString, "")
 
-	adapter := core.NewFallbackAdapter()
+	adapter := dsgo.NewFallbackAdapter()
 
 	tests := []struct {
 		name                     string
@@ -690,11 +690,11 @@ func TestAdapter_Metadata_Tracking(t *testing.T) {
 
 // TestAdapter_CaseInsensitivity_ClassFields tests case-insensitive class field matching
 func TestAdapter_CaseInsensitivity_ClassFields(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("sentiment", core.FieldTypeClass, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("sentiment", dsgo.FieldTypeClass, "")
 	sig.OutputFields[0].Classes = []string{"positive", "negative", "neutral"}
 
-	adapter := core.NewChatAdapter()
+	adapter := dsgo.NewChatAdapter()
 
 	tests := []struct {
 		name     string
@@ -746,40 +746,40 @@ func TestAdapter_CaseInsensitivity_ClassFields(t *testing.T) {
 
 // TestAdapter_IntegrationWithModule tests adapter robustness in actual module usage
 func TestAdapter_IntegrationWithModule(t *testing.T) {
-	sig := core.NewSignature("Generate").
-		AddInput("topic", core.FieldTypeString, "").
-		AddOutput("content", core.FieldTypeString, "")
+	sig := dsgo.NewSignature("Generate").
+		AddInput("topic", dsgo.FieldTypeString, "").
+		AddOutput("content", dsgo.FieldTypeString, "")
 
 	tests := []struct {
 		name       string
 		lmResponse string
-		adapter    core.Adapter
+		adapter    dsgo.Adapter
 		shouldWork bool
 	}{
 		{
 			name: "Chat adapter with markers",
 			lmResponse: `[[ ## content ## ]]
 This is the generated content about the topic.`,
-			adapter:    core.NewChatAdapter(),
+			adapter:    dsgo.NewChatAdapter(),
 			shouldWork: true,
 		},
 		{
 			name:       "JSON adapter with valid JSON",
 			lmResponse: `{"content": "This is the generated content about the topic."}`,
-			adapter:    core.NewJSONAdapter(),
+			adapter:    dsgo.NewJSONAdapter(),
 			shouldWork: true,
 		},
 		{
 			name: "Fallback adapter with Chat format",
 			lmResponse: `[[ ## content ## ]]
 Generated content here.`,
-			adapter:    core.NewFallbackAdapter(),
+			adapter:    dsgo.NewFallbackAdapter(),
 			shouldWork: true,
 		},
 		{
 			name:       "Fallback adapter with JSON format",
 			lmResponse: `{"content": "Generated content here."}`,
-			adapter:    core.NewFallbackAdapter(),
+			adapter:    dsgo.NewFallbackAdapter(),
 			shouldWork: true,
 		},
 	}
@@ -809,10 +809,10 @@ Generated content here.`,
 
 // TestAdapter_JSONRepair tests JSON repair functionality
 func TestAdapter_JSONRepair(t *testing.T) {
-	sig := core.NewSignature("test").
-		AddOutput("answer", core.FieldTypeString, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("answer", dsgo.FieldTypeString, "")
 
-	adapter := core.NewJSONAdapter()
+	adapter := dsgo.NewJSONAdapter()
 
 	// Test cases for JSON repair
 	tests := []struct {
@@ -863,13 +863,13 @@ type mockExtractionLM struct {
 	err      error
 }
 
-func (m *mockExtractionLM) Generate(_ context.Context, _ []core.Message, _ *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *mockExtractionLM) Generate(_ context.Context, _ []dsgo.Message, _ *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: m.response,
-		Usage:   core.Usage{},
+		Usage:   dsgo.Usage{},
 	}, nil
 }
 
@@ -889,8 +889,8 @@ func (m *mockExtractionLM) IsOpenAI() bool {
 	return false
 }
 
-func (m *mockExtractionLM) Stream(_ context.Context, _ []core.Message, _ *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *mockExtractionLM) Stream(_ context.Context, _ []dsgo.Message, _ *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -903,7 +903,7 @@ func (m *mockExtractionLM) Stream(_ context.Context, _ []core.Message, _ *core.G
 			return
 		}
 
-		chunkChan <- core.Chunk{
+		chunkChan <- dsgo.Chunk{
 			Content:      result.Content,
 			FinishReason: result.FinishReason,
 			Usage:        result.Usage,
@@ -920,98 +920,98 @@ func (m *mockExtractionLM) Stream(_ context.Context, _ []core.Message, _ *core.G
 func TestAdapter_UnicodeHandling(t *testing.T) {
 	tests := []struct {
 		name     string
-		sig      *core.Signature
+		sig      *dsgo.Signature
 		input    string
-		adapter  core.Adapter
+		adapter  dsgo.Adapter
 		expected map[string]string
 	}{
 		{
 			name: "Emoji in output",
-			sig: core.NewSignature("test").
-				AddOutput("reaction", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("reaction", dsgo.FieldTypeString, ""),
 			input:   `{"reaction": "Great job! 🎉👏🚀"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			expected: map[string]string{
 				"reaction": "Great job! 🎉👏🚀",
 			},
 		},
 		{
 			name: "CJK characters (Chinese)",
-			sig: core.NewSignature("test").
-				AddOutput("translation", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("translation", dsgo.FieldTypeString, ""),
 			input:   `{"translation": "这是一个测试。中文字符处理。"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			expected: map[string]string{
 				"translation": "这是一个测试。中文字符处理。",
 			},
 		},
 		{
 			name: "CJK characters (Japanese)",
-			sig: core.NewSignature("test").
-				AddOutput("translation", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("translation", dsgo.FieldTypeString, ""),
 			input:   `{"translation": "これはテストです。日本語の文字。"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			expected: map[string]string{
 				"translation": "これはテストです。日本語の文字。",
 			},
 		},
 		{
 			name: "CJK characters (Korean)",
-			sig: core.NewSignature("test").
-				AddOutput("translation", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("translation", dsgo.FieldTypeString, ""),
 			input:   `{"translation": "이것은 테스트입니다. 한국어 문자."}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			expected: map[string]string{
 				"translation": "이것은 테스트입니다. 한국어 문자.",
 			},
 		},
 		{
 			name: "RTL text (Arabic)",
-			sig: core.NewSignature("test").
-				AddOutput("text", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("text", dsgo.FieldTypeString, ""),
 			input:   `{"text": "هذا اختبار. النص العربي من اليمين إلى اليسار."}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			expected: map[string]string{
 				"text": "هذا اختبار. النص العربي من اليمين إلى اليسار.",
 			},
 		},
 		{
 			name: "RTL text (Hebrew)",
-			sig: core.NewSignature("test").
-				AddOutput("text", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("text", dsgo.FieldTypeString, ""),
 			input:   `{"text": "זהו מבחן. טקסט עברי מימין לשמאל."}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			expected: map[string]string{
 				"text": "זהו מבחן. טקסט עברי מימין לשמאל.",
 			},
 		},
 		{
 			name: "Mixed Unicode with Chat adapter",
-			sig: core.NewSignature("test").
-				AddOutput("message", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("message", dsgo.FieldTypeString, ""),
 			input: `[[ ## message ## ]]
 Hello 你好 مرحبا שלום 🌍`,
-			adapter: core.NewChatAdapter(),
+			adapter: dsgo.NewChatAdapter(),
 			expected: map[string]string{
 				"message": "Hello 你好 مرحبا שלום 🌍",
 			},
 		},
 		{
 			name: "Emoji sequences and skin tones",
-			sig: core.NewSignature("test").
-				AddOutput("emoji", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("emoji", dsgo.FieldTypeString, ""),
 			input:   `{"emoji": "👨‍👩‍👧‍👦 👋🏽 🏳️‍🌈"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			expected: map[string]string{
 				"emoji": "👨‍👩‍👧‍👦 👋🏽 🏳️‍🌈",
 			},
 		},
 		{
 			name: "Special Unicode characters",
-			sig: core.NewSignature("test").
-				AddOutput("special", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("special", dsgo.FieldTypeString, ""),
 			input:   `{"special": "© ® ™ € £ ¥ § † ‡ • … — –"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			expected: map[string]string{
 				"special": "© ® ™ € £ ¥ § † ‡ • … — –",
 			},
@@ -1047,42 +1047,42 @@ func TestAdapter_VeryLargeOutputs(t *testing.T) {
 	tests := []struct {
 		name           string
 		contentSizeKB  int
-		adapter        core.Adapter
+		adapter        dsgo.Adapter
 		useMarkers     bool
 		validateLength bool
 	}{
 		{
 			name:           "100KB JSON response",
 			contentSizeKB:  100,
-			adapter:        core.NewJSONAdapter(),
+			adapter:        dsgo.NewJSONAdapter(),
 			useMarkers:     false,
 			validateLength: true,
 		},
 		{
 			name:           "100KB Chat response",
 			contentSizeKB:  100,
-			adapter:        core.NewChatAdapter(),
+			adapter:        dsgo.NewChatAdapter(),
 			useMarkers:     true,
 			validateLength: true,
 		},
 		{
 			name:           "200KB Fallback response",
 			contentSizeKB:  200,
-			adapter:        core.NewFallbackAdapter(),
+			adapter:        dsgo.NewFallbackAdapter(),
 			useMarkers:     false,
 			validateLength: true,
 		},
 		{
 			name:           "500KB large response",
 			contentSizeKB:  500,
-			adapter:        core.NewJSONAdapter(),
+			adapter:        dsgo.NewJSONAdapter(),
 			useMarkers:     false,
 			validateLength: true,
 		},
 	}
 
-	sig := core.NewSignature("test").
-		AddOutput("content", core.FieldTypeString, "")
+	sig := dsgo.NewSignature("test").
+		AddOutput("content", dsgo.FieldTypeString, "")
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1136,7 +1136,7 @@ func TestAdapter_VeryLargeOutputs(t *testing.T) {
 func TestAdapter_MixedFieldMarkers(t *testing.T) {
 	tests := []struct {
 		name            string
-		sig             *core.Signature
+		sig             *dsgo.Signature
 		input           string
 		expectedAdapter string
 		shouldSucceed   bool
@@ -1144,9 +1144,9 @@ func TestAdapter_MixedFieldMarkers(t *testing.T) {
 	}{
 		{
 			name: "Chat markers followed by JSON",
-			sig: core.NewSignature("test").
-				AddOutput("answer", core.FieldTypeString, "").
-				AddOutput("score", core.FieldTypeFloat, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("answer", dsgo.FieldTypeString, "").
+				AddOutput("score", dsgo.FieldTypeFloat, ""),
 			input: `[[ ## answer ## ]]
 yes
 
@@ -1164,8 +1164,8 @@ Here's also some JSON: {"score": 0.95}
 		},
 		{
 			name: "JSON with embedded Chat-like markers",
-			sig: core.NewSignature("test").
-				AddOutput("content", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("content", dsgo.FieldTypeString, ""),
 			input:           `{"content": "Example: [[ ## field ## ]]\nvalue"}`,
 			expectedAdapter: "json",
 			shouldSucceed:   true,
@@ -1176,9 +1176,9 @@ Here's also some JSON: {"score": 0.95}
 		},
 		{
 			name: "Markdown JSON block with Chat markers after",
-			sig: core.NewSignature("test").
-				AddOutput("data", core.FieldTypeJSON, "").
-				AddOutput("summary", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("data", dsgo.FieldTypeJSON, "").
+				AddOutput("summary", dsgo.FieldTypeString, ""),
 			input:           "```json\n{\"data\": {\"key\": \"value\"}}\n```\n\n[[ ## summary ## ]]\nThis is a summary",
 			expectedAdapter: "json",
 			shouldSucceed:   true,
@@ -1189,16 +1189,16 @@ Here's also some JSON: {"score": 0.95}
 		},
 		{
 			name: "Fallback adapter with ambiguous format",
-			sig: core.NewSignature("test").
-				AddOutput("result", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("result", dsgo.FieldTypeString, ""),
 			input:           `result: The answer is {"value": 42}`,
 			expectedAdapter: "fallback",
 			shouldSucceed:   false,
 		},
 		{
 			name: "JSON wrapped in Chat markers",
-			sig: core.NewSignature("test").
-				AddOutput("data", core.FieldTypeJSON, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("data", dsgo.FieldTypeJSON, ""),
 			input: `[[ ## data ## ]]
 {"nested": {"key": "value", "array": [1, 2, 3]}}`,
 			expectedAdapter: "chat",
@@ -1212,7 +1212,7 @@ Here's also some JSON: {"score": 0.95}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adapter := core.NewFallbackAdapter()
+			adapter := dsgo.NewFallbackAdapter()
 			outputs, err := adapter.Parse(tt.sig, tt.input)
 
 			if tt.shouldSucceed {
@@ -1238,17 +1238,17 @@ Here's also some JSON: {"score": 0.95}
 func TestAdapter_NestedJSONEscape(t *testing.T) {
 	tests := []struct {
 		name            string
-		sig             *core.Signature
+		sig             *dsgo.Signature
 		input           string
-		adapter         core.Adapter
+		adapter         dsgo.Adapter
 		validateOutputs func(map[string]any) bool
 	}{
 		{
 			name: "Escaped quotes in string",
-			sig: core.NewSignature("test").
-				AddOutput("text", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("text", dsgo.FieldTypeString, ""),
 			input:   `{"text": "He said \"Hello, World!\" to everyone."}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				text, ok := outputs["text"].(string)
 				return ok && strings.Contains(text, `"Hello, World!"`)
@@ -1256,10 +1256,10 @@ func TestAdapter_NestedJSONEscape(t *testing.T) {
 		},
 		{
 			name: "Escaped newlines and tabs",
-			sig: core.NewSignature("test").
-				AddOutput("code", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("code", dsgo.FieldTypeString, ""),
 			input:   `{"code": "function test() {\n\treturn true;\n}"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				code, ok := outputs["code"].(string)
 				return ok && strings.Contains(code, "\n") && strings.Contains(code, "\t")
@@ -1267,10 +1267,10 @@ func TestAdapter_NestedJSONEscape(t *testing.T) {
 		},
 		{
 			name: "Escaped backslashes",
-			sig: core.NewSignature("test").
-				AddOutput("path", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("path", dsgo.FieldTypeString, ""),
 			input:   `{"path": "C:\\Users\\test\\Documents\\file.txt"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				path, ok := outputs["path"].(string)
 				return ok && path == `C:\Users\test\Documents\file.txt`
@@ -1278,10 +1278,10 @@ func TestAdapter_NestedJSONEscape(t *testing.T) {
 		},
 		{
 			name: "Nested JSON as string",
-			sig: core.NewSignature("test").
-				AddOutput("config", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("config", dsgo.FieldTypeString, ""),
 			input:   `{"config": "{\"database\": {\"host\": \"localhost\", \"port\": 5432}}"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				config, ok := outputs["config"].(string)
 				return ok && strings.Contains(config, `"database"`) && strings.Contains(config, `"host"`)
@@ -1289,10 +1289,10 @@ func TestAdapter_NestedJSONEscape(t *testing.T) {
 		},
 		{
 			name: "Unicode escapes",
-			sig: core.NewSignature("test").
-				AddOutput("text", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("text", dsgo.FieldTypeString, ""),
 			input:   `{"text": "Hello \u4e16\u754c (world in Chinese)"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				text, ok := outputs["text"].(string)
 				return ok && strings.Contains(text, "世界")
@@ -1300,10 +1300,10 @@ func TestAdapter_NestedJSONEscape(t *testing.T) {
 		},
 		{
 			name: "Mixed escape sequences",
-			sig: core.NewSignature("test").
-				AddOutput("complex", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("complex", dsgo.FieldTypeString, ""),
 			input:   `{"complex": "Line1\nLine2\tTabbed\r\nWindows line\u0020space"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				complex, ok := outputs["complex"].(string)
 				return ok && strings.Contains(complex, "\n") && strings.Contains(complex, "\t")
@@ -1311,10 +1311,10 @@ func TestAdapter_NestedJSONEscape(t *testing.T) {
 		},
 		{
 			name: "Deeply nested JSON object",
-			sig: core.NewSignature("test").
-				AddOutput("data", core.FieldTypeJSON, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("data", dsgo.FieldTypeJSON, ""),
 			input:   `{"data": {"level1": {"level2": {"level3": {"level4": {"value": "deep"}}}}}}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				data, ok := outputs["data"].(map[string]any)
 				if !ok {
@@ -1342,10 +1342,10 @@ func TestAdapter_NestedJSONEscape(t *testing.T) {
 		},
 		{
 			name: "JSON with escaped forward slashes",
-			sig: core.NewSignature("test").
-				AddOutput("url", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("url", dsgo.FieldTypeString, ""),
 			input:   `{"url": "https:\/\/example.com\/path\/to\/resource"}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				url, ok := outputs["url"].(string)
 				return ok && url == "https://example.com/path/to/resource"
@@ -1353,14 +1353,14 @@ func TestAdapter_NestedJSONEscape(t *testing.T) {
 		},
 		{
 			name: "Chat adapter with escaped content",
-			sig: core.NewSignature("test").
-				AddOutput("code", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("code", dsgo.FieldTypeString, ""),
 			input: `[[ ## code ## ]]
 func example() {
 	fmt.Println("Hello, \"World\"")
 	path := "C:\\Users\\test"
 }`,
-			adapter: core.NewChatAdapter(),
+			adapter: dsgo.NewChatAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				code, ok := outputs["code"].(string)
 				return ok && strings.Contains(code, "func example()")
@@ -1368,10 +1368,10 @@ func example() {
 		},
 		{
 			name: "Empty string value",
-			sig: core.NewSignature("test").
-				AddOutput("empty", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("empty", dsgo.FieldTypeString, ""),
 			input:   `{"empty": ""}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				empty, ok := outputs["empty"].(string)
 				return ok && empty == ""
@@ -1379,10 +1379,10 @@ func example() {
 		},
 		{
 			name: "String with only escape characters",
-			sig: core.NewSignature("test").
-				AddOutput("escapes", core.FieldTypeString, ""),
+			sig: dsgo.NewSignature("test").
+				AddOutput("escapes", dsgo.FieldTypeString, ""),
 			input:   `{"escapes": "\n\t\r\\\""}`,
-			adapter: core.NewJSONAdapter(),
+			adapter: dsgo.NewJSONAdapter(),
 			validateOutputs: func(outputs map[string]any) bool {
 				escapes, ok := outputs["escapes"].(string)
 				return ok && strings.Contains(escapes, "\"")

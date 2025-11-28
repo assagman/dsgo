@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/jsonutil"
+	"github.com/assagman/dsgo/internal/logging"
 	"github.com/assagman/dsgo/internal/retry"
-	"github.com/assagman/dsgo/logging"
 )
 
 func init() {

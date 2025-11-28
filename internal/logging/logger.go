@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 type contextKey string

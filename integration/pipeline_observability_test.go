@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 type pipelineContextKey string
@@ -32,14 +31,14 @@ func TestPipeline_RequestIDPropagation(t *testing.T) {
 	ctx = context.WithValue(ctx, pipelineRequestIDKey, requestID)
 
 	sig := fixtures.SimplePredictSig()
-	collector := core.NewMemoryCollector(100)
+	collector := dsgo.NewMemoryCollector(100)
 
 	// Create 5 modules in sequence
-	modules := make([]*module.Predict, 5)
+	modules := make([]*dsgo.Predict, 5)
 	for i := 0; i < 5; i++ {
 		lm := &PipelineObsLM{
 			FinalResponse: `{"answer": "stage result"}`,
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     10 + i*5,
 				CompletionTokens: 5 + i*2,
 				TotalTokens:      15 + i*7,
@@ -48,7 +47,7 @@ func TestPipeline_RequestIDPropagation(t *testing.T) {
 			Collector: collector,
 			RequestID: requestID,
 		}
-		modules[i] = module.NewPredict(sig, lm)
+		modules[i] = dsgo.NewPredict(sig, lm)
 	}
 
 	// Execute pipeline - each module gets same input type
@@ -102,7 +101,7 @@ func TestPipeline_CostAggregation(t *testing.T) {
 			Response: `{"answer": "stage result"}`,
 			Cost:     cost,
 		}
-		pred := module.NewPredict(sig, lm)
+		pred := dsgo.NewPredict(sig, lm)
 
 		result, err := pred.Forward(ctx, map[string]any{"question": "test"})
 		if err != nil {
@@ -161,7 +160,7 @@ func TestPipeline_CostAggregation_TableDriven(t *testing.T) {
 					Response: `{"answer": "result"}`,
 					Cost:     cost,
 				}
-				pred := module.NewPredict(sig, lm)
+				pred := dsgo.NewPredict(sig, lm)
 
 				result, err := pred.Forward(ctx, map[string]any{"question": "test"})
 				if err != nil {
@@ -207,7 +206,7 @@ func TestPipeline_LatencyTracking(t *testing.T) {
 			Response: `{"answer": "result"}`,
 			Delay:    delay,
 		}
-		pred := module.NewPredict(sig, lm)
+		pred := dsgo.NewPredict(sig, lm)
 
 		start := time.Now()
 		result, err := pred.Forward(ctx, map[string]any{"question": "test"})
@@ -246,7 +245,7 @@ func TestPipeline_ErrorOriginTracking(t *testing.T) {
 	sig := fixtures.SimplePredictSig()
 
 	// Create modules where middle one fails
-	modules := []core.LM{
+	modules := []dsgo.LM{
 		NewMockLMWithResponse(`{"answer": "stage1"}`),
 		NewMockLMWithResponse(`{"answer": "stage2"}`),
 		NewAlwaysFailLM("mid-pipeline-error"),
@@ -257,7 +256,7 @@ func TestPipeline_ErrorOriginTracking(t *testing.T) {
 	var lastError error
 
 	for i, lm := range modules {
-		pred := module.NewPredict(sig, lm)
+		pred := dsgo.NewPredict(sig, lm)
 
 		_, err := pred.Forward(ctx, map[string]any{"question": "test"})
 		if err != nil {
@@ -316,14 +315,14 @@ func TestPipeline_ErrorOriginTracking_TableDriven(t *testing.T) {
 			successfulStages := 0
 
 			for i := 0; i < tt.totalStages; i++ {
-				var lm core.LM
+				var lm dsgo.LM
 				if i == tt.errorAtStage {
 					lm = NewAlwaysFailLM("planned-error")
 				} else {
 					lm = NewMockLMWithResponse(`{"answer": "result"}`)
 				}
 
-				pred := module.NewPredict(sig, lm)
+				pred := dsgo.NewPredict(sig, lm)
 				_, err := pred.Forward(ctx, map[string]any{"question": "test"})
 				if err != nil {
 					break
@@ -346,15 +345,15 @@ func TestPipeline_ErrorOriginTracking_TableDriven(t *testing.T) {
 // PipelineObsLM is a mock that supports observability features for pipeline tests
 type PipelineObsLM struct {
 	FinalResponse string
-	Usage         core.Usage
-	Collector     core.Collector
+	Usage         dsgo.Usage
+	Collector     dsgo.Collector
 	RequestID     string
 }
 
-func (m *PipelineObsLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *PipelineObsLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	// Record to collector if available
 	if m.Collector != nil {
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID:           "obs-test-" + time.Now().Format("20060102150405.000"),
 			Timestamp:    time.Now(),
 			Provider:     "mock",
@@ -365,15 +364,15 @@ func (m *PipelineObsLM) Generate(ctx context.Context, messages []core.Message, o
 		_ = m.Collector.Collect(entry)
 	}
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      m.FinalResponse,
 		FinishReason: "stop",
 		Usage:        m.Usage,
 	}, nil
 }
 
-func (m *PipelineObsLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *PipelineObsLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -383,7 +382,7 @@ func (m *PipelineObsLM) Stream(ctx context.Context, messages []core.Message, opt
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -399,11 +398,11 @@ type CostTrackingMockLM struct {
 	Cost     float64
 }
 
-func (m *CostTrackingMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-	return &core.GenerateResult{
+func (m *CostTrackingMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	return &dsgo.GenerateResult{
 		Content:      m.Response,
 		FinishReason: "stop",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 5,
 			TotalTokens:      15,
@@ -412,8 +411,8 @@ func (m *CostTrackingMockLM) Generate(ctx context.Context, messages []core.Messa
 	}, nil
 }
 
-func (m *CostTrackingMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *CostTrackingMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -423,7 +422,7 @@ func (m *CostTrackingMockLM) Stream(ctx context.Context, messages []core.Message
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -440,7 +439,7 @@ type LatencyMockLM struct {
 	callCount int32
 }
 
-func (m *LatencyMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *LatencyMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	start := time.Now()
 
@@ -449,10 +448,10 @@ func (m *LatencyMockLM) Generate(ctx context.Context, messages []core.Message, o
 		return nil, ctx.Err()
 	case <-time.After(m.Delay):
 		latencyMs := time.Since(start).Milliseconds()
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      m.Response,
 			FinishReason: "stop",
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     10,
 				CompletionTokens: 5,
 				TotalTokens:      15,
@@ -462,8 +461,8 @@ func (m *LatencyMockLM) Generate(ctx context.Context, messages []core.Message, o
 	}
 }
 
-func (m *LatencyMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *LatencyMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -473,7 +472,7 @@ func (m *LatencyMockLM) Stream(ctx context.Context, messages []core.Message, opt
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }

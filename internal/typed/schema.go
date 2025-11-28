@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 // StructToSignature converts a struct type with dsgo tags to a Signature

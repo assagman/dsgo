@@ -4,9 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // TestE2E_TicketRouting simulates customer support ticket routing workflow.
@@ -21,7 +20,7 @@ func TestE2E_TicketRouting(t *testing.T) {
 	// Stage 1: Sentiment classification
 	sentimentLM := NewMockLMWithResponse(`{"answer": "negative"}`)
 	sentimentSig := fixtures.SimplePredictSig()
-	sentimentClassifier := module.NewPredict(sentimentSig, sentimentLM)
+	sentimentClassifier := dsgo.NewPredict(sentimentSig, sentimentLM)
 
 	sentimentResult, err := sentimentClassifier.Forward(ctx, map[string]any{
 		"question": "This product is broken and support is useless",
@@ -38,7 +37,7 @@ func TestE2E_TicketRouting(t *testing.T) {
 	// Stage 2: Intent extraction
 	intentLM := NewMockLMWithResponse(`{"answer": "complaint"}`)
 	intentSig := fixtures.SimplePredictSig()
-	intentExtractor := module.NewPredict(intentSig, intentLM)
+	intentExtractor := dsgo.NewPredict(intentSig, intentLM)
 
 	intentResult, err := intentExtractor.Forward(ctx, map[string]any{
 		"question": "What type of issue is this?",
@@ -58,7 +57,7 @@ func TestE2E_TicketRouting(t *testing.T) {
 		"answer": "We sincerely apologize for your experience. Our team will investigate immediately."
 	}`)
 	responseSig := fixtures.ChainOfThoughtSig()
-	responseGenerator := module.NewChainOfThought(responseSig, responseLM)
+	responseGenerator := dsgo.NewChainOfThought(responseSig, responseLM)
 
 	responseResult, err := responseGenerator.Forward(ctx, map[string]any{
 		"problem": "Generate support response",
@@ -102,7 +101,7 @@ func TestE2E_DocumentAnalysisPipeline(t *testing.T) {
 	// Stage 1: Extract key information
 	extractLM := NewMockLMWithResponse(`{"answer": "Author: John Doe, Date: 2025-01-01, Topic: AI Safety"}`)
 	extractSig := fixtures.SimplePredictSig()
-	extractor := module.NewPredict(extractSig, extractLM)
+	extractor := dsgo.NewPredict(extractSig, extractLM)
 
 	extractResult, err := extractor.Forward(ctx, map[string]any{
 		"question": "Extract key information from document",
@@ -122,7 +121,7 @@ func TestE2E_DocumentAnalysisPipeline(t *testing.T) {
 		"answer": "Document provides comprehensive overview of AI safety considerations in deployment."
 	}`)
 	summarySig := fixtures.ChainOfThoughtSig()
-	summarizer := module.NewChainOfThought(summarySig, summaryLM)
+	summarizer := dsgo.NewChainOfThought(summarySig, summaryLM)
 
 	summaryResult, err := summarizer.Forward(ctx, map[string]any{
 		"problem": "Summarize document",
@@ -139,7 +138,7 @@ func TestE2E_DocumentAnalysisPipeline(t *testing.T) {
 	// Stage 3: Identify risks (use simple Predict instead of BestOfN to avoid scorer requirement)
 	riskLM := NewMockLMWithResponse(`{"answer": "Critical risk: Insufficient safety testing"}`)
 	riskSig := fixtures.SimplePredictSig()
-	riskAnalyzer := module.NewPredict(riskSig, riskLM)
+	riskAnalyzer := dsgo.NewPredict(riskSig, riskLM)
 
 	riskResult, err := riskAnalyzer.Forward(ctx, map[string]any{
 		"question": "Identify top risk",
@@ -178,7 +177,7 @@ func TestE2E_CreativeGeneration(t *testing.T) {
 	// Stage 1: Generate draft
 	draftLM := NewMockLMWithResponse(`{"answer": "Once upon a time, there was a curious explorer..."}`)
 	draftSig := fixtures.SimplePredictSig()
-	draftGen := module.NewPredict(draftSig, draftLM)
+	draftGen := dsgo.NewPredict(draftSig, draftLM)
 
 	draftResult, err := draftGen.Forward(ctx, map[string]any{
 		"question": "Write creative opening",
@@ -195,7 +194,7 @@ func TestE2E_CreativeGeneration(t *testing.T) {
 	// Stage 2: Refine using Refine module
 	refineLM := NewMockLMWithResponse(`{"answer": "In a land of mystery and wonder, an intrepid explorer ventured forth..."}`)
 	refineSig := fixtures.SimplePredictSig()
-	refiner := module.NewRefine(refineSig, refineLM)
+	refiner := dsgo.NewRefine(refineSig, refineLM)
 
 	refineResult, err := refiner.Forward(ctx, map[string]any{
 		"question": "Refine the draft",
@@ -212,7 +211,7 @@ func TestE2E_CreativeGeneration(t *testing.T) {
 	// Stage 3: Parallel critiques (simulated with sequential execution)
 	critic1LM := NewMockLMWithResponse(`{"answer": "Good atmosphere, needs stronger character development"}`)
 	critic1Sig := fixtures.SimplePredictSig()
-	critic1 := module.NewPredict(critic1Sig, critic1LM)
+	critic1 := dsgo.NewPredict(critic1Sig, critic1LM)
 
 	critique1Result, err := critic1.Forward(ctx, map[string]any{
 		"question": "Critique the refined version",
@@ -228,7 +227,7 @@ func TestE2E_CreativeGeneration(t *testing.T) {
 
 	critic2LM := NewMockLMWithResponse(`{"answer": "Excellent pacing, world-building could be expanded"}`)
 	critic2Sig := fixtures.SimplePredictSig()
-	critic2 := module.NewPredict(critic2Sig, critic2LM)
+	critic2 := dsgo.NewPredict(critic2Sig, critic2LM)
 
 	critique2Result, err := critic2.Forward(ctx, map[string]any{
 		"question": "Critique the refined version",
@@ -245,7 +244,7 @@ func TestE2E_CreativeGeneration(t *testing.T) {
 	// Stage 4: Final version using critiques
 	finalLM := NewMockLMWithResponse(`{"answer": "Final polished version incorporating feedback: In a land of mystery and wonder, inhabited by complex characters, an intrepid explorer ventured forth..."}`)
 	finalSig := fixtures.SimplePredictSig()
-	finalGen := module.NewPredict(finalSig, finalLM)
+	finalGen := dsgo.NewPredict(finalSig, finalLM)
 
 	finalResult, err := finalGen.Forward(ctx, map[string]any{
 		"question": "Create final version",
@@ -274,7 +273,7 @@ func TestE2E_BatchProcessing(t *testing.T) {
 	lm := NewMockLMWithResponse(`{"answer": "processed"}`)
 	sig := fixtures.SimplePredictSig()
 
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	batchSize := 10
 	var totalCost float64
@@ -318,7 +317,7 @@ func TestE2E_ConditionalRouting(t *testing.T) {
 	// Stage 1: Classify input type
 	classifyLM := NewMockLMWithResponse(`{"answer": "technical_question"}`)
 	classifySig := fixtures.SimplePredictSig()
-	classifier := module.NewPredict(classifySig, classifyLM)
+	classifier := dsgo.NewPredict(classifySig, classifyLM)
 
 	classifyResult, err := classifier.Forward(ctx, map[string]any{
 		"question": "Is this technical or general?",
@@ -333,7 +332,7 @@ func TestE2E_ConditionalRouting(t *testing.T) {
 	}
 
 	// Stage 2: Route to specialized handler
-	var finalResult *core.Prediction
+	var finalResult *dsgo.Prediction
 
 	if inputType == "technical_question" {
 		// Use ChainOfThought for complex reasoning
@@ -342,7 +341,7 @@ func TestE2E_ConditionalRouting(t *testing.T) {
 			"answer": "The issue stems from incorrect configuration in the load balancer."
 		}`)
 		techSig := fixtures.ChainOfThoughtSig()
-		techHandler := module.NewChainOfThought(techSig, techLM)
+		techHandler := dsgo.NewChainOfThought(techSig, techLM)
 
 		var err error
 		finalResult, err = techHandler.Forward(ctx, map[string]any{
@@ -355,7 +354,7 @@ func TestE2E_ConditionalRouting(t *testing.T) {
 		// Use simple Predict for general questions
 		generalLM := NewMockLMWithResponse(`{"answer": "This is a general response."}`)
 		generalSig := fixtures.SimplePredictSig()
-		generalHandler := module.NewPredict(generalSig, generalLM)
+		generalHandler := dsgo.NewPredict(generalSig, generalLM)
 
 		var err error
 		finalResult, err = generalHandler.Forward(ctx, map[string]any{
@@ -391,7 +390,7 @@ func TestE2E_ErrorRecoveryPipeline(t *testing.T) {
 		Error: nil, // Will fail
 	}
 	complexSig := fixtures.SimplePredictSig()
-	complexAnalyzer := module.NewPredict(complexSig, complexLM)
+	complexAnalyzer := dsgo.NewPredict(complexSig, complexLM)
 
 	_, err := complexAnalyzer.Forward(ctx, map[string]any{
 		"question": "Complex analysis",
@@ -401,7 +400,7 @@ func TestE2E_ErrorRecoveryPipeline(t *testing.T) {
 	// Stage 2: Fallback to simpler analysis
 	simpleLM := NewMockLMWithResponse(`{"answer": "Simplified analysis result"}`)
 	simpleSig := fixtures.SimplePredictSig()
-	simpleAnalyzer := module.NewPredict(simpleSig, simpleLM)
+	simpleAnalyzer := dsgo.NewPredict(simpleSig, simpleLM)
 
 	simpleResult, err := simpleAnalyzer.Forward(ctx, map[string]any{
 		"question": "Simple analysis",
@@ -418,7 +417,7 @@ func TestE2E_ErrorRecoveryPipeline(t *testing.T) {
 	// Stage 3: Continue with downstream processing
 	reportLM := NewMockLMWithResponse(`{"answer": "Final report generated"}`)
 	reportSig := fixtures.SimplePredictSig()
-	reporter := module.NewPredict(reportSig, reportLM)
+	reporter := dsgo.NewPredict(reportSig, reportLM)
 
 	reportResult, err := reporter.Forward(ctx, map[string]any{
 		"question": "Generate report from analysis",

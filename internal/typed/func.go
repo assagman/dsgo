@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/assagman/dsgo/core"
-	"github.com/assagman/dsgo/module"
+	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/module"
 )
 
 // Func is a generic, type-safe module wrapper for DSGo modules

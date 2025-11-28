@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // ContextWithTimeout creates a context with a timeout for tests
@@ -18,14 +18,14 @@ func ContextWithTimeout(duration time.Duration) (context.Context, context.Cancel
 }
 
 // NewMockLMWithResponse creates a mock LM with a single response
-func NewMockLMWithResponse(response string) core.LM {
+func NewMockLMWithResponse(response string) dsgo.LM {
 	return &MockLM{
 		Response: response,
 	}
 }
 
 // NewMockLMWithResponses creates a mock LM that cycles through responses
-func NewMockLMWithResponses(responses []string) core.LM {
+func NewMockLMWithResponses(responses []string) dsgo.LM {
 	return &MockLM{
 		Responses: responses,
 		Index:     0,
@@ -33,7 +33,7 @@ func NewMockLMWithResponses(responses []string) core.LM {
 }
 
 // NewFailThenSucceedLM creates a mock LM that fails N times then succeeds
-func NewFailThenSucceedLM(failAttempts int, successResponse string) core.LM {
+func NewFailThenSucceedLM(failAttempts int, successResponse string) dsgo.LM {
 	responses := make([]string, failAttempts+1)
 	// Fill with empty responses (failures)
 	for i := 0; i < failAttempts; i++ {
@@ -48,14 +48,14 @@ func NewFailThenSucceedLM(failAttempts int, successResponse string) core.LM {
 }
 
 // NewAlwaysFailLM creates a mock LM that always fails
-func NewAlwaysFailLM(errorType string) core.LM {
+func NewAlwaysFailLM(errorType string) dsgo.LM {
 	return &MockLM{
 		Error: errors.New("LM generation failed: " + errorType),
 	}
 }
 
 // NewTimeoutThenSucceedLM creates a mock LM that times out on specified attempt then succeeds
-func NewTimeoutThenSucceedLM(timeoutAttempt int, duration time.Duration, successResponse string) core.LM {
+func NewTimeoutThenSucceedLM(timeoutAttempt int, duration time.Duration, successResponse string) dsgo.LM {
 	m := &MockLM{
 		SupportsJSONValue:  false,
 		SupportsToolsValue: false,
@@ -68,7 +68,7 @@ func NewTimeoutThenSucceedLM(timeoutAttempt int, duration time.Duration, success
 }
 
 // NewLatencyLM creates a mock LM with specified latency
-func NewLatencyLM(latency time.Duration, response string) core.LM {
+func NewLatencyLM(latency time.Duration, response string) dsgo.LM {
 	return &MockLM{
 		Response: response,
 		Latency:  latency,
@@ -76,13 +76,13 @@ func NewLatencyLM(latency time.Duration, response string) core.LM {
 }
 
 // NewConstantResponseLM creates a mock LM with a constant response
-func NewConstantResponseLM(response string) core.LM {
+func NewConstantResponseLM(response string) dsgo.LM {
 	return &MockLM{
 		Response: response,
 	}
 }
 
-// MockLM is a test double for core.LM interface - exported for direct use in tests
+// MockLM is a test double for dsgo.LM interface - exported for direct use in tests
 type MockLM struct {
 	mu                 sync.Mutex
 	Response           string
@@ -94,8 +94,8 @@ type MockLM struct {
 	Latency            time.Duration
 }
 
-// Generate implements core.LM
-func (m *MockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+// Generate implements dsgo.LM
+func (m *MockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	// Handle latency with context cancellation support
 	if m.Latency > 0 {
 		select {
@@ -122,9 +122,9 @@ func (m *MockLM) Generate(ctx context.Context, messages []core.Message, options 
 	}
 	m.mu.Unlock()
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: response,
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -133,9 +133,9 @@ func (m *MockLM) Generate(ctx context.Context, messages []core.Message, options 
 	}, nil
 }
 
-// Stream implements core.LM
-func (m *MockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+// Stream implements dsgo.LM
+func (m *MockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -148,7 +148,7 @@ func (m *MockLM) Stream(ctx context.Context, messages []core.Message, options *c
 			return
 		}
 
-		chunkChan <- core.Chunk{
+		chunkChan <- dsgo.Chunk{
 			Content: result.Content,
 			Usage:   result.Usage,
 		}
@@ -157,49 +157,49 @@ func (m *MockLM) Stream(ctx context.Context, messages []core.Message, options *c
 	return chunkChan, errChan
 }
 
-// Name implements core.LM
+// Name implements dsgo.LM
 func (m *MockLM) Name() string {
 	return "mock-lm"
 }
 
-// SupportsJSON implements core.LM
+// SupportsJSON implements dsgo.LM
 func (m *MockLM) SupportsJSON() bool {
 	return m.SupportsJSONValue
 }
 
-// SupportsTools implements core.LM
+// SupportsTools implements dsgo.LM
 func (m *MockLM) SupportsTools() bool {
 	return m.SupportsToolsValue
 }
 
-// IsOpenAI implements core.LM
+// IsOpenAI implements dsgo.LM
 func (m *MockLM) IsOpenAI() bool {
 	return false
 }
 
 // HistoryCollector is a test double that collects history entries
 type HistoryCollector struct {
-	Entries []*core.HistoryEntry
+	Entries []*dsgo.HistoryEntry
 }
 
-// Collect implements core.Collector
-func (hc *HistoryCollector) Collect(entry *core.HistoryEntry) error {
+// Collect implements dsgo.Collector
+func (hc *HistoryCollector) Collect(entry *dsgo.HistoryEntry) error {
 	hc.Entries = append(hc.Entries, entry)
 	return nil
 }
 
-// Close implements core.Collector
+// Close implements dsgo.Collector
 func (hc *HistoryCollector) Close() error {
 	return nil
 }
 
 // GetEntries returns all collected entries
-func (hc *HistoryCollector) GetEntries() []*core.HistoryEntry {
+func (hc *HistoryCollector) GetEntries() []*dsgo.HistoryEntry {
 	return hc.Entries
 }
 
 // GetLastEntry returns the most recent entry
-func (hc *HistoryCollector) GetLastEntry() *core.HistoryEntry {
+func (hc *HistoryCollector) GetLastEntry() *dsgo.HistoryEntry {
 	if len(hc.Entries) == 0 {
 		return nil
 	}
@@ -226,7 +226,7 @@ func (hc *HistoryCollector) GetTotalTokens() int {
 
 // Clear resets the collector
 func (hc *HistoryCollector) Clear() {
-	hc.Entries = []*core.HistoryEntry{}
+	hc.Entries = []*dsgo.HistoryEntry{}
 }
 
 // ============================================================================
@@ -239,7 +239,7 @@ type MalformedJSONMockLM struct {
 }
 
 // Generate returns malformed JSON based on type
-func (m *MalformedJSONMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *MalformedJSONMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	var response string
 
 	switch m.MalformationType {
@@ -262,9 +262,9 @@ func (m *MalformedJSONMockLM) Generate(ctx context.Context, messages []core.Mess
 		response = "{\"answer\": \"test value\", \"confidence\": 0.95}"
 	}
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: response,
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -273,9 +273,9 @@ func (m *MalformedJSONMockLM) Generate(ctx context.Context, messages []core.Mess
 	}, nil
 }
 
-// Stream implements core.LM
-func (m *MalformedJSONMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+// Stream implements dsgo.LM
+func (m *MalformedJSONMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -288,7 +288,7 @@ func (m *MalformedJSONMockLM) Stream(ctx context.Context, messages []core.Messag
 			return
 		}
 
-		chunkChan <- core.Chunk{
+		chunkChan <- dsgo.Chunk{
 			Content: result.Content,
 			Usage:   result.Usage,
 		}
@@ -297,22 +297,22 @@ func (m *MalformedJSONMockLM) Stream(ctx context.Context, messages []core.Messag
 	return chunkChan, errChan
 }
 
-// Name implements core.LM
+// Name implements dsgo.LM
 func (m *MalformedJSONMockLM) Name() string {
 	return "malformed-json-mock"
 }
 
-// SupportsJSON implements core.LM
+// SupportsJSON implements dsgo.LM
 func (m *MalformedJSONMockLM) SupportsJSON() bool {
 	return true
 }
 
-// SupportsTools implements core.LM
+// SupportsTools implements dsgo.LM
 func (m *MalformedJSONMockLM) SupportsTools() bool {
 	return false
 }
 
-// IsOpenAI implements core.LM
+// IsOpenAI implements dsgo.LM
 func (m *MalformedJSONMockLM) IsOpenAI() bool {
 	return false
 }
@@ -323,7 +323,7 @@ type TypeCoercionMockLM struct {
 }
 
 // Generate returns values with type mismatches
-func (m *TypeCoercionMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *TypeCoercionMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	var response string
 
 	switch m.CoercionType {
@@ -352,9 +352,9 @@ func (m *TypeCoercionMockLM) Generate(ctx context.Context, messages []core.Messa
 		response = `{"count": 42, "score": 95.5, "enabled": true, "name": "test"}`
 	}
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: response,
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -363,9 +363,9 @@ func (m *TypeCoercionMockLM) Generate(ctx context.Context, messages []core.Messa
 	}, nil
 }
 
-// Stream implements core.LM
-func (m *TypeCoercionMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+// Stream implements dsgo.LM
+func (m *TypeCoercionMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -378,7 +378,7 @@ func (m *TypeCoercionMockLM) Stream(ctx context.Context, messages []core.Message
 			return
 		}
 
-		chunkChan <- core.Chunk{
+		chunkChan <- dsgo.Chunk{
 			Content: result.Content,
 			Usage:   result.Usage,
 		}
@@ -387,22 +387,22 @@ func (m *TypeCoercionMockLM) Stream(ctx context.Context, messages []core.Message
 	return chunkChan, errChan
 }
 
-// Name implements core.LM
+// Name implements dsgo.LM
 func (m *TypeCoercionMockLM) Name() string {
 	return "type-coercion-mock"
 }
 
-// SupportsJSON implements core.LM
+// SupportsJSON implements dsgo.LM
 func (m *TypeCoercionMockLM) SupportsJSON() bool {
 	return true
 }
 
-// SupportsTools implements core.LM
+// SupportsTools implements dsgo.LM
 func (m *TypeCoercionMockLM) SupportsTools() bool {
 	return false
 }
 
-// IsOpenAI implements core.LM
+// IsOpenAI implements dsgo.LM
 func (m *TypeCoercionMockLM) IsOpenAI() bool {
 	return false
 }

@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestNewOpenRouter(t *testing.T) {

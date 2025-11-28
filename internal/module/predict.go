@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/assagman/dsgo/core"
-	"github.com/assagman/dsgo/logging"
+	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // Predict is the basic prediction module

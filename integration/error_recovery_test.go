@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // TestRetry_TransientError validates that transient errors are handled.
@@ -39,7 +38,7 @@ func TestRetry_TransientError(t *testing.T) {
 			lm := NewMockLMWithResponses(responses)
 
 			sig := fixtures.SimplePredictSig()
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			result, err := predictor.Forward(ctx, map[string]any{
 				"question": "What is the answer?",
@@ -90,7 +89,7 @@ func TestRetry_PermanentError(t *testing.T) {
 			}
 
 			sig := fixtures.SimplePredictSig()
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			startTime := time.Now()
 			result, err := predictor.Forward(ctx, map[string]any{
@@ -147,7 +146,7 @@ func TestRetry_ContextTimeout(t *testing.T) {
 			}
 
 			sig := fixtures.SimplePredictSig()
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			result, err := predictor.Forward(ctx, map[string]any{
 				"question": "test",
@@ -236,7 +235,7 @@ func TestErrorPropagation_SerialComposition(t *testing.T) {
 			sig := fixtures.SimplePredictSig()
 
 			// Module 1
-			var lm1 core.LM
+			var lm1 dsgo.LM
 			if tt.module1Succeeds {
 				lm1 = NewMockLMWithResponse(`{"answer": "intermediate"}`)
 			} else {
@@ -244,10 +243,10 @@ func TestErrorPropagation_SerialComposition(t *testing.T) {
 					Error: errors.New("module 1 failed"),
 				}
 			}
-			module1 := module.NewPredict(sig, lm1)
+			module1 := dsgo.NewPredict(sig, lm1)
 
 			// Module 2
-			var lm2 core.LM
+			var lm2 dsgo.LM
 			if tt.module2Succeeds {
 				lm2 = NewMockLMWithResponse(`{"answer": "final"}`)
 			} else {
@@ -255,7 +254,7 @@ func TestErrorPropagation_SerialComposition(t *testing.T) {
 					Error: errors.New("module 2 failed"),
 				}
 			}
-			module2 := module.NewPredict(sig, lm2)
+			module2 := dsgo.NewPredict(sig, lm2)
 
 			// Execute Module 1
 			result1, err1 := module1.Forward(ctx, map[string]any{
@@ -343,7 +342,7 @@ func TestErrorPropagation_ParallelComposition(t *testing.T) {
 			sig := fixtures.SimplePredictSig()
 
 			// Module A
-			var lmA core.LM
+			var lmA dsgo.LM
 			if tt.moduleASucceeds {
 				lmA = NewMockLMWithResponse(`{"answer": "A"}`)
 			} else {
@@ -351,10 +350,10 @@ func TestErrorPropagation_ParallelComposition(t *testing.T) {
 					Error: errors.New("module A failed"),
 				}
 			}
-			moduleA := module.NewPredict(sig, lmA)
+			moduleA := dsgo.NewPredict(sig, lmA)
 
 			// Module B
-			var lmB core.LM
+			var lmB dsgo.LM
 			if tt.moduleBSucceeds {
 				lmB = NewMockLMWithResponse(`{"answer": "B"}`)
 			} else {
@@ -362,13 +361,13 @@ func TestErrorPropagation_ParallelComposition(t *testing.T) {
 					Error: errors.New("module B failed"),
 				}
 			}
-			moduleB := module.NewPredict(sig, lmB)
+			moduleB := dsgo.NewPredict(sig, lmB)
 
 			// Execute in parallel
 			inputs := map[string]any{"question": "test"}
-			resultAChan := make(chan *core.Prediction, 1)
+			resultAChan := make(chan *dsgo.Prediction, 1)
 			errAChan := make(chan error, 1)
-			resultBChan := make(chan *core.Prediction, 1)
+			resultBChan := make(chan *dsgo.Prediction, 1)
 			errBChan := make(chan error, 1)
 
 			go func() {
@@ -405,7 +404,7 @@ func TestErrorPropagation_ParallelComposition(t *testing.T) {
 
 // TestGracefulDegradation_FallbackModule validates fallback behavior on failure.
 // Scenario: Primary module fails, fallback module executes.
-// Expected: Final result from fallback module.
+// Expected: Final result from fallback dsgo.
 func TestGracefulDegradation_FallbackModule(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -440,7 +439,7 @@ func TestGracefulDegradation_FallbackModule(t *testing.T) {
 			sig := fixtures.SimplePredictSig()
 
 			// Primary module
-			var primaryLM core.LM
+			var primaryLM dsgo.LM
 			if tt.primarySucceeds {
 				primaryLM = NewMockLMWithResponse(`{"answer": "primary"}`)
 			} else {
@@ -448,10 +447,10 @@ func TestGracefulDegradation_FallbackModule(t *testing.T) {
 					Error: errors.New("primary failed"),
 				}
 			}
-			primaryModule := module.NewPredict(sig, primaryLM)
+			primaryModule := dsgo.NewPredict(sig, primaryLM)
 
 			// Fallback module
-			var fallbackLM core.LM
+			var fallbackLM dsgo.LM
 			if tt.fallbackSucceeds {
 				fallbackLM = NewMockLMWithResponse(`{"answer": "fallback"}`)
 			} else {
@@ -459,7 +458,7 @@ func TestGracefulDegradation_FallbackModule(t *testing.T) {
 					Error: errors.New("fallback failed"),
 				}
 			}
-			fallbackModule := module.NewPredict(sig, fallbackLM)
+			fallbackModule := dsgo.NewPredict(sig, fallbackLM)
 
 			inputs := map[string]any{"question": "test"}
 
@@ -513,11 +512,11 @@ func TestErrorRecovery_AdapterFallback(t *testing.T) {
 			ctx := context.Background()
 
 			lm := NewMockLMWithResponse(tt.lmOutput)
-			adapter := core.NewFallbackAdapter()
+			adapter := dsgo.NewFallbackAdapter()
 
 			sig := fixtures.SimplePredictSig()
 
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 			predictor.Adapter = adapter
 
 			result, err := predictor.Forward(ctx, map[string]any{
@@ -614,11 +613,11 @@ func TestError_ChainedModuleRecovery(t *testing.T) {
 			sig := fixtures.SimplePredictSig()
 
 			// Create three modules
-			modules := make([]*module.Predict, 3)
+			modules := make([]*dsgo.Predict, 3)
 			shouldFail := []bool{tt.module1Fails, tt.module2Fails, tt.module3Fails}
 
 			for i := range modules {
-				var lm core.LM
+				var lm dsgo.LM
 				if shouldFail[i] {
 					lm = &MockLM{
 						Error: errors.New("module failed"),
@@ -626,12 +625,12 @@ func TestError_ChainedModuleRecovery(t *testing.T) {
 				} else {
 					lm = NewMockLMWithResponse(`{"answer": "step"}`)
 				}
-				modules[i] = module.NewPredict(sig, lm)
+				modules[i] = dsgo.NewPredict(sig, lm)
 			}
 
 			// Execute chain
 			inputs := map[string]any{"question": "start"}
-			var result *core.Prediction
+			var result *dsgo.Prediction
 			var err error
 			var executedSteps int
 

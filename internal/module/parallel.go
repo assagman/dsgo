@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/assagman/dsgo/core"
-	"github.com/assagman/dsgo/logging"
+	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // ParallelMetrics contains execution metrics for parallel execution

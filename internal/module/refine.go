@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 // Refine implements iterative refinement of predictions

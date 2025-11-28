@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // SearchTool creates a mock search tool
-func SearchTool() *core.Tool {
-	return core.NewTool(
+func SearchTool() *dsgo.Tool {
+	return dsgo.NewTool(
 		"search",
 		"Search for information",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -22,8 +22,8 @@ func SearchTool() *core.Tool {
 }
 
 // CalculatorTool creates a mock calculator tool
-func CalculatorTool() *core.Tool {
-	return core.NewTool(
+func CalculatorTool() *dsgo.Tool {
+	return dsgo.NewTool(
 		"calculate",
 		"Perform mathematical calculations",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -53,8 +53,8 @@ func CalculatorTool() *core.Tool {
 }
 
 // DatabaseQueryTool creates a mock database query tool
-func DatabaseQueryTool() *core.Tool {
-	return core.NewTool(
+func DatabaseQueryTool() *dsgo.Tool {
+	return dsgo.NewTool(
 		"query_db",
 		"Query the database",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -68,8 +68,8 @@ func DatabaseQueryTool() *core.Tool {
 }
 
 // WeatherTool creates a mock weather tool
-func WeatherTool() *core.Tool {
-	return core.NewTool(
+func WeatherTool() *dsgo.Tool {
+	return dsgo.NewTool(
 		"get_weather",
 		"Get weather information",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -80,8 +80,8 @@ func WeatherTool() *core.Tool {
 }
 
 // TimeTool creates a mock time tool
-func TimeTool() *core.Tool {
-	return core.NewTool(
+func TimeTool() *dsgo.Tool {
+	return dsgo.NewTool(
 		"get_time",
 		"Get current time",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -95,8 +95,8 @@ func TimeTool() *core.Tool {
 }
 
 // CommonTools returns a slice of commonly used test tools
-func CommonTools() []core.Tool {
-	return []core.Tool{
+func CommonTools() []dsgo.Tool {
+	return []dsgo.Tool{
 		*SearchTool(),
 		*CalculatorTool(),
 		*DatabaseQueryTool(),
@@ -104,8 +104,8 @@ func CommonTools() []core.Tool {
 }
 
 // AllTools returns all available test tools
-func AllTools() []core.Tool {
-	return []core.Tool{
+func AllTools() []dsgo.Tool {
+	return []dsgo.Tool{
 		*SearchTool(),
 		*CalculatorTool(),
 		*DatabaseQueryTool(),
@@ -119,8 +119,8 @@ func AllTools() []core.Tool {
 // ============================================================================
 
 // ComplexJSONTool creates a tool that returns complex nested JSON
-func ComplexJSONTool() *core.Tool {
-	return core.NewTool(
+func ComplexJSONTool() *dsgo.Tool {
+	return dsgo.NewTool(
 		"get_user_data",
 		"Get comprehensive user data",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -153,8 +153,8 @@ func ComplexJSONTool() *core.Tool {
 }
 
 // DelayedTool creates a tool with configurable response delay
-func DelayedTool(delay time.Duration) *core.Tool {
-	return core.NewTool(
+func DelayedTool(delay time.Duration) *dsgo.Tool {
+	return dsgo.NewTool(
 		"slow_operation",
 		"A slow operation that takes time",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -169,9 +169,9 @@ func DelayedTool(delay time.Duration) *core.Tool {
 }
 
 // IntermittentFailTool creates a tool that fails intermittently
-func IntermittentFailTool(failRate float64) *core.Tool {
+func IntermittentFailTool(failRate float64) *dsgo.Tool {
 	var callCount int
-	return core.NewTool(
+	return dsgo.NewTool(
 		"flaky_service",
 		"A service that sometimes fails",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -185,11 +185,11 @@ func IntermittentFailTool(failRate float64) *core.Tool {
 }
 
 // StatefulTool creates a tool that maintains state across calls
-func StatefulTool() *core.Tool {
+func StatefulTool() *dsgo.Tool {
 	state := make(map[string]any)
 	var mu sync.Mutex
 
-	return core.NewTool(
+	return dsgo.NewTool(
 		"state_manager",
 		"Manage stateful data",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -229,11 +229,11 @@ func StatefulTool() *core.Tool {
 }
 
 // MultiStepTool creates a tool that requires multiple calls to complete
-func MultiStepTool() *core.Tool {
+func MultiStepTool() *dsgo.Tool {
 	sessions := make(map[string]int)
 	var mu sync.Mutex
 
-	return core.NewTool(
+	return dsgo.NewTool(
 		"multi_step_process",
 		"A process requiring multiple steps",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -279,8 +279,8 @@ func MultiStepTool() *core.Tool {
 // ============================================================================
 
 // AdvancedTools returns tools for advanced testing scenarios
-func AdvancedTools() []core.Tool {
-	return []core.Tool{
+func AdvancedTools() []dsgo.Tool {
+	return []dsgo.Tool{
 		*ComplexJSONTool(),
 		*StatefulTool(),
 		*MultiStepTool(),
@@ -288,7 +288,7 @@ func AdvancedTools() []core.Tool {
 }
 
 // AllToolsWithAdvanced returns all tools including advanced ones
-func AllToolsWithAdvanced() []core.Tool {
+func AllToolsWithAdvanced() []dsgo.Tool {
 	basic := AllTools()
 	advanced := AdvancedTools()
 	return append(basic, advanced...)

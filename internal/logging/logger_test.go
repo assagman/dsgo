@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestRequestIDGeneration(t *testing.T) {

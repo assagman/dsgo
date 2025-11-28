@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // ============================================================================
@@ -31,14 +31,14 @@ func TestCompositeCollector_DualSink(t *testing.T) {
 	jsonlPath := filepath.Join(tempDir, "events.jsonl")
 
 	// Create collectors
-	memoryCollector := core.NewMemoryCollector(10)
-	jsonlCollector, err := core.NewJSONLCollector(jsonlPath)
+	memoryCollector := dsgo.NewMemoryCollector(10)
+	jsonlCollector, err := dsgo.NewJSONLCollector(jsonlPath)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector: %v", err)
 	}
 
 	// Create composite collector
-	composite := core.NewCompositeCollector(memoryCollector, jsonlCollector)
+	composite := dsgo.NewCompositeCollector(memoryCollector, jsonlCollector)
 
 	// Create test entry
 	entry := createTestHistoryEntry("test-001", "openai", "gpt-4")
@@ -69,7 +69,7 @@ func TestCompositeCollector_DualSink(t *testing.T) {
 		t.Fatalf("Failed to read JSONL file: %v", err)
 	}
 
-	var jsonlEntry core.HistoryEntry
+	var jsonlEntry dsgo.HistoryEntry
 	if err := json.Unmarshal(data, &jsonlEntry); err != nil {
 		t.Fatalf("Failed to parse JSONL entry: %v", err)
 	}
@@ -90,13 +90,13 @@ func TestCompositeCollector_IndependentOperation(t *testing.T) {
 	tempDir := t.TempDir()
 	jsonlPath := filepath.Join(tempDir, "events.jsonl")
 
-	memoryCollector := core.NewMemoryCollector(5)
-	jsonlCollector, err := core.NewJSONLCollector(jsonlPath)
+	memoryCollector := dsgo.NewMemoryCollector(5)
+	jsonlCollector, err := dsgo.NewJSONLCollector(jsonlPath)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector: %v", err)
 	}
 
-	composite := core.NewCompositeCollector(memoryCollector, jsonlCollector)
+	composite := dsgo.NewCompositeCollector(memoryCollector, jsonlCollector)
 
 	// Collect multiple entries
 	entries := []struct {
@@ -158,8 +158,8 @@ func TestCompositeCollector_PartialFailure(t *testing.T) {
 	tempDir := t.TempDir()
 	jsonlPath := filepath.Join(tempDir, "events.jsonl")
 
-	memoryCollector := core.NewMemoryCollector(10)
-	jsonlCollector, err := core.NewJSONLCollector(jsonlPath)
+	memoryCollector := dsgo.NewMemoryCollector(10)
+	jsonlCollector, err := dsgo.NewJSONLCollector(jsonlPath)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestCompositeCollector_PartialFailure(t *testing.T) {
 		t.Fatalf("Failed to close JSONL collector: %v", err)
 	}
 
-	composite := core.NewCompositeCollector(memoryCollector, jsonlCollector)
+	composite := dsgo.NewCompositeCollector(memoryCollector, jsonlCollector)
 
 	entry := createTestHistoryEntry("partial-fail-001", "openai", "gpt-4")
 
@@ -194,12 +194,12 @@ func TestCompositeCollector_PartialFailureMultipleEntries(t *testing.T) {
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	memoryCollector := core.NewMemoryCollector(10)
+	memoryCollector := dsgo.NewMemoryCollector(10)
 	failingCollector := &FailingCollector{
 		FailAfter: 2,
 	}
 
-	composite := core.NewCompositeCollector(memoryCollector, failingCollector)
+	composite := dsgo.NewCompositeCollector(memoryCollector, failingCollector)
 
 	var collectErrors []error
 	for i := 0; i < 5; i++ {
@@ -233,9 +233,9 @@ func TestCompositeCollector_ErrorAggregation(t *testing.T) {
 
 	failingCollector1 := &FailingCollector{CloseError: errors.New("close error 1")}
 	failingCollector2 := &FailingCollector{CloseError: errors.New("close error 2")}
-	memoryCollector := core.NewMemoryCollector(10)
+	memoryCollector := dsgo.NewMemoryCollector(10)
 
-	composite := core.NewCompositeCollector(failingCollector1, memoryCollector, failingCollector2)
+	composite := dsgo.NewCompositeCollector(failingCollector1, memoryCollector, failingCollector2)
 
 	err := composite.Close()
 	if err == nil {
@@ -285,13 +285,13 @@ func TestCompositeCollector_MultipleEntries(t *testing.T) {
 			tempDir := t.TempDir()
 			jsonlPath := filepath.Join(tempDir, "events.jsonl")
 
-			memoryCollector := core.NewMemoryCollector(tt.memorySize)
-			jsonlCollector, err := core.NewJSONLCollector(jsonlPath)
+			memoryCollector := dsgo.NewMemoryCollector(tt.memorySize)
+			jsonlCollector, err := dsgo.NewJSONLCollector(jsonlPath)
 			if err != nil {
 				t.Fatalf("Failed to create JSONL collector: %v", err)
 			}
 
-			composite := core.NewCompositeCollector(memoryCollector, jsonlCollector)
+			composite := dsgo.NewCompositeCollector(memoryCollector, jsonlCollector)
 
 			// Collect entries
 			for i := 0; i < tt.entryCount; i++ {
@@ -348,23 +348,23 @@ func TestCompositeCollector_DataIntegrity(t *testing.T) {
 	tempDir := t.TempDir()
 	jsonlPath := filepath.Join(tempDir, "events.jsonl")
 
-	memoryCollector := core.NewMemoryCollector(10)
-	jsonlCollector, err := core.NewJSONLCollector(jsonlPath)
+	memoryCollector := dsgo.NewMemoryCollector(10)
+	jsonlCollector, err := dsgo.NewJSONLCollector(jsonlPath)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector: %v", err)
 	}
 
-	composite := core.NewCompositeCollector(memoryCollector, jsonlCollector)
+	composite := dsgo.NewCompositeCollector(memoryCollector, jsonlCollector)
 
 	// Create entry with detailed data
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:        "integrity-test-001",
 		Timestamp: time.Now(),
 		SessionID: "session-xyz",
 		Provider:  "openai",
 		Model:     "gpt-4-turbo",
-		Request: core.RequestMeta{
-			Messages: []core.Message{
+		Request: dsgo.RequestMeta{
+			Messages: []dsgo.Message{
 				{Role: "user", Content: "Hello world"},
 			},
 			PromptLength:   11,
@@ -373,18 +373,18 @@ func TestCompositeCollector_DataIntegrity(t *testing.T) {
 			ToolCount:      2,
 			ResponseFormat: "json",
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content:        `{"result": "success"}`,
 			FinishReason:   "stop",
 			ResponseLength: 21,
 		},
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 			TotalTokens:      150,
 			Cost:             0.005,
 		},
-		Cache: core.CacheMeta{
+		Cache: dsgo.CacheMeta{
 			Hit:    false,
 			Source: "",
 		},
@@ -415,7 +415,7 @@ func TestCompositeCollector_DataIntegrity(t *testing.T) {
 		t.Fatalf("Failed to read JSONL file: %v", err)
 	}
 
-	var jsonlEntry core.HistoryEntry
+	var jsonlEntry dsgo.HistoryEntry
 	if err := json.Unmarshal(data, &jsonlEntry); err != nil {
 		t.Fatalf("Failed to parse JSONL entry: %v", err)
 	}
@@ -435,17 +435,17 @@ func TestCompositeCollector_CloseAll(t *testing.T) {
 	jsonlPath1 := filepath.Join(tempDir, "events1.jsonl")
 	jsonlPath2 := filepath.Join(tempDir, "events2.jsonl")
 
-	memoryCollector := core.NewMemoryCollector(10)
-	jsonlCollector1, err := core.NewJSONLCollector(jsonlPath1)
+	memoryCollector := dsgo.NewMemoryCollector(10)
+	jsonlCollector1, err := dsgo.NewJSONLCollector(jsonlPath1)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector 1: %v", err)
 	}
-	jsonlCollector2, err := core.NewJSONLCollector(jsonlPath2)
+	jsonlCollector2, err := dsgo.NewJSONLCollector(jsonlPath2)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector 2: %v", err)
 	}
 
-	composite := core.NewCompositeCollector(memoryCollector, jsonlCollector1, jsonlCollector2)
+	composite := dsgo.NewCompositeCollector(memoryCollector, jsonlCollector1, jsonlCollector2)
 
 	// Verify collector count
 	if composite.Len() != 3 {
@@ -491,8 +491,8 @@ func TestCompositeCollector_CloseIdempotent(t *testing.T) {
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	memoryCollector := core.NewMemoryCollector(10)
-	composite := core.NewCompositeCollector(memoryCollector)
+	memoryCollector := dsgo.NewMemoryCollector(10)
+	composite := dsgo.NewCompositeCollector(memoryCollector)
 
 	// First close should succeed
 	if err := composite.Close(); err != nil {
@@ -510,15 +510,15 @@ func TestCompositeCollector_AddCollector(t *testing.T) {
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	memoryCollector1 := core.NewMemoryCollector(10)
-	composite := core.NewCompositeCollector(memoryCollector1)
+	memoryCollector1 := dsgo.NewMemoryCollector(10)
+	composite := dsgo.NewCompositeCollector(memoryCollector1)
 
 	if composite.Len() != 1 {
 		t.Errorf("Initial Len() = %d, want 1", composite.Len())
 	}
 
 	// Add another collector
-	memoryCollector2 := core.NewMemoryCollector(10)
+	memoryCollector2 := dsgo.NewMemoryCollector(10)
 	composite.Add(memoryCollector2)
 
 	if composite.Len() != 2 {
@@ -544,7 +544,7 @@ func TestCompositeCollector_EmptyComposite(t *testing.T) {
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	composite := core.NewCompositeCollector()
+	composite := dsgo.NewCompositeCollector()
 
 	if composite.Len() != 0 {
 		t.Errorf("Empty composite Len() = %d, want 0", composite.Len())
@@ -567,27 +567,27 @@ func TestCompositeCollector_EmptyComposite(t *testing.T) {
 // ============================================================================
 
 // createTestHistoryEntry creates a test history entry with basic fields.
-func createTestHistoryEntry(id, provider, model string) *core.HistoryEntry {
-	return &core.HistoryEntry{
+func createTestHistoryEntry(id, provider, model string) *dsgo.HistoryEntry {
+	return &dsgo.HistoryEntry{
 		ID:        id,
 		Timestamp: time.Now(),
 		SessionID: "test-session",
 		Provider:  provider,
 		Model:     model,
-		Request: core.RequestMeta{
-			Messages: []core.Message{
+		Request: dsgo.RequestMeta{
+			Messages: []dsgo.Message{
 				{Role: "user", Content: "Test message"},
 			},
 			PromptLength:   12,
 			MessageCount:   1,
 			ResponseFormat: "text",
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content:        "Test response",
 			FinishReason:   "stop",
 			ResponseLength: 13,
 		},
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -597,7 +597,7 @@ func createTestHistoryEntry(id, provider, model string) *core.HistoryEntry {
 }
 
 // assertEntryIntegrity verifies that an entry matches expected values.
-func assertEntryIntegrity(t *testing.T, source string, got, want *core.HistoryEntry) {
+func assertEntryIntegrity(t *testing.T, source string, got, want *dsgo.HistoryEntry) {
 	t.Helper()
 
 	if got.ID != want.ID {
@@ -634,8 +634,8 @@ type FailingCollector struct {
 	CloseError   error
 }
 
-// Collect implements core.Collector.
-func (fc *FailingCollector) Collect(entry *core.HistoryEntry) error {
+// Collect implements dsgo.Collector.
+func (fc *FailingCollector) Collect(entry *dsgo.HistoryEntry) error {
 	if fc.SuccessCount >= fc.FailAfter {
 		return errors.New("simulated collector failure")
 	}
@@ -643,7 +643,7 @@ func (fc *FailingCollector) Collect(entry *core.HistoryEntry) error {
 	return nil
 }
 
-// Close implements core.Collector.
+// Close implements dsgo.Collector.
 func (fc *FailingCollector) Close() error {
 	return fc.CloseError
 }

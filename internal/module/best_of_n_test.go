@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 type MockModule struct {

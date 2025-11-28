@@ -3,11 +3,11 @@ package integration
 import (
 	"testing"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // AssertPredictionValid validates that a prediction contains all expected fields
-func AssertPredictionValid(t *testing.T, pred *core.Prediction, expectedFields []string) {
+func AssertPredictionValid(t *testing.T, pred *dsgo.Prediction, expectedFields []string) {
 	t.Helper()
 
 	if pred == nil {
@@ -41,7 +41,7 @@ func AssertPredictionError(t *testing.T, err error, expectedSubstring string) {
 }
 
 // AssertOutputsMatch validates that prediction outputs match expected values
-func AssertOutputsMatch(t *testing.T, pred *core.Prediction, expected map[string]interface{}) {
+func AssertOutputsMatch(t *testing.T, pred *dsgo.Prediction, expected map[string]interface{}) {
 	t.Helper()
 
 	AssertPredictionValid(t, pred, getKeys(expected))
@@ -60,7 +60,7 @@ func AssertOutputsMatch(t *testing.T, pred *core.Prediction, expected map[string
 }
 
 // AssertUsageTracked validates that usage information was captured
-func AssertUsageTracked(t *testing.T, pred *core.Prediction, minTokens, maxTokens int) {
+func AssertUsageTracked(t *testing.T, pred *dsgo.Prediction, minTokens, maxTokens int) {
 	t.Helper()
 
 	if pred == nil {
@@ -86,7 +86,7 @@ func AssertUsageTracked(t *testing.T, pred *core.Prediction, minTokens, maxToken
 }
 
 // AssertCostCalculated validates that cost was properly calculated
-func AssertCostCalculated(t *testing.T, pred *core.Prediction, minCost, maxCost float64) {
+func AssertCostCalculated(t *testing.T, pred *dsgo.Prediction, minCost, maxCost float64) {
 	t.Helper()
 
 	if pred == nil {
@@ -104,7 +104,7 @@ func AssertCostCalculated(t *testing.T, pred *core.Prediction, minCost, maxCost 
 }
 
 // AssertHistoryCollected validates that history was collected
-func AssertHistoryCollected(t *testing.T, entries []*core.HistoryEntry, expectedCount int) {
+func AssertHistoryCollected(t *testing.T, entries []*dsgo.HistoryEntry, expectedCount int) {
 	t.Helper()
 
 	if len(entries) != expectedCount {
@@ -113,7 +113,7 @@ func AssertHistoryCollected(t *testing.T, entries []*core.HistoryEntry, expected
 }
 
 // AssertHistoryComplete validates that a history entry has complete metadata
-func AssertHistoryComplete(t *testing.T, entry *core.HistoryEntry, model, provider string) {
+func AssertHistoryComplete(t *testing.T, entry *dsgo.HistoryEntry, model, provider string) {
 	t.Helper()
 
 	if entry == nil {
@@ -150,7 +150,7 @@ func AssertHistoryComplete(t *testing.T, entry *core.HistoryEntry, model, provid
 }
 
 // AssertCompositionCost validates that composition cost is within expected range
-func AssertCompositionCost(t *testing.T, results []*core.Prediction, maxTotalCost float64) {
+func AssertCompositionCost(t *testing.T, results []*dsgo.Prediction, maxTotalCost float64) {
 	t.Helper()
 
 	totalCost := 0.0
@@ -167,7 +167,7 @@ func AssertCompositionCost(t *testing.T, results []*core.Prediction, maxTotalCos
 }
 
 // AssertAllModulesExecuted validates that all expected modules executed
-func AssertAllModulesExecuted(t *testing.T, entries []*core.HistoryEntry, expectedModuleCount int) {
+func AssertAllModulesExecuted(t *testing.T, entries []*dsgo.HistoryEntry, expectedModuleCount int) {
 	t.Helper()
 
 	if len(entries) != expectedModuleCount {
@@ -188,7 +188,7 @@ func AssertAllModulesExecuted(t *testing.T, entries []*core.HistoryEntry, expect
 }
 
 // AssertParseError validates parsing-related errors
-func AssertParseError(t *testing.T, pred *core.Prediction, shouldHaveErrors bool) {
+func AssertParseError(t *testing.T, pred *dsgo.Prediction, shouldHaveErrors bool) {
 	t.Helper()
 
 	if pred == nil {
@@ -205,7 +205,7 @@ func AssertParseError(t *testing.T, pred *core.Prediction, shouldHaveErrors bool
 }
 
 // AssertAdapterUsed validates which adapter was used
-func AssertAdapterUsed(t *testing.T, pred *core.Prediction, expectedAdapter string) {
+func AssertAdapterUsed(t *testing.T, pred *dsgo.Prediction, expectedAdapter string) {
 	t.Helper()
 
 	if pred == nil {
@@ -218,7 +218,7 @@ func AssertAdapterUsed(t *testing.T, pred *core.Prediction, expectedAdapter stri
 }
 
 // AssertFallbackUsed validates that fallback adapter was used
-func AssertFallbackUsed(t *testing.T, pred *core.Prediction, shouldUseFallback bool) {
+func AssertFallbackUsed(t *testing.T, pred *dsgo.Prediction, shouldUseFallback bool) {
 	t.Helper()
 
 	if pred == nil {
@@ -231,7 +231,7 @@ func AssertFallbackUsed(t *testing.T, pred *core.Prediction, shouldUseFallback b
 }
 
 // AssertFieldValue safely retrieves and validates a field value
-func AssertFieldValue(t *testing.T, pred *core.Prediction, fieldName string, expectedValue interface{}) {
+func AssertFieldValue(t *testing.T, pred *dsgo.Prediction, fieldName string, expectedValue interface{}) {
 	t.Helper()
 
 	if pred == nil || pred.Outputs == nil {
@@ -250,7 +250,7 @@ func AssertFieldValue(t *testing.T, pred *core.Prediction, fieldName string, exp
 }
 
 // AssertOutputFieldExists validates that a field exists in outputs
-func AssertOutputFieldExists(t *testing.T, pred *core.Prediction, fieldName string) {
+func AssertOutputFieldExists(t *testing.T, pred *dsgo.Prediction, fieldName string) {
 	t.Helper()
 
 	if pred == nil || pred.Outputs == nil {
@@ -267,7 +267,7 @@ func AssertOutputFieldExists(t *testing.T, pred *core.Prediction, fieldName stri
 }
 
 // AssertModuleName validates the module name in prediction
-func AssertModuleName(t *testing.T, pred *core.Prediction, expectedModuleName string) {
+func AssertModuleName(t *testing.T, pred *dsgo.Prediction, expectedModuleName string) {
 	t.Helper()
 
 	if pred == nil {
@@ -280,7 +280,7 @@ func AssertModuleName(t *testing.T, pred *core.Prediction, expectedModuleName st
 }
 
 // AssertRationale validates that reasoning trace exists
-func AssertRationale(t *testing.T, pred *core.Prediction, shouldExist bool) {
+func AssertRationale(t *testing.T, pred *dsgo.Prediction, shouldExist bool) {
 	t.Helper()
 
 	if pred == nil {
@@ -294,7 +294,7 @@ func AssertRationale(t *testing.T, pred *core.Prediction, shouldExist bool) {
 }
 
 // AssertCompletions validates alternative completions
-func AssertCompletions(t *testing.T, pred *core.Prediction, expectedCount int) {
+func AssertCompletions(t *testing.T, pred *dsgo.Prediction, expectedCount int) {
 	t.Helper()
 
 	if pred == nil {

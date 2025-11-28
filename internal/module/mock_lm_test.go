@@ -3,7 +3,7 @@ package module
 import (
 	"context"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 type MockLM struct {

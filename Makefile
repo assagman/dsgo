@@ -36,7 +36,7 @@ integration-performance:
 
 integration-coverage:
 	@echo "Running integration tests with coverage of main codebase..."
-	@go test -race -covermode=atomic -coverpkg=./core/...,./module/...,./internal/...,./logging/... -coverprofile=integration_coverage.out ./integration/... || exit 1
+	@go test -race -covermode=atomic -coverpkg=./internal/... -coverprofile=integration_coverage.out ./integration/... || exit 1
 	@printf "\nIntegration Test Coverage (of main codebase): "
 	@go tool cover -func=integration_coverage.out | grep total | awk '{print $$3}'
 

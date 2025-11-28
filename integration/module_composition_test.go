@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // ============================================================================
@@ -33,8 +32,8 @@ func TestSequentialComposition_TwoModules(t *testing.T) {
 	lm2 := NewMockLMWithResponse(`{"answer": "Final result"}`)
 
 	// Create modules
-	module1 := module.NewPredict(sig1, lm1)
-	module2 := module.NewPredict(sig2, lm2)
+	module1 := dsgo.NewPredict(sig1, lm1)
+	module2 := dsgo.NewPredict(sig2, lm2)
 
 	// Execute module 1
 	result1, err := module1.Forward(ctx, map[string]any{
@@ -102,8 +101,8 @@ func TestSequentialComposition_ChainOfThoughtToRefine(t *testing.T) {
 	}`)
 
 	// Create modules
-	cot := module.NewChainOfThought(cotSig, cotLM)
-	refine := module.NewRefine(refineSig, refineLM)
+	cot := dsgo.NewChainOfThought(cotSig, cotLM)
+	refine := dsgo.NewRefine(refineSig, refineLM)
 
 	// Execute chain of thought
 	cotResult, err := cot.Forward(ctx, map[string]any{
@@ -165,16 +164,16 @@ func TestSequentialComposition_LongPipeline(t *testing.T) {
 		`{"answer": "Step1→Step2→Step3→Step4→Step5"}`,
 	}
 
-	lms := make([]core.LM, 5)
-	modules := make([]core.Module, 5)
+	lms := make([]dsgo.LM, 5)
+	modules := make([]dsgo.Module, 5)
 
 	for i, response := range responses {
 		lms[i] = NewMockLMWithResponse(response)
-		modules[i] = module.NewPredict(sig, lms[i])
+		modules[i] = dsgo.NewPredict(sig, lms[i])
 	}
 
 	// Execute pipeline
-	var result *core.Prediction
+	var result *dsgo.Prediction
 	var err error
 	input := "Start"
 
@@ -218,11 +217,11 @@ func TestSequentialComposition_Program(t *testing.T) {
 	lm1 := NewMockLMWithResponse(`{"answer": "first"}`)
 	lm2 := NewMockLMWithResponse(`{"answer": "second"}`)
 
-	m1 := module.NewPredict(sig, lm1)
-	m2 := module.NewPredict(sig, lm2)
+	m1 := dsgo.NewPredict(sig, lm1)
+	m2 := dsgo.NewPredict(sig, lm2)
 
 	// Create program
-	prog := module.NewProgram("test_pipeline").
+	prog := dsgo.NewProgram("test_pipeline").
 		AddModule(m1).
 		AddModule(m2)
 
@@ -264,14 +263,14 @@ func TestParallelComposition_MultiplePredictsSync(t *testing.T) {
 	sig := fixtures.SimplePredictSig()
 
 	// Create 3 independent modules
-	modules := []core.Module{
-		module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "response1"}`)),
-		module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "response2"}`)),
-		module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "response3"}`)),
+	modules := []dsgo.Module{
+		dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "response1"}`)),
+		dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "response2"}`)),
+		dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "response3"}`)),
 	}
 
 	// Execute all modules (sequential for this test, but demonstrates the pattern)
-	results := make([]*core.Prediction, len(modules))
+	results := make([]*dsgo.Prediction, len(modules))
 	for i, m := range modules {
 		res, err := m.Forward(ctx, map[string]any{
 			"question": fmt.Sprintf("Question %d", i+1),
@@ -314,13 +313,13 @@ func TestParallelComposition_BestOfN(t *testing.T) {
 		`{"answer": "best"}`,
 	})
 
-	m := module.NewPredict(sig, lm)
+	m := dsgo.NewPredict(sig, lm)
 
 	// Create BestOfN
-	best := module.NewBestOfN(m, 3)
+	best := dsgo.NewBestOfN(m, 3)
 
 	// Scoring: prefer "best" specifically
-	best.WithScorer(func(inputs map[string]any, pred *core.Prediction) (float64, error) {
+	best.WithScorer(func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
 		answer, ok := pred.GetString("answer")
 		if !ok {
 			return 0, nil
@@ -363,11 +362,11 @@ func TestParallelComposition_BestOfNWithParallel(t *testing.T) {
 	sig := fixtures.SimplePredictSig()
 
 	// Create module for BestOfN
-	m := module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "result"}`))
+	m := dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "result"}`))
 
 	// Create best of N
-	best := module.NewBestOfN(m, 3)
-	best.WithScorer(func(inputs map[string]any, pred *core.Prediction) (float64, error) {
+	best := dsgo.NewBestOfN(m, 3)
+	best.WithScorer(func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
 		return 1.0, nil
 	})
 
@@ -401,17 +400,17 @@ func TestNestedComposition_ProgramWithinProgram(t *testing.T) {
 	sig := fixtures.SimplePredictSig()
 
 	// Create inner programs
-	innerProg1 := module.NewProgram("inner1").
-		AddModule(module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "inner1_result"}`)))
+	innerProg1 := dsgo.NewProgram("inner1").
+		AddModule(dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "inner1_result"}`)))
 
-	innerProg2 := module.NewProgram("inner2").
-		AddModule(module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "inner2_result"}`)))
+	innerProg2 := dsgo.NewProgram("inner2").
+		AddModule(dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "inner2_result"}`)))
 
 	// Create outer program containing inner programs
-	outerProg := module.NewProgram("outer").
+	outerProg := dsgo.NewProgram("outer").
 		AddModule(innerProg1).
 		AddModule(innerProg2).
-		AddModule(module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "final_result"}`)))
+		AddModule(dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "final_result"}`)))
 
 	// Execute
 	result, err := outerProg.Forward(ctx, map[string]any{
@@ -441,12 +440,12 @@ func TestNestedComposition_ChainOfThoughtWithinProgram(t *testing.T) {
 	refineSig := fixtures.RefineSig()
 
 	// Create program with mixed module types
-	prog := module.NewProgram("mixed").
-		AddModule(module.NewChainOfThought(cotSig, NewMockLMWithResponse(`{
+	prog := dsgo.NewProgram("mixed").
+		AddModule(dsgo.NewChainOfThought(cotSig, NewMockLMWithResponse(`{
 			"reasoning": "Step-by-step reasoning here",
 			"answer": "Reasoned answer"
 		}`))).
-		AddModule(module.NewRefine(refineSig, NewMockLMWithResponse(`{
+		AddModule(dsgo.NewRefine(refineSig, NewMockLMWithResponse(`{
 			"output": "Refined output"
 		}`)))
 
@@ -485,7 +484,7 @@ func TestScenario_ChainOfThoughtToRefineToClassify(t *testing.T) {
 		"answer": "Generally positive tone detected"
 	}`)
 
-	reasoner := module.NewChainOfThought(reasonSig, reasonLM)
+	reasoner := dsgo.NewChainOfThought(reasonSig, reasonLM)
 
 	// Execute reasoning
 	reasonResult, err := reasoner.Forward(ctx, map[string]any{
@@ -501,7 +500,7 @@ func TestScenario_ChainOfThoughtToRefineToClassify(t *testing.T) {
 		"output": "The analysis shows strong positive sentiment with confidence 0.9"
 	}`)
 
-	refiner := module.NewRefine(refineSig, refineLM)
+	refiner := dsgo.NewRefine(refineSig, refineLM)
 	answer, ok := reasonResult.GetString("answer")
 	if !ok {
 		t.Fatal("Reason result didn't have answer")
@@ -520,7 +519,7 @@ func TestScenario_ChainOfThoughtToRefineToClassify(t *testing.T) {
 		"sentiment": "positive"
 	}`)
 
-	classifier := module.NewPredict(classifySig, classifyLM)
+	classifier := dsgo.NewPredict(classifySig, classifyLM)
 	output, ok := refineResult.GetString("output")
 	if !ok {
 		t.Fatal("Refine result didn't have output")
@@ -569,11 +568,11 @@ func TestScenario_BestOfNRefinement(t *testing.T) {
 		`{"answer": "excellent response"}`,
 	})
 
-	generator := module.NewPredict(sig, genLM)
+	generator := dsgo.NewPredict(sig, genLM)
 
 	// Create BestOfN
-	best := module.NewBestOfN(generator, 3)
-	best.WithScorer(func(inputs map[string]any, pred *core.Prediction) (float64, error) {
+	best := dsgo.NewBestOfN(generator, 3)
+	best.WithScorer(func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
 		answer, ok := pred.GetString("answer")
 		if !ok {
 			return 0, nil
@@ -596,7 +595,7 @@ func TestScenario_BestOfNRefinement(t *testing.T) {
 		"output": "Polished and perfected excellent response"
 	}`)
 
-	refiner := module.NewRefine(refineSig, refineLM)
+	refiner := dsgo.NewRefine(refineSig, refineLM)
 	bestAnswer, ok := bestResult.GetString("answer")
 	if !ok {
 		t.Fatal("BestOfN result didn't have answer")
@@ -632,7 +631,7 @@ func TestScenario_ConditionalBranching(t *testing.T) {
 		"sentiment": "positive"
 	}`)
 
-	classifier := module.NewPredict(sig, classifyLM)
+	classifier := dsgo.NewPredict(sig, classifyLM)
 	classifyResult, err := classifier.Forward(ctx, map[string]any{
 		"text": "This is great!",
 	})
@@ -646,14 +645,14 @@ func TestScenario_ConditionalBranching(t *testing.T) {
 	}
 
 	// Decision: Route to appropriate next module based on sentiment
-	var nextModule core.Module
+	var nextModule dsgo.Module
 	if sentiment == "positive" {
-		nextModule = module.NewPredict(
+		nextModule = dsgo.NewPredict(
 			fixtures.SimplePredictSig(),
 			NewMockLMWithResponse(`{"answer": "Generate positive-focused response"}`),
 		)
 	} else {
-		nextModule = module.NewPredict(
+		nextModule = dsgo.NewPredict(
 			fixtures.SimplePredictSig(),
 			NewMockLMWithResponse(`{"answer": "Generate neutral-focused response"}`),
 		)
@@ -688,7 +687,7 @@ func TestScenario_DocumentAnalysisPipeline(t *testing.T) {
 	extractLM := NewMockLMWithResponse(`{
 		"answer": "Key info: Budget $100k, Timeline 6 months, Team size 5"
 	}`)
-	extractor := module.NewPredict(fixtures.SimplePredictSig(), extractLM)
+	extractor := dsgo.NewPredict(fixtures.SimplePredictSig(), extractLM)
 	extractResult, err := extractor.Forward(ctx, map[string]any{
 		"question": "Extract key project information",
 	})
@@ -701,7 +700,7 @@ func TestScenario_DocumentAnalysisPipeline(t *testing.T) {
 		"reasoning": "The project has clear constraints",
 		"answer": "Project summary: Medium-scale initiative with fixed resources"
 	}`)
-	summarizer := module.NewChainOfThought(fixtures.ChainOfThoughtSig(), summaryLM)
+	summarizer := dsgo.NewChainOfThought(fixtures.ChainOfThoughtSig(), summaryLM)
 	extractAnswer, ok := extractResult.GetString("answer")
 	if !ok {
 		t.Fatal("Extract didn't produce answer")
@@ -720,9 +719,9 @@ func TestScenario_DocumentAnalysisPipeline(t *testing.T) {
 		`{"answer": "Risk: Timeline slippage"}`,
 		`{"answer": "Risk: Resource shortage"}`,
 	})
-	riskAnalyzer := module.NewPredict(fixtures.SimplePredictSig(), riskLM)
-	bestRisk := module.NewBestOfN(riskAnalyzer, 3)
-	bestRisk.WithScorer(func(inputs map[string]any, pred *core.Prediction) (float64, error) {
+	riskAnalyzer := dsgo.NewPredict(fixtures.SimplePredictSig(), riskLM)
+	bestRisk := dsgo.NewBestOfN(riskAnalyzer, 3)
+	bestRisk.WithScorer(func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
 		answer, ok := pred.GetString("answer")
 		if !ok {
 			return 0, nil
@@ -750,7 +749,7 @@ func TestScenario_DocumentAnalysisPipeline(t *testing.T) {
 	actionLM := NewMockLMWithResponse(`{
 		"answer": "Action items: 1) Allocate reserve budget 2) Plan resource acquisition 3) Risk monitoring"
 	}`)
-	actionCreator := module.NewPredict(fixtures.SimplePredictSig(), actionLM)
+	actionCreator := dsgo.NewPredict(fixtures.SimplePredictSig(), actionLM)
 	riskAnswer, ok := riskResult.GetString("answer")
 	if !ok {
 		t.Fatal("Risk analysis didn't produce answer")
@@ -798,14 +797,14 @@ func TestScenario_ErrorPropagationSequential(t *testing.T) {
 
 	// Create failing module
 	failingLM := &MockLM{Error: fmt.Errorf("simulated LM error")}
-	failingModule := module.NewPredict(sig, failingLM)
+	failingModule := dsgo.NewPredict(sig, failingLM)
 
 	// Create successful module (should not execute)
 	successLM := NewMockLMWithResponse(`{"answer": "success"}`)
-	successModule := module.NewPredict(sig, successLM)
+	successModule := dsgo.NewPredict(sig, successLM)
 
 	// Create program
-	prog := module.NewProgram("error_test").
+	prog := dsgo.NewProgram("error_test").
 		AddModule(failingModule).
 		AddModule(successModule)
 

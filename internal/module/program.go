@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 // Program represents a composable pipeline of modules

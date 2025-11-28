@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestProgram_Forward_Success(t *testing.T) {

@@ -4,8 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
-	"github.com/assagman/dsgo/module"
+	"github.com/assagman/dsgo"
 )
 
 // ============================================================================
@@ -22,10 +21,10 @@ func TestProgramOfThought_CodeGeneration(t *testing.T) {
 	defer cancel()
 
 	// Create signature for ProgramOfThought
-	sig := core.NewSignature("Solve a mathematical problem by writing code").
-		AddInput("problem", core.FieldTypeString, "The problem to solve").
-		AddOutput("code", core.FieldTypeString, "Python code that solves the problem").
-		AddOutput("explanation", core.FieldTypeString, "Step-by-step explanation of the code")
+	sig := dsgo.NewSignature("Solve a mathematical problem by writing code").
+		AddInput("problem", dsgo.FieldTypeString, "The problem to solve").
+		AddOutput("code", dsgo.FieldTypeString, "Python code that solves the problem").
+		AddOutput("explanation", dsgo.FieldTypeString, "Step-by-step explanation of the code")
 
 	// Mock LM that returns code and explanation
 	lm := NewMockLMWithResponse(`{
@@ -33,7 +32,7 @@ func TestProgramOfThought_CodeGeneration(t *testing.T) {
 		"explanation": "We define a recursive Fibonacci function that returns n for base cases (0 or 1), and recursively computes fib(n-1) + fib(n-2) otherwise. We then compute the 10th Fibonacci number."
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Calculate the 10th Fibonacci number",
@@ -74,17 +73,17 @@ func TestProgramOfThought_JavaScriptGeneration(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Solve problem with JavaScript code").
-		AddInput("problem", core.FieldTypeString, "The problem to solve").
-		AddOutput("code", core.FieldTypeString, "JavaScript code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Solve problem with JavaScript code").
+		AddInput("problem", dsgo.FieldTypeString, "The problem to solve").
+		AddOutput("code", dsgo.FieldTypeString, "JavaScript code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	lm := NewMockLMWithResponse(`{
 		"code": "function factorial(n) {\n    if (n <= 1) return 1;\n    return n * factorial(n - 1);\n}\nconsole.log(factorial(5));",
 		"explanation": "We define a recursive factorial function in JavaScript. For n <= 1, we return 1. Otherwise, we multiply n by factorial(n-1). We compute 5! = 120."
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "javascript")
+	pot := dsgo.NewProgramOfThought(sig, lm, "javascript")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Calculate 5 factorial",
@@ -114,17 +113,17 @@ func TestProgramOfThought_ComplexMath(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Solve complex mathematical problems").
-		AddInput("problem", core.FieldTypeString, "Math problem").
-		AddOutput("code", core.FieldTypeString, "Code solution").
-		AddOutput("explanation", core.FieldTypeString, "Mathematical reasoning")
+	sig := dsgo.NewSignature("Solve complex mathematical problems").
+		AddInput("problem", dsgo.FieldTypeString, "Math problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code solution").
+		AddOutput("explanation", dsgo.FieldTypeString, "Mathematical reasoning")
 
 	lm := NewMockLMWithResponse(`{
 		"code": "import math\n\ndef calculate_compound_interest(principal, rate, time, n):\n    amount = principal * (1 + rate/n) ** (n * time)\n    return amount\n\n# $1000 at 5% for 10 years, compounded monthly\nresult = calculate_compound_interest(1000, 0.05, 10, 12)\nprint(f'Final amount: ${result:.2f}')",
 		"explanation": "We use the compound interest formula A = P(1 + r/n)^(nt). We define a function that takes principal ($1000), annual rate (5% = 0.05), time (10 years), and compounding frequency (12 for monthly). The calculation gives approximately $1647.01."
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Calculate compound interest on $1000 at 5% annual rate for 10 years, compounded monthly",
@@ -161,17 +160,17 @@ func TestProgramOfThought_WithExecution(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Execute code").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Execute code").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	lm := NewMockLMWithResponse(`{
 		"code": "print(2 + 2)",
 		"explanation": "Simple addition to verify execution works"
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 	pot.WithAllowExecution(true)
 	pot.WithExecutionTimeout(5)
 
@@ -205,17 +204,17 @@ func TestProgramOfThought_ExecutionDisabled(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Generate code only").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Generate code only").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	lm := NewMockLMWithResponse(`{
 		"code": "print('Hello World')",
 		"explanation": "Simple hello world program"
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 	// AllowExecution is false by default
 
 	result, err := pot.Forward(ctx, map[string]any{
@@ -244,10 +243,10 @@ func TestProgramOfThought_EmptyCodeHandling(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Generate code").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Generate code").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	// Mock LM that returns empty code
 	lm := NewMockLMWithResponse(`{
@@ -255,7 +254,7 @@ func TestProgramOfThought_EmptyCodeHandling(t *testing.T) {
 		"explanation": "I couldn't generate any code"
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	_, err := pot.Forward(ctx, map[string]any{
 		"problem": "Impossible problem",
@@ -275,10 +274,10 @@ func TestProgramOfThought_EmptyExplanationHandling(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Generate code").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Generate code").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	// Mock LM that returns empty explanation
 	lm := NewMockLMWithResponse(`{
@@ -286,7 +285,7 @@ func TestProgramOfThought_EmptyExplanationHandling(t *testing.T) {
 		"explanation": ""
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	_, err := pot.Forward(ctx, map[string]any{
 		"problem": "Some problem",
@@ -306,15 +305,15 @@ func TestProgramOfThought_MalformedJSON(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Generate code").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Generate code").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	// Mock LM that returns markdown-style code block instead of JSON
 	lm := NewMockLMWithResponse("Here is the solution:\n\n```python\ndef add(a, b):\n    return a + b\n```\n\nThis function adds two numbers together.")
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Add two numbers",
@@ -345,17 +344,17 @@ func TestProgramOfThought_UsageTracking(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Generate code").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Generate code").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	lm := NewMockLMWithResponse(`{
 		"code": "x = 1 + 1",
 		"explanation": "Simple arithmetic"
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Calculate 1 + 1",
@@ -409,13 +408,13 @@ func TestProgramOfThought_MultipleLanguages(t *testing.T) {
 			ctx, cancel := ContextWithTimeout(10 * time.Second)
 			defer cancel()
 
-			sig := core.NewSignature("Generate code").
-				AddInput("problem", core.FieldTypeString, "Problem").
-				AddOutput("code", core.FieldTypeString, "Code").
-				AddOutput("explanation", core.FieldTypeString, "Explanation")
+			sig := dsgo.NewSignature("Generate code").
+				AddInput("problem", dsgo.FieldTypeString, "Problem").
+				AddOutput("code", dsgo.FieldTypeString, "Code").
+				AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 			lm := NewMockLMWithResponse(tt.response)
-			pot := module.NewProgramOfThought(sig, lm, tt.language)
+			pot := dsgo.NewProgramOfThought(sig, lm, tt.language)
 
 			result, err := pot.Forward(ctx, map[string]any{
 				"problem": "Create a greeting function",
@@ -442,17 +441,17 @@ func TestProgramOfThought_AdapterMetadata(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Generate code").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Generate code").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	lm := NewMockLMWithResponse(`{
 		"code": "result = 42",
 		"explanation": "The answer to everything"
 	}`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "What is the answer?",
@@ -480,16 +479,16 @@ func TestProgramOfThought_ExtractTextOutputs_CodeBlock(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Extract code from text").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code solution").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Extract code from text").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code solution").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	// LM returns code in markdown format instead of JSON
 	// This should trigger extractTextOutputs fallback
 	lm := NewMockLMWithResponse("Here's the solution:\n\n```python\ndef find_max(arr):\n    return max(arr) if arr else None\n\nresult = find_max([1, 5, 3, 9, 2])\n```\n\nThis function finds the maximum value in a list using Python's built-in max() function.")
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Find maximum in list",
@@ -519,15 +518,15 @@ func TestProgramOfThought_ExtractTextOutputs_ExplanationMarker(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Extract code with explanation marker").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Extract code with explanation marker").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	// LM returns code followed by "Explanation:" marker
 	lm := NewMockLMWithResponse("Code:\ndef bubble_sort(arr):\n    n = len(arr)\n    for i in range(n):\n        for j in range(0, n-i-1):\n            if arr[j] > arr[j+1]:\n                arr[j], arr[j+1] = arr[j+1], arr[j]\n    return arr\n\nExplanation:\nWe implement bubble sort by iterating through the array and swapping adjacent elements if they're out of order. This continues until the array is sorted.")
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Sort array",
@@ -552,16 +551,16 @@ func TestProgramOfThought_ExtractTextOutputs_DirectContent(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Direct content extraction").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Direct content extraction").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	// LM returns plain code without markdown formatting
 	// This triggers extraction strategy 3 (use entire content as code)
 	lm := NewMockLMWithResponse("x = 10\ny = 20\nprint(f\"Sum: {x + y}\")")
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Add numbers",
@@ -591,18 +590,18 @@ func TestProgramOfThought_FillRequiredStringFields(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Multiple output fields").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation").
-		AddOutput("result", core.FieldTypeString, "Result").
-		AddOutput("insights", core.FieldTypeString, "Insights")
+	sig := dsgo.NewSignature("Multiple output fields").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation").
+		AddOutput("result", dsgo.FieldTypeString, "Result").
+		AddOutput("insights", dsgo.FieldTypeString, "Insights")
 
 	// Markdown code block triggers extraction, then fillRequiredStringFields
 	// fills in missing required fields with defaults
 	lm := NewMockLMWithResponse("```python\ndef compute():\n    return 42\n```")
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	result, err := pot.Forward(ctx, map[string]any{
 		"problem": "Compute answer",
@@ -640,16 +639,16 @@ func TestProgramOfThought_ExtractTextOutputs_TooShortContent(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Short content test").
-		AddInput("problem", core.FieldTypeString, "Problem").
-		AddOutput("code", core.FieldTypeString, "Code").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Short content test").
+		AddInput("problem", dsgo.FieldTypeString, "Problem").
+		AddOutput("code", dsgo.FieldTypeString, "Code").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	// LM returns content shorter than 10 chars
 	// This should fail to parse and eventually error
 	lm := NewMockLMWithResponse(`short`)
 
-	pot := module.NewProgramOfThought(sig, lm, "python")
+	pot := dsgo.NewProgramOfThought(sig, lm, "python")
 
 	_, err := pot.Forward(ctx, map[string]any{
 		"problem": "Brief",

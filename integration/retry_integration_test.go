@@ -10,10 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
 	"github.com/assagman/dsgo/internal/retry"
-	"github.com/assagman/dsgo/module"
 )
 
 // ============================================================================
@@ -69,14 +68,14 @@ func TestRetry_WithModuleComposition(t *testing.T) {
 
 	// First module succeeds immediately
 	lm1 := NewMockLMWithResponse(`{"answer": "first_result"}`)
-	module1 := module.NewPredict(sig, lm1)
+	module1 := dsgo.NewPredict(sig, lm1)
 
 	// Second module with retry behavior (uses RetryingMockLM)
 	lm2 := &RetryingMockLM{
 		FailCount:       2,
 		SuccessResponse: `{"answer": "second_result"}`,
 	}
-	module2 := module.NewPredict(sig, lm2)
+	module2 := dsgo.NewPredict(sig, lm2)
 
 	// Execute pipeline
 	result1, err := module1.Forward(ctx, map[string]any{
@@ -130,7 +129,7 @@ func TestRetry_TransientFailureRecovery(t *testing.T) {
 		SuccessResponse: `{"answer": "success after retries"}`,
 	}
 
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Forward(ctx, map[string]any{
 		"question": "Test question",
@@ -166,7 +165,7 @@ func TestRetry_PermanentFailure(t *testing.T) {
 		Error: errors.New("authentication failed: invalid API key"),
 	}
 
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	startTime := time.Now()
 	_, err := predictor.Forward(ctx, map[string]any{
@@ -204,7 +203,7 @@ func TestRetry_ContextCancellation(t *testing.T) {
 		Response: `{"answer": "delayed response"}`,
 	}
 
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	// Cancel after short delay
 	go func() {
@@ -238,7 +237,7 @@ func TestRetryWrapper_ContextTimeout(t *testing.T) {
 		Response: `{"answer": "delayed response"}`,
 	}
 
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	_, err := predictor.Forward(ctx, map[string]any{
 		"question": "Test",
@@ -275,7 +274,7 @@ func TestRetry_ConcurrentRetries(t *testing.T) {
 				FailCount:       1,
 				SuccessResponse: `{"answer": "concurrent result"}`,
 			}
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			result, err := predictor.Forward(ctx, map[string]any{
 				"question": "Concurrent test",
@@ -310,16 +309,16 @@ type RetryingMockLM struct {
 	CallCount       int
 }
 
-func (m *RetryingMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *RetryingMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	m.CallCount++
 
 	// Track call count for simulating transient failure recovery
 	// In a real scenario, this would be handled by the retry wrapper
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      m.SuccessResponse,
 		FinishReason: "stop",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -328,8 +327,8 @@ func (m *RetryingMockLM) Generate(ctx context.Context, messages []core.Message, 
 	}, nil
 }
 
-func (m *RetryingMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *RetryingMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -339,7 +338,7 @@ func (m *RetryingMockLM) Stream(ctx context.Context, messages []core.Message, op
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -354,12 +353,12 @@ type PermanentFailureMockLM struct {
 	Error error
 }
 
-func (m *PermanentFailureMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *PermanentFailureMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	return nil, m.Error
 }
 
-func (m *PermanentFailureMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *PermanentFailureMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -380,15 +379,15 @@ type DelayedMockLM struct {
 	Response string
 }
 
-func (m *DelayedMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *DelayedMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(m.Delay):
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      m.Response,
 			FinishReason: "stop",
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				TotalTokens: 20,
 				Cost:        0.001,
 			},
@@ -396,8 +395,8 @@ func (m *DelayedMockLM) Generate(ctx context.Context, messages []core.Message, o
 	}
 }
 
-func (m *DelayedMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *DelayedMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -407,7 +406,7 @@ func (m *DelayedMockLM) Stream(ctx context.Context, messages []core.Message, opt
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }

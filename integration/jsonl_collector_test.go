@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // ============================================================================
@@ -31,7 +31,7 @@ func TestJSONLCollector_FileOutput(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test_output.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestJSONLCollector_FileOutput(t *testing.T) {
 			continue
 		}
 
-		var entry core.HistoryEntry
+		var entry dsgo.HistoryEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			t.Errorf("Line %d is not valid JSON: %v\nLine: %s", lineCount+1, err, truncateString(line, 100))
 		}
@@ -94,7 +94,7 @@ func TestJSONLCollector_FileOutputTableDriven(t *testing.T) {
 	tests := []struct {
 		name       string
 		entryCount int
-		setupEntry func(i int) *core.HistoryEntry
+		setupEntry func(i int) *dsgo.HistoryEntry
 	}{
 		{
 			name:       "basic entries",
@@ -104,9 +104,9 @@ func TestJSONLCollector_FileOutputTableDriven(t *testing.T) {
 		{
 			name:       "entries with tool calls",
 			entryCount: 10,
-			setupEntry: func(i int) *core.HistoryEntry {
+			setupEntry: func(i int) *dsgo.HistoryEntry {
 				entry := createJSONLTestEntry(i)
-				entry.Response.ToolCalls = []core.ToolCall{
+				entry.Response.ToolCalls = []dsgo.ToolCall{
 					{
 						ID:        fmt.Sprintf("call-%d", i),
 						Name:      "test_tool",
@@ -120,9 +120,9 @@ func TestJSONLCollector_FileOutputTableDriven(t *testing.T) {
 		{
 			name:       "entries with errors",
 			entryCount: 10,
-			setupEntry: func(i int) *core.HistoryEntry {
+			setupEntry: func(i int) *dsgo.HistoryEntry {
 				entry := createJSONLTestEntry(i)
-				entry.Error = &core.ErrorMeta{
+				entry.Error = &dsgo.ErrorMeta{
 					Message:    fmt.Sprintf("Error %d", i),
 					Code:       "TEST_ERROR",
 					StatusCode: 500,
@@ -133,7 +133,7 @@ func TestJSONLCollector_FileOutputTableDriven(t *testing.T) {
 		{
 			name:       "entries with cache hits",
 			entryCount: 10,
-			setupEntry: func(i int) *core.HistoryEntry {
+			setupEntry: func(i int) *dsgo.HistoryEntry {
 				entry := createJSONLTestEntry(i)
 				entry.Cache.Hit = i%2 == 0
 				entry.Cache.Source = "memory"
@@ -148,7 +148,7 @@ func TestJSONLCollector_FileOutputTableDriven(t *testing.T) {
 			tmpDir := t.TempDir()
 			filePath := filepath.Join(tmpDir, "test.jsonl")
 
-			collector, err := core.NewJSONLCollector(filePath)
+			collector, err := dsgo.NewJSONLCollector(filePath)
 			if err != nil {
 				t.Fatalf("Failed to create collector: %v", err)
 			}
@@ -189,7 +189,7 @@ func TestJSONLCollector_ConcurrentWrites(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "concurrent_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector: %v", err)
 	}
@@ -206,25 +206,25 @@ func TestJSONLCollector_ConcurrentWrites(t *testing.T) {
 		go func(goroutineID int) {
 			defer wg.Done()
 			for i := 0; i < entriesPerGoroutine; i++ {
-				entry := &core.HistoryEntry{
+				entry := &dsgo.HistoryEntry{
 					ID:        fmt.Sprintf("g%d-entry-%d", goroutineID, i),
 					Timestamp: time.Now(),
 					SessionID: fmt.Sprintf("session-%d", goroutineID),
 					Provider:  "test-provider",
 					Model:     "test-model",
-					Request: core.RequestMeta{
-						Messages: []core.Message{
+					Request: dsgo.RequestMeta{
+						Messages: []dsgo.Message{
 							{Role: "user", Content: fmt.Sprintf("Message from goroutine %d, entry %d", goroutineID, i)},
 						},
 						PromptLength: 50,
 						MessageCount: 1,
 					},
-					Response: core.ResponseMeta{
+					Response: dsgo.ResponseMeta{
 						Content:        fmt.Sprintf("Response from goroutine %d, entry %d", goroutineID, i),
 						FinishReason:   "stop",
 						ResponseLength: 50,
 					},
-					Usage: core.Usage{
+					Usage: dsgo.Usage{
 						PromptTokens:     10,
 						CompletionTokens: 10,
 						TotalTokens:      20,
@@ -274,7 +274,7 @@ func TestJSONLCollector_ConcurrentWrites(t *testing.T) {
 			continue
 		}
 
-		var entry core.HistoryEntry
+		var entry dsgo.HistoryEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			corruptedLines++
 			t.Errorf("Corrupted line %d: %v\nLine: %s", lineCount+1, err, truncateString(line, 200))
@@ -308,7 +308,7 @@ func TestJSONLCollector_ConcurrentWritesRapidFire(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "rapid_fire.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestJSONLCollector_LargeEntries(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "large_entries.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector: %v", err)
 	}
@@ -373,28 +373,28 @@ func TestJSONLCollector_LargeEntries(t *testing.T) {
 		100 * 1024,
 	}
 
-	entries := make([]*core.HistoryEntry, len(largeContentSizes))
+	entries := make([]*dsgo.HistoryEntry, len(largeContentSizes))
 	for i, size := range largeContentSizes {
 		content := generateLargeContent(size, i)
-		entries[i] = &core.HistoryEntry{
+		entries[i] = &dsgo.HistoryEntry{
 			ID:        fmt.Sprintf("large-entry-%d", i),
 			Timestamp: time.Now(),
 			SessionID: "large-content-session",
 			Provider:  "test-provider",
 			Model:     "test-model",
-			Request: core.RequestMeta{
-				Messages: []core.Message{
+			Request: dsgo.RequestMeta{
+				Messages: []dsgo.Message{
 					{Role: "user", Content: content},
 				},
 				PromptLength: len(content),
 				MessageCount: 1,
 			},
-			Response: core.ResponseMeta{
+			Response: dsgo.ResponseMeta{
 				Content:        content,
 				FinishReason:   "stop",
 				ResponseLength: len(content),
 			},
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     size / 4,
 				CompletionTokens: size / 4,
 				TotalTokens:      size / 2,
@@ -428,7 +428,7 @@ func TestJSONLCollector_LargeEntries(t *testing.T) {
 			continue
 		}
 
-		var parsedEntry core.HistoryEntry
+		var parsedEntry dsgo.HistoryEntry
 		if err := json.Unmarshal([]byte(line), &parsedEntry); err != nil {
 			t.Fatalf("Failed to parse line %d: %v", lineIndex+1, err)
 		}
@@ -476,19 +476,19 @@ func TestJSONLCollector_LargeEntriesTableDriven(t *testing.T) {
 			tmpDir := t.TempDir()
 			filePath := filepath.Join(tmpDir, "large.jsonl")
 
-			collector, err := core.NewJSONLCollector(filePath)
+			collector, err := dsgo.NewJSONLCollector(filePath)
 			if err != nil {
 				t.Fatalf("Failed to create collector: %v", err)
 			}
 
 			content := generateLargeContent(tt.contentSize, 0)
-			entry := &core.HistoryEntry{
+			entry := &dsgo.HistoryEntry{
 				ID:        "large-entry",
 				Timestamp: time.Now(),
 				SessionID: "test",
 				Provider:  "test",
 				Model:     "test",
-				Response: core.ResponseMeta{
+				Response: dsgo.ResponseMeta{
 					Content:        content,
 					ResponseLength: len(content),
 				},
@@ -506,7 +506,7 @@ func TestJSONLCollector_LargeEntriesTableDriven(t *testing.T) {
 				t.Fatalf("Expected 1 line, got %d", len(lines))
 			}
 
-			var parsed core.HistoryEntry
+			var parsed dsgo.HistoryEntry
 			if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
 				t.Fatalf("Failed to parse: %v", err)
 			}
@@ -524,25 +524,25 @@ func TestJSONLCollector_LargeEntriesWithSpecialCharacters(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "special_chars.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
 
 	specialContent := generateContentWithSpecialChars(15 * 1024)
 
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:        "special-chars-entry",
 		Timestamp: time.Now(),
 		SessionID: "test",
 		Provider:  "test",
 		Model:     "test",
-		Request: core.RequestMeta{
-			Messages: []core.Message{
+		Request: dsgo.RequestMeta{
+			Messages: []dsgo.Message{
 				{Role: "user", Content: specialContent},
 			},
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content: specialContent,
 		},
 	}
@@ -559,7 +559,7 @@ func TestJSONLCollector_LargeEntriesWithSpecialCharacters(t *testing.T) {
 		t.Fatalf("Expected 1 line, got %d", len(lines))
 	}
 
-	var parsed core.HistoryEntry
+	var parsed dsgo.HistoryEntry
 	if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
 		t.Fatalf("Failed to parse entry with special chars: %v", err)
 	}
@@ -585,7 +585,7 @@ func TestJSONLCollector_Cleanup(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "cleanup_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create JSONL collector: %v", err)
 	}
@@ -669,7 +669,7 @@ func TestJSONLCollector_CleanupTableDriven(t *testing.T) {
 			tmpDir := t.TempDir()
 			filePath := filepath.Join(tmpDir, "cleanup.jsonl")
 
-			collector, err := core.NewJSONLCollector(filePath)
+			collector, err := dsgo.NewJSONLCollector(filePath)
 			if err != nil {
 				t.Fatalf("Failed to create collector: %v", err)
 			}
@@ -703,7 +703,7 @@ func TestJSONLCollector_FlushOnClose(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "flush_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
@@ -739,7 +739,7 @@ func TestJSONLCollector_PathAccessor(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "path_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
@@ -755,7 +755,7 @@ func TestJSONLCollector_CountAccuracy(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "count_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
@@ -789,15 +789,15 @@ func TestJSONLCollector_CountAccuracy(t *testing.T) {
 // Helper Functions
 // ============================================================================
 
-func createJSONLTestEntry(index int) *core.HistoryEntry {
-	return &core.HistoryEntry{
+func createJSONLTestEntry(index int) *dsgo.HistoryEntry {
+	return &dsgo.HistoryEntry{
 		ID:        fmt.Sprintf("entry-%d", index),
 		Timestamp: time.Now(),
 		SessionID: fmt.Sprintf("session-%d", index%10),
 		Provider:  "test-provider",
 		Model:     "test-model",
-		Request: core.RequestMeta{
-			Messages: []core.Message{
+		Request: dsgo.RequestMeta{
+			Messages: []dsgo.Message{
 				{Role: "user", Content: fmt.Sprintf("Test message %d", index)},
 			},
 			PromptLength: 20,
@@ -805,40 +805,40 @@ func createJSONLTestEntry(index int) *core.HistoryEntry {
 			HasTools:     false,
 			ToolCount:    0,
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content:        fmt.Sprintf("Test response %d", index),
 			FinishReason:   "stop",
 			ResponseLength: 20,
 		},
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
 			Cost:             0.001,
 		},
-		Cache: core.CacheMeta{
+		Cache: dsgo.CacheMeta{
 			Hit: false,
 		},
 	}
 }
 
-func createJSONLConcurrentEntry(goroutineID, entryIndex int) *core.HistoryEntry {
-	return &core.HistoryEntry{
+func createJSONLConcurrentEntry(goroutineID, entryIndex int) *dsgo.HistoryEntry {
+	return &dsgo.HistoryEntry{
 		ID:        fmt.Sprintf("g%d-e%d", goroutineID, entryIndex),
 		Timestamp: time.Now(),
 		SessionID: fmt.Sprintf("session-%d", goroutineID),
 		Provider:  "concurrent-provider",
 		Model:     "concurrent-model",
-		Request: core.RequestMeta{
-			Messages: []core.Message{
+		Request: dsgo.RequestMeta{
+			Messages: []dsgo.Message{
 				{Role: "user", Content: fmt.Sprintf("Concurrent message g%d e%d", goroutineID, entryIndex)},
 			},
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content:      fmt.Sprintf("Response g%d e%d", goroutineID, entryIndex),
 			FinishReason: "stop",
 		},
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			TotalTokens: 20,
 			Cost:        0.001,
 		},
@@ -966,7 +966,7 @@ func TestJSONLCollector_InvalidPath(t *testing.T) {
 	// Try to create collector in a non-existent directory
 	invalidPath := "/nonexistent/directory/structure/that/should/not/exist/test.jsonl"
 
-	_, err := core.NewJSONLCollector(invalidPath)
+	_, err := dsgo.NewJSONLCollector(invalidPath)
 	if err == nil {
 		t.Error("Expected error creating collector with invalid path, got nil")
 	}
@@ -977,7 +977,7 @@ func TestJSONLCollector_WriteAfterClose(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "write_after_close_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
@@ -1006,7 +1006,7 @@ func TestJSONLCollector_ConcurrentCollectAndClose(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "concurrent_close_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
@@ -1079,7 +1079,7 @@ func TestJSONLCollector_PermissionDenied(t *testing.T) {
 	defer func() { _ = os.Chmod(filePath, 0644) }() // restore permissions
 
 	// Try to open collector on read-only file - this should fail on write
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err == nil {
 		defer func() { _ = collector.Close() }()
 		// Try to collect - this should fail
@@ -1099,13 +1099,13 @@ func TestJSONLCollector_EmptyEntry(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "empty_entry_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
 
 	// Create minimal entry
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID: "minimal-entry",
 	}
 
@@ -1123,7 +1123,7 @@ func TestJSONLCollector_EmptyEntry(t *testing.T) {
 		t.Errorf("Expected 1 line, got %d", len(lines))
 	}
 
-	var parsed core.HistoryEntry
+	var parsed dsgo.HistoryEntry
 	if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -1138,24 +1138,24 @@ func TestJSONLCollector_LargeContentCount(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "large_counts_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
 
 	// Create entry with large values
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:        "large-count-entry",
 		Timestamp: time.Now(),
 		Provider:  "test",
 		Model:     "test",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     1000000,
 			CompletionTokens: 1000000,
 			TotalTokens:      2000000,
 			Cost:             999999.99,
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content:        strings.Repeat("x", 10000), // 10KB content
 			ResponseLength: 10000,
 		},
@@ -1175,7 +1175,7 @@ func TestJSONLCollector_LargeContentCount(t *testing.T) {
 		t.Fatalf("Expected 1 line, got %d", len(lines))
 	}
 
-	var parsed core.HistoryEntry
+	var parsed dsgo.HistoryEntry
 	if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -1194,19 +1194,19 @@ func TestJSONLCollector_NilFieldsHandling(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "nil_fields_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
 
 	// Create entry with nil/empty fields
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID: "nil-entry",
-		Request: core.RequestMeta{
+		Request: dsgo.RequestMeta{
 			Messages: nil,
 		},
 		Error: nil,
-		Cache: core.CacheMeta{},
+		Cache: dsgo.CacheMeta{},
 	}
 
 	if err := collector.Collect(entry); err != nil {
@@ -1223,7 +1223,7 @@ func TestJSONLCollector_NilFieldsHandling(t *testing.T) {
 		t.Fatalf("Expected 1 line, got %d", len(lines))
 	}
 
-	var parsed core.HistoryEntry
+	var parsed dsgo.HistoryEntry
 	if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -1238,7 +1238,7 @@ func TestJSONLCollector_CounterAccuracyAfterError(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "count_accuracy_test.jsonl")
 
-	collector, err := core.NewJSONLCollector(filePath)
+	collector, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create collector: %v", err)
 	}
@@ -1271,7 +1271,7 @@ func TestJSONLCollector_RecreateAfterDelete(t *testing.T) {
 	filePath := filepath.Join(tmpDir, "recreate_test.jsonl")
 
 	// First collector
-	collector1, err := core.NewJSONLCollector(filePath)
+	collector1, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create first collector: %v", err)
 	}
@@ -1290,7 +1290,7 @@ func TestJSONLCollector_RecreateAfterDelete(t *testing.T) {
 	}
 
 	// Create second collector for same path
-	collector2, err := core.NewJSONLCollector(filePath)
+	collector2, err := dsgo.NewJSONLCollector(filePath)
 	if err != nil {
 		t.Fatalf("Failed to create second collector: %v", err)
 	}
@@ -1309,7 +1309,7 @@ func TestJSONLCollector_RecreateAfterDelete(t *testing.T) {
 		t.Errorf("Expected 1 line, got %d", len(lines))
 	}
 
-	var parsed core.HistoryEntry
+	var parsed dsgo.HistoryEntry
 	if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}

@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // ============================================================================
@@ -31,7 +30,7 @@ func TestReAct_SingleToolExecution(t *testing.T) {
 	var toolArgs map[string]any
 
 	// Create a calculator tool
-	calcTool := core.NewTool(
+	calcTool := dsgo.NewTool(
 		"calculate",
 		"Perform mathematical calculations",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -55,7 +54,7 @@ func TestReAct_SingleToolExecution(t *testing.T) {
 
 	// Create mock LM that supports tools
 	lm := &ToolMockLM{
-		ToolCalls: []core.ToolCall{
+		ToolCalls: []dsgo.ToolCall{
 			{
 				ID:   "call_1",
 				Name: "calculate",
@@ -70,7 +69,7 @@ func TestReAct_SingleToolExecution(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*calcTool})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*calcTool})
 	react.WithMaxIterations(5)
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -121,7 +120,7 @@ func TestReAct_MultipleToolCalls(t *testing.T) {
 	var callCount int32
 
 	// Create search tool
-	searchTool := core.NewTool(
+	searchTool := dsgo.NewTool(
 		"search",
 		"Search for information",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -133,7 +132,7 @@ func TestReAct_MultipleToolCalls(t *testing.T) {
 
 	// Create mock LM that makes multiple tool calls
 	lm := &MultiToolMockLM{
-		ToolCallSequence: [][]core.ToolCall{
+		ToolCallSequence: [][]dsgo.ToolCall{
 			// First iteration: search for weather
 			{{ID: "call_1", Name: "search", Arguments: map[string]any{"query": "weather today"}}},
 			// Second iteration: search for temperature
@@ -144,7 +143,7 @@ func TestReAct_MultipleToolCalls(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*searchTool})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool})
 	react.WithMaxIterations(5)
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -179,7 +178,7 @@ func TestReAct_MaxIterationEnforcement(t *testing.T) {
 	var iterCount int32
 
 	// Create a tool that never provides conclusive answer
-	loopTool := core.NewTool(
+	loopTool := dsgo.NewTool(
 		"search",
 		"Search for more info",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -190,7 +189,7 @@ func TestReAct_MaxIterationEnforcement(t *testing.T) {
 
 	// Mock LM that always calls tools (never finishes)
 	lm := &InfiniteToolMockLM{
-		ToolCall: core.ToolCall{
+		ToolCall: dsgo.ToolCall{
 			ID:        "call_loop",
 			Name:      "search",
 			Arguments: map[string]any{"query": "more info"},
@@ -199,7 +198,7 @@ func TestReAct_MaxIterationEnforcement(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*loopTool})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*loopTool})
 	react.WithMaxIterations(3) // Set low for test
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -237,7 +236,7 @@ func TestReAct_ToolErrorRecovery(t *testing.T) {
 	defer cancel()
 
 	// Create a tool that fails
-	failingTool := core.NewTool(
+	failingTool := dsgo.NewTool(
 		"database",
 		"Query database",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -247,7 +246,7 @@ func TestReAct_ToolErrorRecovery(t *testing.T) {
 
 	// Mock LM that tries failing tool, then provides answer
 	lm := &ToolErrorRecoveryMockLM{
-		FirstToolCall: core.ToolCall{
+		FirstToolCall: dsgo.ToolCall{
 			ID:        "call_1",
 			Name:      "database",
 			Arguments: map[string]any{"query": "SELECT *"},
@@ -256,7 +255,7 @@ func TestReAct_ToolErrorRecovery(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*failingTool})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*failingTool})
 	react.WithMaxIterations(5)
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -288,12 +287,12 @@ func TestReAct_ToolNotFound(t *testing.T) {
 
 	// Mock LM that calls non-existent tool first
 	lm := &ToolNotFoundMockLM{
-		FirstToolCall: core.ToolCall{
+		FirstToolCall: dsgo.ToolCall{
 			ID:        "call_1",
 			Name:      "unknown_tool",
 			Arguments: map[string]any{"param": "value"},
 		},
-		SecondToolCall: core.ToolCall{
+		SecondToolCall: dsgo.ToolCall{
 			ID:        "call_2",
 			Name:      "finish",
 			Arguments: map[string]any{"answer": "Used fallback approach", "reasoning": "Unknown tool failed"},
@@ -301,7 +300,7 @@ func TestReAct_ToolNotFound(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*searchTool})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool})
 	react.WithMaxIterations(5)
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -333,7 +332,7 @@ func TestReAct_ObservabilityIntegration(t *testing.T) {
 	defer cancel()
 
 	// Simple tool
-	searchTool := core.NewTool(
+	searchTool := dsgo.NewTool(
 		"search",
 		"Search",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -343,13 +342,13 @@ func TestReAct_ObservabilityIntegration(t *testing.T) {
 
 	// Mock LM with tool call then finish
 	lm := &ObservabilityMockLM{
-		ToolCall: core.ToolCall{
+		ToolCall: dsgo.ToolCall{
 			ID:        "call_1",
 			Name:      "search",
 			Arguments: map[string]any{"query": "test"},
 		},
 		FinalResponse: `{"answer": "Found the result", "reasoning": "Search was successful"}`,
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 			TotalTokens:      150,
@@ -358,7 +357,7 @@ func TestReAct_ObservabilityIntegration(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*searchTool})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool})
 
 	result, err := react.Forward(ctx, map[string]any{
 		"question": "Test query",
@@ -393,7 +392,7 @@ func TestReAct_ContextCancellation(t *testing.T) {
 	defer cancel()
 
 	// Create a slow tool that respects context
-	slowTool := core.NewTool(
+	slowTool := dsgo.NewTool(
 		"slow_search",
 		"Slow search",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -409,7 +408,7 @@ func TestReAct_ContextCancellation(t *testing.T) {
 	// Mock LM that is slow and respects context
 	lm := &SlowGenerateMockLM{
 		Delay: 500 * time.Millisecond,
-		ToolCall: core.ToolCall{
+		ToolCall: dsgo.ToolCall{
 			ID:        "call_1",
 			Name:      "slow_search",
 			Arguments: map[string]any{"query": "test"},
@@ -417,7 +416,7 @@ func TestReAct_ContextCancellation(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*slowTool})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*slowTool})
 	react.WithMaxIterations(5)
 
 	_, err := react.Forward(ctx, map[string]any{
@@ -439,7 +438,7 @@ func TestReAct_FinishToolDirectCall(t *testing.T) {
 
 	// No additional tools - just the auto-injected finish tool
 	lm := &FinishToolMockLM{
-		FinishCall: core.ToolCall{
+		FinishCall: dsgo.ToolCall{
 			ID:   "call_finish",
 			Name: "finish",
 			Arguments: map[string]any{
@@ -450,7 +449,7 @@ func TestReAct_FinishToolDirectCall(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 	react.WithMaxIterations(3)
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -473,21 +472,21 @@ func TestReAct_FinishToolDirectCall(t *testing.T) {
 
 // ToolMockLM simulates an LM that makes a single tool call then provides final answer
 type ToolMockLM struct {
-	ToolCalls     []core.ToolCall
+	ToolCalls     []dsgo.ToolCall
 	FinalResponse string
 	callCount     int
 }
 
-func (m *ToolMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *ToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	m.callCount++
 
 	// First call: return tool calls
 	if m.callCount == 1 && len(m.ToolCalls) > 0 {
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      "Let me calculate that for you.",
 			ToolCalls:    m.ToolCalls,
 			FinishReason: "tool_calls",
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     50,
 				CompletionTokens: 20,
 				TotalTokens:      70,
@@ -497,10 +496,10 @@ func (m *ToolMockLM) Generate(ctx context.Context, messages []core.Message, opti
 	}
 
 	// Subsequent calls: return final response
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      m.FinalResponse,
 		FinishReason: "stop",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 			TotalTokens:      150,
@@ -509,8 +508,8 @@ func (m *ToolMockLM) Generate(ctx context.Context, messages []core.Message, opti
 	}, nil
 }
 
-func (m *ToolMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *ToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -520,7 +519,7 @@ func (m *ToolMockLM) Stream(ctx context.Context, messages []core.Message, option
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -532,32 +531,32 @@ func (m *ToolMockLM) IsOpenAI() bool      { return false }
 
 // MultiToolMockLM simulates an LM making multiple tool calls across iterations
 type MultiToolMockLM struct {
-	ToolCallSequence [][]core.ToolCall
+	ToolCallSequence [][]dsgo.ToolCall
 	callCount        int
 }
 
-func (m *MultiToolMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *MultiToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	if m.callCount >= len(m.ToolCallSequence) {
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      `{"answer": "Final answer", "reasoning": "Complete"}`,
 			FinishReason: "stop",
-			Usage:        core.Usage{TotalTokens: 50, Cost: 0.001},
+			Usage:        dsgo.Usage{TotalTokens: 50, Cost: 0.001},
 		}, nil
 	}
 
 	toolCalls := m.ToolCallSequence[m.callCount]
 	m.callCount++
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      "Processing...",
 		ToolCalls:    toolCalls,
 		FinishReason: "tool_calls",
-		Usage:        core.Usage{TotalTokens: 30, Cost: 0.0005},
+		Usage:        dsgo.Usage{TotalTokens: 30, Cost: 0.0005},
 	}, nil
 }
 
-func (m *MultiToolMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *MultiToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -567,7 +566,7 @@ func (m *MultiToolMockLM) Stream(ctx context.Context, messages []core.Message, o
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -579,34 +578,34 @@ func (m *MultiToolMockLM) IsOpenAI() bool      { return false }
 
 // InfiniteToolMockLM simulates an LM that never stops calling tools
 type InfiniteToolMockLM struct {
-	ToolCall      core.ToolCall
+	ToolCall      dsgo.ToolCall
 	FinalResponse string
 	callCount     int
 }
 
-func (m *InfiniteToolMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *InfiniteToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	m.callCount++
 
 	// If tools are disabled (final mode), return final response
 	if len(options.Tools) == 0 {
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      m.FinalResponse,
 			FinishReason: "stop",
-			Usage:        core.Usage{TotalTokens: 50, Cost: 0.001},
+			Usage:        dsgo.Usage{TotalTokens: 50, Cost: 0.001},
 		}, nil
 	}
 
 	// Always return tool call
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      "Need more information...",
-		ToolCalls:    []core.ToolCall{m.ToolCall},
+		ToolCalls:    []dsgo.ToolCall{m.ToolCall},
 		FinishReason: "tool_calls",
-		Usage:        core.Usage{TotalTokens: 30, Cost: 0.0005},
+		Usage:        dsgo.Usage{TotalTokens: 30, Cost: 0.0005},
 	}, nil
 }
 
-func (m *InfiniteToolMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *InfiniteToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -616,7 +615,7 @@ func (m *InfiniteToolMockLM) Stream(ctx context.Context, messages []core.Message
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -628,34 +627,34 @@ func (m *InfiniteToolMockLM) IsOpenAI() bool      { return false }
 
 // ToolErrorRecoveryMockLM simulates recovery from tool errors
 type ToolErrorRecoveryMockLM struct {
-	FirstToolCall core.ToolCall
+	FirstToolCall dsgo.ToolCall
 	FinalResponse string
 	callCount     int
 }
 
-func (m *ToolErrorRecoveryMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *ToolErrorRecoveryMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	m.callCount++
 
 	// First call: return tool call
 	if m.callCount == 1 {
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      "Let me query the database.",
-			ToolCalls:    []core.ToolCall{m.FirstToolCall},
+			ToolCalls:    []dsgo.ToolCall{m.FirstToolCall},
 			FinishReason: "tool_calls",
-			Usage:        core.Usage{TotalTokens: 30, Cost: 0.0005},
+			Usage:        dsgo.Usage{TotalTokens: 30, Cost: 0.0005},
 		}, nil
 	}
 
 	// After tool error, provide final answer
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      m.FinalResponse,
 		FinishReason: "stop",
-		Usage:        core.Usage{TotalTokens: 50, Cost: 0.001},
+		Usage:        dsgo.Usage{TotalTokens: 50, Cost: 0.001},
 	}, nil
 }
 
-func (m *ToolErrorRecoveryMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *ToolErrorRecoveryMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -665,7 +664,7 @@ func (m *ToolErrorRecoveryMockLM) Stream(ctx context.Context, messages []core.Me
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -677,33 +676,33 @@ func (m *ToolErrorRecoveryMockLM) IsOpenAI() bool      { return false }
 
 // ToolNotFoundMockLM simulates calling an unknown tool
 type ToolNotFoundMockLM struct {
-	FirstToolCall  core.ToolCall
-	SecondToolCall core.ToolCall
+	FirstToolCall  dsgo.ToolCall
+	SecondToolCall dsgo.ToolCall
 	callCount      int
 }
 
-func (m *ToolNotFoundMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *ToolNotFoundMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	m.callCount++
 
 	if m.callCount == 1 {
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      "Let me use this tool.",
-			ToolCalls:    []core.ToolCall{m.FirstToolCall},
+			ToolCalls:    []dsgo.ToolCall{m.FirstToolCall},
 			FinishReason: "tool_calls",
-			Usage:        core.Usage{TotalTokens: 30},
+			Usage:        dsgo.Usage{TotalTokens: 30},
 		}, nil
 	}
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      "Using finish tool.",
-		ToolCalls:    []core.ToolCall{m.SecondToolCall},
+		ToolCalls:    []dsgo.ToolCall{m.SecondToolCall},
 		FinishReason: "tool_calls",
-		Usage:        core.Usage{TotalTokens: 30},
+		Usage:        dsgo.Usage{TotalTokens: 30},
 	}, nil
 }
 
-func (m *ToolNotFoundMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *ToolNotFoundMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -713,7 +712,7 @@ func (m *ToolNotFoundMockLM) Stream(ctx context.Context, messages []core.Message
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -725,33 +724,33 @@ func (m *ToolNotFoundMockLM) IsOpenAI() bool      { return false }
 
 // ObservabilityMockLM tracks observability data
 type ObservabilityMockLM struct {
-	ToolCall      core.ToolCall
+	ToolCall      dsgo.ToolCall
 	FinalResponse string
-	Usage         core.Usage
+	Usage         dsgo.Usage
 	callCount     int
 }
 
-func (m *ObservabilityMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *ObservabilityMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	m.callCount++
 
 	if m.callCount == 1 && m.ToolCall.Name != "" {
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      "Searching...",
-			ToolCalls:    []core.ToolCall{m.ToolCall},
+			ToolCalls:    []dsgo.ToolCall{m.ToolCall},
 			FinishReason: "tool_calls",
 			Usage:        m.Usage,
 		}, nil
 	}
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      m.FinalResponse,
 		FinishReason: "stop",
 		Usage:        m.Usage,
 	}, nil
 }
 
-func (m *ObservabilityMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *ObservabilityMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -761,7 +760,7 @@ func (m *ObservabilityMockLM) Stream(ctx context.Context, messages []core.Messag
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -774,25 +773,25 @@ func (m *ObservabilityMockLM) IsOpenAI() bool      { return false }
 // SlowGenerateMockLM simulates a slow LM for context cancellation tests
 type SlowGenerateMockLM struct {
 	Delay    time.Duration
-	ToolCall core.ToolCall
+	ToolCall dsgo.ToolCall
 }
 
-func (m *SlowGenerateMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *SlowGenerateMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(m.Delay):
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      "Calling slow tool...",
-			ToolCalls:    []core.ToolCall{m.ToolCall},
+			ToolCalls:    []dsgo.ToolCall{m.ToolCall},
 			FinishReason: "tool_calls",
-			Usage:        core.Usage{TotalTokens: 30},
+			Usage:        dsgo.Usage{TotalTokens: 30},
 		}, nil
 	}
 }
 
-func (m *SlowGenerateMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *SlowGenerateMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -802,7 +801,7 @@ func (m *SlowGenerateMockLM) Stream(ctx context.Context, messages []core.Message
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -814,20 +813,20 @@ func (m *SlowGenerateMockLM) IsOpenAI() bool      { return false }
 
 // FinishToolMockLM simulates calling the finish tool directly
 type FinishToolMockLM struct {
-	FinishCall core.ToolCall
+	FinishCall dsgo.ToolCall
 }
 
-func (m *FinishToolMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-	return &core.GenerateResult{
+func (m *FinishToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	return &dsgo.GenerateResult{
 		Content:      "I can answer directly.",
-		ToolCalls:    []core.ToolCall{m.FinishCall},
+		ToolCalls:    []dsgo.ToolCall{m.FinishCall},
 		FinishReason: "tool_calls",
-		Usage:        core.Usage{TotalTokens: 30, Cost: 0.0005},
+		Usage:        dsgo.Usage{TotalTokens: 30, Cost: 0.0005},
 	}, nil
 }
 
-func (m *FinishToolMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *FinishToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -837,7 +836,7 @@ func (m *FinishToolMockLM) Stream(ctx context.Context, messages []core.Message, 
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -863,7 +862,7 @@ func TestReAct_ExtractTextOutputsFallback(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	react := module.NewReAct(sig, lm, []core.Tool{}).
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{}).
 		WithMaxIterations(3)
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -891,7 +890,7 @@ func TestReAct_SynthesizeAnswerFromHistory(t *testing.T) {
 	var observations []string
 
 	// Create a tool that returns useful information
-	infoTool := core.NewTool(
+	infoTool := dsgo.NewTool(
 		"get_info",
 		"Get information about a topic",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -903,7 +902,7 @@ func TestReAct_SynthesizeAnswerFromHistory(t *testing.T) {
 
 	// Mock LM that calls tool then returns empty content
 	lm := &EmptyContentAfterToolMockLM{
-		ToolCalls: []core.ToolCall{
+		ToolCalls: []dsgo.ToolCall{
 			{
 				ID:        "call_1",
 				Name:      "get_info",
@@ -913,7 +912,7 @@ func TestReAct_SynthesizeAnswerFromHistory(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*infoTool}).
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*infoTool}).
 		WithMaxIterations(3)
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -943,14 +942,14 @@ func TestReAct_MaxIterationsExceeded(t *testing.T) {
 
 	// Mock LM that always wants to call tools, never finishes
 	lm := &InfiniteLoopMockLM{
-		ToolCall: core.ToolCall{
+		ToolCall: dsgo.ToolCall{
 			ID:        "call_loop",
 			Name:      "search",
 			Arguments: map[string]any{"query": "keep searching"},
 		},
 	}
 
-	searchTool := core.NewTool(
+	searchTool := dsgo.NewTool(
 		"search",
 		"Search for information",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -959,7 +958,7 @@ func TestReAct_MaxIterationsExceeded(t *testing.T) {
 	).AddParameter("query", "string", "Query", true)
 
 	sig := fixtures.ReActSig()
-	react := module.NewReAct(sig, lm, []core.Tool{*searchTool}).
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool}).
 		WithMaxIterations(2) // Low max to trigger runExtract quickly
 
 	result, err := react.Forward(ctx, map[string]any{
@@ -985,22 +984,22 @@ type MalformedOutputMockLM struct {
 	Response string
 }
 
-func (m *MalformedOutputMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-	return &core.GenerateResult{
+func (m *MalformedOutputMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	return &dsgo.GenerateResult{
 		Content:      m.Response,
 		FinishReason: "stop",
-		Usage:        core.Usage{TotalTokens: 20, Cost: 0.0005},
+		Usage:        dsgo.Usage{TotalTokens: 20, Cost: 0.0005},
 	}, nil
 }
 
-func (m *MalformedOutputMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *MalformedOutputMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
 		result, _ := m.Generate(ctx, messages, options)
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -1012,39 +1011,39 @@ func (m *MalformedOutputMockLM) IsOpenAI() bool      { return false }
 
 // EmptyContentAfterToolMockLM calls tools then returns empty content
 type EmptyContentAfterToolMockLM struct {
-	ToolCalls []core.ToolCall
+	ToolCalls []dsgo.ToolCall
 	callCount int
 }
 
-func (m *EmptyContentAfterToolMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *EmptyContentAfterToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	m.callCount++
 
 	if m.callCount == 1 && len(m.ToolCalls) > 0 {
 		// First call: return tool calls
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:      "Let me search for information.",
 			ToolCalls:    m.ToolCalls,
 			FinishReason: "tool_calls",
-			Usage:        core.Usage{TotalTokens: 20, Cost: 0.0005},
+			Usage:        dsgo.Usage{TotalTokens: 20, Cost: 0.0005},
 		}, nil
 	}
 
 	// Subsequent calls: return very short content to trigger synthesis
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content:      "Ok",
 		FinishReason: "stop",
-		Usage:        core.Usage{TotalTokens: 5, Cost: 0.0001},
+		Usage:        dsgo.Usage{TotalTokens: 5, Cost: 0.0001},
 	}, nil
 }
 
-func (m *EmptyContentAfterToolMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *EmptyContentAfterToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
 		result, _ := m.Generate(ctx, messages, options)
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -1056,26 +1055,26 @@ func (m *EmptyContentAfterToolMockLM) IsOpenAI() bool      { return false }
 
 // InfiniteLoopMockLM always returns tool calls, never finishes
 type InfiniteLoopMockLM struct {
-	ToolCall core.ToolCall
+	ToolCall dsgo.ToolCall
 }
 
-func (m *InfiniteLoopMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-	return &core.GenerateResult{
+func (m *InfiniteLoopMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	return &dsgo.GenerateResult{
 		Content:      "Need to search more",
-		ToolCalls:    []core.ToolCall{m.ToolCall},
+		ToolCalls:    []dsgo.ToolCall{m.ToolCall},
 		FinishReason: "tool_calls",
-		Usage:        core.Usage{TotalTokens: 15, Cost: 0.0003},
+		Usage:        dsgo.Usage{TotalTokens: 15, Cost: 0.0003},
 	}, nil
 }
 
-func (m *InfiniteLoopMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *InfiniteLoopMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
 		result, _ := m.Generate(ctx, messages, options)
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }
@@ -1095,14 +1094,14 @@ func TestReAct_CoerceBasicTypes_StringToInt(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Count items").
-		AddInput("items", core.FieldTypeString, "Items").
-		AddOutput("count", core.FieldTypeInt, "Number of items")
+	sig := dsgo.NewSignature("Count items").
+		AddInput("items", dsgo.FieldTypeString, "Items").
+		AddOutput("count", dsgo.FieldTypeInt, "Number of items")
 
 	// LM returns count as string instead of int
 	lm := &TypeCoercionMockLM{CoercionType: "string-as-int"}
 
-	react := module.NewReAct(sig, lm, []core.Tool{})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 
 	result, err := react.Forward(ctx, map[string]any{
 		"items": "apple, banana, orange",
@@ -1126,14 +1125,14 @@ func TestReAct_CoerceBasicTypes_StringToFloat(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Rate quality").
-		AddInput("text", core.FieldTypeString, "Text to rate").
-		AddOutput("score", core.FieldTypeFloat, "Quality score")
+	sig := dsgo.NewSignature("Rate quality").
+		AddInput("text", dsgo.FieldTypeString, "Text to rate").
+		AddOutput("score", dsgo.FieldTypeFloat, "Quality score")
 
 	// LM returns score as string
 	lm := &TypeCoercionMockLM{CoercionType: "string-as-float"}
 
-	react := module.NewReAct(sig, lm, []core.Tool{})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 
 	result, err := react.Forward(ctx, map[string]any{
 		"text": "test",
@@ -1157,14 +1156,14 @@ func TestReAct_CoerceBasicTypes_StringBoolTrue(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Check validity").
-		AddInput("item", core.FieldTypeString, "Item").
-		AddOutput("valid", core.FieldTypeBool, "Is valid")
+	sig := dsgo.NewSignature("Check validity").
+		AddInput("item", dsgo.FieldTypeString, "Item").
+		AddOutput("valid", dsgo.FieldTypeBool, "Is valid")
 
 	// LM returns bool as string "true"
 	lm := &TypeCoercionMockLM{CoercionType: "bool-as-string"}
 
-	react := module.NewReAct(sig, lm, []core.Tool{})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 
 	result, err := react.Forward(ctx, map[string]any{
 		"item": "test",
@@ -1188,14 +1187,14 @@ func TestReAct_CoerceBasicTypes_StringToPercentage(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Confidence assessment").
-		AddInput("query", core.FieldTypeString, "Query").
-		AddOutput("confidence", core.FieldTypeFloat, "Confidence level (0-1)")
+	sig := dsgo.NewSignature("Confidence assessment").
+		AddInput("query", dsgo.FieldTypeString, "Query").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence level (0-1)")
 
 	// LM returns "95%" which should extract to 95 and normalize to 0.95
 	lm := &TypeCoercionMockLM{CoercionType: "string-as-percentage"}
 
-	react := module.NewReAct(sig, lm, []core.Tool{})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 
 	result, err := react.Forward(ctx, map[string]any{
 		"query": "test",
@@ -1217,14 +1216,14 @@ func TestReAct_CoerceBasicTypes_IntToFloat(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Calculate average").
-		AddInput("values", core.FieldTypeString, "Values").
-		AddOutput("average", core.FieldTypeFloat, "Average")
+	sig := dsgo.NewSignature("Calculate average").
+		AddInput("values", dsgo.FieldTypeString, "Values").
+		AddOutput("average", dsgo.FieldTypeFloat, "Average")
 
 	// TypeCoercionMockLM returns numeric values as JSON
 	lm := &TypeCoercionMockLM{CoercionType: "int-as-string"}
 
-	react := module.NewReAct(sig, lm, []core.Tool{})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 
 	_, err := react.Forward(ctx, map[string]any{
 		"values": "1,2,3",
@@ -1242,14 +1241,14 @@ func TestReAct_CoerceBasicTypes_QualitativeToNumeric(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Assess quality").
-		AddInput("text", core.FieldTypeString, "Text").
-		AddOutput("confidence", core.FieldTypeFloat, "Confidence")
+	sig := dsgo.NewSignature("Assess quality").
+		AddInput("text", dsgo.FieldTypeString, "Text").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence")
 
 	// LM returns qualitative values like "high" for confidence
 	lm := &TypeCoercionMockLM{CoercionType: "qualitative-confidence"}
 
-	react := module.NewReAct(sig, lm, []core.Tool{})
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 
 	_, err := react.Forward(ctx, map[string]any{
 		"text": "test",

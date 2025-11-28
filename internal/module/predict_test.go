@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestPredict_Forward_Success(t *testing.T) {

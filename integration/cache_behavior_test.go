@@ -6,20 +6,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // TestCacheBehavior_BasicHitMiss tests basic cache hit and miss behavior
 func TestCacheBehavior_BasicHitMiss(t *testing.T) {
 	tests := []struct {
 		name           string
-		operations     func(cache core.Cache) (int, int) // Returns hits, misses
+		operations     func(cache dsgo.Cache) (int, int) // Returns hits, misses
 		expectedHits   int
 		expectedMisses int
 	}{
 		{
 			name: "single miss",
-			operations: func(cache core.Cache) (int, int) {
+			operations: func(cache dsgo.Cache) (int, int) {
 				cache.Get("key1")
 				stats := cache.Stats()
 				return int(stats.Hits), int(stats.Misses)
@@ -29,8 +29,8 @@ func TestCacheBehavior_BasicHitMiss(t *testing.T) {
 		},
 		{
 			name: "single hit",
-			operations: func(cache core.Cache) (int, int) {
-				result := &core.GenerateResult{Content: "test"}
+			operations: func(cache dsgo.Cache) (int, int) {
+				result := &dsgo.GenerateResult{Content: "test"}
 				cache.Set("key1", result)
 				cache.Get("key1")
 				stats := cache.Stats()
@@ -41,9 +41,9 @@ func TestCacheBehavior_BasicHitMiss(t *testing.T) {
 		},
 		{
 			name: "multiple operations",
-			operations: func(cache core.Cache) (int, int) {
-				result1 := &core.GenerateResult{Content: "result1"}
-				result2 := &core.GenerateResult{Content: "result2"}
+			operations: func(cache dsgo.Cache) (int, int) {
+				result1 := &dsgo.GenerateResult{Content: "result1"}
+				result2 := &dsgo.GenerateResult{Content: "result2"}
 
 				cache.Set("key1", result1)
 				cache.Set("key2", result2)
@@ -63,7 +63,7 @@ func TestCacheBehavior_BasicHitMiss(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := core.NewLMCache(100)
+			cache := dsgo.NewLMCache(100)
 			hits, misses := tt.operations(cache)
 
 			if hits != tt.expectedHits {
@@ -93,7 +93,7 @@ func TestCacheBehavior_CacheHitRate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stats := core.CacheStats{Hits: tt.hits, Misses: tt.misses}
+			stats := dsgo.CacheStats{Hits: tt.hits, Misses: tt.misses}
 			rate := stats.HitRate()
 
 			if rate != tt.expectedRate {
@@ -113,11 +113,11 @@ func TestCacheBehavior_KeyDeterminism(t *testing.T) {
 		{
 			name: "identical messages and options",
 			setup: func() (string, string) {
-				messages := []core.Message{{Role: "user", Content: "hello"}}
-				opts := core.DefaultGenerateOptions()
+				messages := []dsgo.Message{{Role: "user", Content: "hello"}}
+				opts := dsgo.DefaultGenerateOptions()
 
-				key1 := core.GenerateCacheKey("gpt-4", messages, opts)
-				key2 := core.GenerateCacheKey("gpt-4", messages, opts)
+				key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts)
+				key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts)
 
 				return key1, key2
 			},
@@ -126,11 +126,11 @@ func TestCacheBehavior_KeyDeterminism(t *testing.T) {
 		{
 			name: "different models",
 			setup: func() (string, string) {
-				messages := []core.Message{{Role: "user", Content: "hello"}}
-				opts := core.DefaultGenerateOptions()
+				messages := []dsgo.Message{{Role: "user", Content: "hello"}}
+				opts := dsgo.DefaultGenerateOptions()
 
-				key1 := core.GenerateCacheKey("gpt-4", messages, opts)
-				key2 := core.GenerateCacheKey("gpt-3.5-turbo", messages, opts)
+				key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts)
+				key2 := dsgo.GenerateCacheKey("gpt-3.5-turbo", messages, opts)
 
 				return key1, key2
 			},
@@ -139,12 +139,12 @@ func TestCacheBehavior_KeyDeterminism(t *testing.T) {
 		{
 			name: "different content",
 			setup: func() (string, string) {
-				msg1 := []core.Message{{Role: "user", Content: "hello"}}
-				msg2 := []core.Message{{Role: "user", Content: "goodbye"}}
-				opts := core.DefaultGenerateOptions()
+				msg1 := []dsgo.Message{{Role: "user", Content: "hello"}}
+				msg2 := []dsgo.Message{{Role: "user", Content: "goodbye"}}
+				opts := dsgo.DefaultGenerateOptions()
 
-				key1 := core.GenerateCacheKey("gpt-4", msg1, opts)
-				key2 := core.GenerateCacheKey("gpt-4", msg2, opts)
+				key1 := dsgo.GenerateCacheKey("gpt-4", msg1, opts)
+				key2 := dsgo.GenerateCacheKey("gpt-4", msg2, opts)
 
 				return key1, key2
 			},
@@ -153,13 +153,13 @@ func TestCacheBehavior_KeyDeterminism(t *testing.T) {
 		{
 			name: "different temperature",
 			setup: func() (string, string) {
-				messages := []core.Message{{Role: "user", Content: "hello"}}
-				opts1 := core.DefaultGenerateOptions()
-				opts2 := core.DefaultGenerateOptions()
+				messages := []dsgo.Message{{Role: "user", Content: "hello"}}
+				opts1 := dsgo.DefaultGenerateOptions()
+				opts2 := dsgo.DefaultGenerateOptions()
 				opts2.Temperature = 0.5
 
-				key1 := core.GenerateCacheKey("gpt-4", messages, opts1)
-				key2 := core.GenerateCacheKey("gpt-4", messages, opts2)
+				key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts1)
+				key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts2)
 
 				return key1, key2
 			},
@@ -183,16 +183,16 @@ func TestCacheBehavior_KeyDeterminism(t *testing.T) {
 
 // TestCacheBehavior_StopSequenceOrder tests that stop sequence order doesn't affect cache key
 func TestCacheBehavior_StopSequenceOrder(t *testing.T) {
-	messages := []core.Message{{Role: "user", Content: "test"}}
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
-	opts1 := core.DefaultGenerateOptions()
+	opts1 := dsgo.DefaultGenerateOptions()
 	opts1.Stop = []string{"stop1", "stop2", "stop3"}
 
-	opts2 := core.DefaultGenerateOptions()
+	opts2 := dsgo.DefaultGenerateOptions()
 	opts2.Stop = []string{"stop3", "stop1", "stop2"}
 
-	key1 := core.GenerateCacheKey("gpt-4", messages, opts1)
-	key2 := core.GenerateCacheKey("gpt-4", messages, opts2)
+	key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts1)
+	key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts2)
 
 	if key1 != key2 {
 		t.Errorf("Expected same key regardless of stop sequence order")
@@ -201,7 +201,7 @@ func TestCacheBehavior_StopSequenceOrder(t *testing.T) {
 
 // TestCacheBehavior_MapCanonicalOrder tests that map insertion order doesn't affect cache key
 func TestCacheBehavior_MapCanonicalOrder(t *testing.T) {
-	messages := []core.Message{{Role: "user", Content: "test"}}
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
 	// Create two maps with same content but different insertion order
 	schema1 := map[string]any{
@@ -216,14 +216,14 @@ func TestCacheBehavior_MapCanonicalOrder(t *testing.T) {
 		"z_field": "value",
 	}
 
-	opts1 := core.DefaultGenerateOptions()
+	opts1 := dsgo.DefaultGenerateOptions()
 	opts1.ResponseSchema = schema1
 
-	opts2 := core.DefaultGenerateOptions()
+	opts2 := dsgo.DefaultGenerateOptions()
 	opts2.ResponseSchema = schema2
 
-	key1 := core.GenerateCacheKey("gpt-4", messages, opts1)
-	key2 := core.GenerateCacheKey("gpt-4", messages, opts2)
+	key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts1)
+	key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts2)
 
 	if key1 != key2 {
 		t.Errorf("Map canonicalization failed: insertion order should not affect key")
@@ -260,9 +260,9 @@ func TestCacheBehavior_TTLExpiration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := core.NewLMCacheWithTTL(10, tt.ttl)
+			cache := dsgo.NewLMCacheWithTTL(10, tt.ttl)
 
-			result := &core.GenerateResult{Content: "test content"}
+			result := &dsgo.GenerateResult{Content: "test content"}
 			cache.Set("key1", result)
 
 			if tt.waitBeforeGet > 0 {
@@ -281,16 +281,16 @@ func TestCacheBehavior_TTLExpiration(t *testing.T) {
 // TestCacheBehavior_TTLRefresh tests that updating an entry refreshes its TTL
 func TestCacheBehavior_TTLRefresh(t *testing.T) {
 	ttl := 100 * time.Millisecond
-	cache := core.NewLMCacheWithTTL(10, ttl)
+	cache := dsgo.NewLMCacheWithTTL(10, ttl)
 
 	// Set initial entry
-	cache.Set("key1", &core.GenerateResult{Content: "initial"})
+	cache.Set("key1", &dsgo.GenerateResult{Content: "initial"})
 
 	// Wait half the TTL
 	time.Sleep(ttl / 2)
 
 	// Update entry (should refresh TTL)
-	cache.Set("key1", &core.GenerateResult{Content: "updated"})
+	cache.Set("key1", &dsgo.GenerateResult{Content: "updated"})
 
 	// Wait another half of TTL
 	time.Sleep(ttl / 2)
@@ -317,9 +317,9 @@ func TestCacheBehavior_TTLRefresh(t *testing.T) {
 
 // TestCacheBehavior_TTLDisabled tests that TTL=0 means no expiration
 func TestCacheBehavior_TTLDisabled(t *testing.T) {
-	cache := core.NewLMCacheWithTTL(10, 0)
+	cache := dsgo.NewLMCacheWithTTL(10, 0)
 
-	cache.Set("key1", &core.GenerateResult{Content: "test"})
+	cache.Set("key1", &dsgo.GenerateResult{Content: "test"})
 
 	// Wait longer than a typical TTL would be
 	time.Sleep(200 * time.Millisecond)
@@ -359,12 +359,12 @@ func TestCacheBehavior_LRUEviction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := core.NewLMCache(tt.capacity)
+			cache := dsgo.NewLMCache(tt.capacity)
 
 			// Add items to trigger eviction
 			for i := 1; i <= tt.itemsToAdd; i++ {
 				key := fmt.Sprintf("key%d", i)
-				cache.Set(key, &core.GenerateResult{Content: key})
+				cache.Set(key, &dsgo.GenerateResult{Content: key})
 
 				// For the "evict oldest after access" test, access key1
 				if tt.name == "evict oldest after access" && i == 3 {
@@ -393,11 +393,11 @@ func TestCacheBehavior_LRUEviction(t *testing.T) {
 
 // TestCacheBehavior_DeepCopyMutation tests that cached values are protected from mutation
 func TestCacheBehavior_DeepCopyMutation(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "original",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			TotalTokens: 100,
 			Cost:        0.01,
 		},
@@ -434,9 +434,9 @@ func TestCacheBehavior_DeepCopyMutation(t *testing.T) {
 
 // TestCacheBehavior_RetrievedValueMutation tests that modifying retrieved values doesn't affect cache
 func TestCacheBehavior_RetrievedValueMutation(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	cache.Set("key1", &core.GenerateResult{
+	cache.Set("key1", &dsgo.GenerateResult{
 		Content: "test",
 		Metadata: map[string]any{
 			"data": "original",
@@ -462,7 +462,7 @@ func TestCacheBehavior_RetrievedValueMutation(t *testing.T) {
 
 // TestCacheBehavior_ConcurrentAccess tests thread-safe concurrent access
 func TestCacheBehavior_ConcurrentAccess(t *testing.T) {
-	cache := core.NewLMCache(100)
+	cache := dsgo.NewLMCache(100)
 	var wg sync.WaitGroup
 
 	// Concurrent writes
@@ -472,7 +472,7 @@ func TestCacheBehavior_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < 10; j++ {
 				key := fmt.Sprintf("key_%d_%d", id, j)
-				cache.Set(key, &core.GenerateResult{Content: key})
+				cache.Set(key, &dsgo.GenerateResult{Content: key})
 			}
 		}(i)
 	}
@@ -503,7 +503,7 @@ func TestCacheBehavior_ConcurrentAccess(t *testing.T) {
 
 // TestCacheBehavior_ConcurrentEviction tests concurrent access during eviction
 func TestCacheBehavior_ConcurrentEviction(t *testing.T) {
-	cache := core.NewLMCache(50)
+	cache := dsgo.NewLMCache(50)
 	var wg sync.WaitGroup
 
 	// Multiple goroutines adding many items to trigger frequent evictions
@@ -514,7 +514,7 @@ func TestCacheBehavior_ConcurrentEviction(t *testing.T) {
 			// Create many unique keys to force evictions
 			for j := 0; j < 100; j++ {
 				key := fmt.Sprintf("key_%d_%d", id, j)
-				cache.Set(key, &core.GenerateResult{Content: key})
+				cache.Set(key, &dsgo.GenerateResult{Content: key})
 			}
 		}(i)
 	}
@@ -530,12 +530,12 @@ func TestCacheBehavior_ConcurrentEviction(t *testing.T) {
 
 // TestCacheBehavior_ConcurrentStatistics tests statistics accuracy under concurrent access
 func TestCacheBehavior_ConcurrentStatistics(t *testing.T) {
-	cache := core.NewLMCache(100)
+	cache := dsgo.NewLMCache(100)
 	var wg sync.WaitGroup
 
 	// Pre-populate cache
 	for i := 0; i < 20; i++ {
-		cache.Set(fmt.Sprintf("key_%d", i), &core.GenerateResult{Content: "test"})
+		cache.Set(fmt.Sprintf("key_%d", i), &dsgo.GenerateResult{Content: "test"})
 	}
 
 	// Concurrent operations
@@ -567,18 +567,18 @@ func TestCacheBehavior_ConcurrentStatistics(t *testing.T) {
 
 // TestCacheBehavior_MultipleKeysTracking tests tracking multiple cache keys
 func TestCacheBehavior_MultipleKeysTracking(t *testing.T) {
-	cache := core.NewLMCache(100)
+	cache := dsgo.NewLMCache(100)
 
 	// Simulate multiple different LM requests with different keys
-	messages1 := []core.Message{{Role: "user", Content: "query 1"}}
-	messages2 := []core.Message{{Role: "user", Content: "query 2"}}
-	messages3 := []core.Message{{Role: "user", Content: "query 3"}}
+	messages1 := []dsgo.Message{{Role: "user", Content: "query 1"}}
+	messages2 := []dsgo.Message{{Role: "user", Content: "query 2"}}
+	messages3 := []dsgo.Message{{Role: "user", Content: "query 3"}}
 
-	opts := core.DefaultGenerateOptions()
+	opts := dsgo.DefaultGenerateOptions()
 
-	key1 := core.GenerateCacheKey("gpt-4", messages1, opts)
-	key2 := core.GenerateCacheKey("gpt-4", messages2, opts)
-	key3 := core.GenerateCacheKey("gpt-4", messages3, opts)
+	key1 := dsgo.GenerateCacheKey("gpt-4", messages1, opts)
+	key2 := dsgo.GenerateCacheKey("gpt-4", messages2, opts)
+	key3 := dsgo.GenerateCacheKey("gpt-4", messages3, opts)
 
 	// Verify all keys are unique
 	keysSet := map[string]bool{key1: true, key2: true, key3: true}
@@ -587,9 +587,9 @@ func TestCacheBehavior_MultipleKeysTracking(t *testing.T) {
 	}
 
 	// Cache responses for each key
-	cache.Set(key1, &core.GenerateResult{Content: "response 1"})
-	cache.Set(key2, &core.GenerateResult{Content: "response 2"})
-	cache.Set(key3, &core.GenerateResult{Content: "response 3"})
+	cache.Set(key1, &dsgo.GenerateResult{Content: "response 1"})
+	cache.Set(key2, &dsgo.GenerateResult{Content: "response 2"})
+	cache.Set(key3, &dsgo.GenerateResult{Content: "response 3"})
 
 	if cache.Size() != 3 {
 		t.Errorf("Expected size 3, got %d", cache.Size())
@@ -618,11 +618,11 @@ func TestCacheBehavior_MultipleKeysTracking(t *testing.T) {
 
 // TestCacheBehavior_ClearResetsStats tests that Clear() resets statistics
 func TestCacheBehavior_ClearResetsStats(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
 	// Add some data and generate stats
-	cache.Set("key1", &core.GenerateResult{Content: "1"})
-	cache.Set("key2", &core.GenerateResult{Content: "2"})
+	cache.Set("key1", &dsgo.GenerateResult{Content: "1"})
+	cache.Set("key2", &dsgo.GenerateResult{Content: "2"})
 	cache.Get("key1")
 	cache.Get("nonexistent")
 
@@ -656,11 +656,11 @@ func TestCacheBehavior_CapacityRespected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := core.NewLMCache(tt.capacity)
+			cache := dsgo.NewLMCache(tt.capacity)
 
 			for i := 0; i < tt.itemsToAdd; i++ {
 				key := fmt.Sprintf("key_%d", i)
-				cache.Set(key, &core.GenerateResult{Content: key})
+				cache.Set(key, &dsgo.GenerateResult{Content: key})
 			}
 
 			size := cache.Size()
@@ -677,10 +677,10 @@ func TestCacheBehavior_CapacityRespected(t *testing.T) {
 
 // TestCacheBehavior_UpdateExistingEntry tests updating existing cache entries
 func TestCacheBehavior_UpdateExistingEntry(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
 	// Set initial entry
-	cache.Set("key1", &core.GenerateResult{Content: "first", Usage: core.Usage{TotalTokens: 10}})
+	cache.Set("key1", &dsgo.GenerateResult{Content: "first", Usage: dsgo.Usage{TotalTokens: 10}})
 
 	// Verify first entry
 	retrieved1, _ := cache.Get("key1")
@@ -689,7 +689,7 @@ func TestCacheBehavior_UpdateExistingEntry(t *testing.T) {
 	}
 
 	// Update entry
-	cache.Set("key1", &core.GenerateResult{Content: "second", Usage: core.Usage{TotalTokens: 20}})
+	cache.Set("key1", &dsgo.GenerateResult{Content: "second", Usage: dsgo.Usage{TotalTokens: 20}})
 
 	// Verify updated entry
 	retrieved2, _ := cache.Get("key1")
@@ -712,43 +712,43 @@ func TestCacheBehavior_KeyGenerationEdgeCases(t *testing.T) {
 		{
 			name: "empty messages",
 			setup: func() (string, error) {
-				key := core.GenerateCacheKey("model", []core.Message{}, core.DefaultGenerateOptions())
+				key := dsgo.GenerateCacheKey("model", []dsgo.Message{}, dsgo.DefaultGenerateOptions())
 				return key, nil
 			},
 		},
 		{
 			name: "nil stop sequences",
 			setup: func() (string, error) {
-				opts := core.DefaultGenerateOptions()
+				opts := dsgo.DefaultGenerateOptions()
 				opts.Stop = nil
-				key := core.GenerateCacheKey("model", []core.Message{{Role: "user", Content: "test"}}, opts)
+				key := dsgo.GenerateCacheKey("model", []dsgo.Message{{Role: "user", Content: "test"}}, opts)
 				return key, nil
 			},
 		},
 		{
 			name: "empty stop sequences",
 			setup: func() (string, error) {
-				opts := core.DefaultGenerateOptions()
+				opts := dsgo.DefaultGenerateOptions()
 				opts.Stop = []string{}
-				key := core.GenerateCacheKey("model", []core.Message{{Role: "user", Content: "test"}}, opts)
+				key := dsgo.GenerateCacheKey("model", []dsgo.Message{{Role: "user", Content: "test"}}, opts)
 				return key, nil
 			},
 		},
 		{
 			name: "nil response schema",
 			setup: func() (string, error) {
-				opts := core.DefaultGenerateOptions()
+				opts := dsgo.DefaultGenerateOptions()
 				opts.ResponseSchema = nil
-				key := core.GenerateCacheKey("model", []core.Message{{Role: "user", Content: "test"}}, opts)
+				key := dsgo.GenerateCacheKey("model", []dsgo.Message{{Role: "user", Content: "test"}}, opts)
 				return key, nil
 			},
 		},
 		{
 			name: "empty response schema",
 			setup: func() (string, error) {
-				opts := core.DefaultGenerateOptions()
+				opts := dsgo.DefaultGenerateOptions()
 				opts.ResponseSchema = map[string]any{}
-				key := core.GenerateCacheKey("model", []core.Message{{Role: "user", Content: "test"}}, opts)
+				key := dsgo.GenerateCacheKey("model", []dsgo.Message{{Role: "user", Content: "test"}}, opts)
 				return key, nil
 			},
 		},
@@ -769,43 +769,43 @@ func TestCacheBehavior_KeyGenerationEdgeCases(t *testing.T) {
 
 // TestCacheBehavior_ToolsInCacheKey tests that tools are included in cache key
 func TestCacheBehavior_ToolsInCacheKey(t *testing.T) {
-	messages := []core.Message{{Role: "user", Content: "test"}}
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
-	tool1 := core.Tool{
+	tool1 := dsgo.Tool{
 		Name:        "tool_a",
 		Description: "Tool A",
-		Parameters: []core.ToolParameter{
+		Parameters: []dsgo.ToolParameter{
 			{Name: "arg1", Type: "string", Required: true},
 		},
 	}
 
-	tool2 := core.Tool{
+	tool2 := dsgo.Tool{
 		Name:        "tool_b",
 		Description: "Tool B",
-		Parameters: []core.ToolParameter{
+		Parameters: []dsgo.ToolParameter{
 			{Name: "arg1", Type: "string", Required: true},
 		},
 	}
 
 	// Same tool should generate same key
-	opts1 := core.DefaultGenerateOptions()
-	opts1.Tools = []core.Tool{tool1}
+	opts1 := dsgo.DefaultGenerateOptions()
+	opts1.Tools = []dsgo.Tool{tool1}
 
-	opts2 := core.DefaultGenerateOptions()
-	opts2.Tools = []core.Tool{tool1}
+	opts2 := dsgo.DefaultGenerateOptions()
+	opts2.Tools = []dsgo.Tool{tool1}
 
-	key1 := core.GenerateCacheKey("gpt-4", messages, opts1)
-	key2 := core.GenerateCacheKey("gpt-4", messages, opts2)
+	key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts1)
+	key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts2)
 
 	if key1 != key2 {
 		t.Error("Expected same key for identical tools")
 	}
 
 	// Different tools should generate different keys
-	opts3 := core.DefaultGenerateOptions()
-	opts3.Tools = []core.Tool{tool2}
+	opts3 := dsgo.DefaultGenerateOptions()
+	opts3.Tools = []dsgo.Tool{tool2}
 
-	key3 := core.GenerateCacheKey("gpt-4", messages, opts3)
+	key3 := dsgo.GenerateCacheKey("gpt-4", messages, opts3)
 
 	if key1 == key3 {
 		t.Error("Expected different keys for different tools")
@@ -814,25 +814,25 @@ func TestCacheBehavior_ToolsInCacheKey(t *testing.T) {
 
 // TestCacheBehavior_PenaltiesInCacheKey tests that penalties affect cache key
 func TestCacheBehavior_PenaltiesInCacheKey(t *testing.T) {
-	messages := []core.Message{{Role: "user", Content: "test"}}
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
-	opts1 := core.DefaultGenerateOptions()
+	opts1 := dsgo.DefaultGenerateOptions()
 	opts1.FrequencyPenalty = 0.0
 
-	opts2 := core.DefaultGenerateOptions()
+	opts2 := dsgo.DefaultGenerateOptions()
 	opts2.FrequencyPenalty = 0.5
 
-	key1 := core.GenerateCacheKey("gpt-4", messages, opts1)
-	key2 := core.GenerateCacheKey("gpt-4", messages, opts2)
+	key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts1)
+	key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts2)
 
 	if key1 == key2 {
 		t.Error("Expected different keys for different frequency penalties")
 	}
 
-	opts3 := core.DefaultGenerateOptions()
+	opts3 := dsgo.DefaultGenerateOptions()
 	opts3.PresencePenalty = 0.5
 
-	key3 := core.GenerateCacheKey("gpt-4", messages, opts3)
+	key3 := dsgo.GenerateCacheKey("gpt-4", messages, opts3)
 
 	if key1 == key3 {
 		t.Error("Expected different keys for different presence penalties")
@@ -841,12 +841,12 @@ func TestCacheBehavior_PenaltiesInCacheKey(t *testing.T) {
 
 // TestCacheBehavior_LargeScaleOperation tests cache performance with many items
 func TestCacheBehavior_LargeScaleOperation(t *testing.T) {
-	cache := core.NewLMCache(1000)
+	cache := dsgo.NewLMCache(1000)
 
 	// Add 5000 items (should trigger many evictions)
 	for i := 0; i < 5000; i++ {
 		key := fmt.Sprintf("key_%d", i)
-		cache.Set(key, &core.GenerateResult{Content: key})
+		cache.Set(key, &dsgo.GenerateResult{Content: key})
 	}
 
 	// Verify cache respects capacity
@@ -890,10 +890,10 @@ func TestCache_KeyDeterminism(t *testing.T) {
 		{
 			name: "map with same keys different insertion order",
 			setup: func() (string, string) {
-				messages := []core.Message{{Role: "user", Content: "test"}}
+				messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
 				// First map: insert in order a, b, c
-				opts1 := core.DefaultGenerateOptions()
+				opts1 := dsgo.DefaultGenerateOptions()
 				opts1.ResponseSchema = map[string]any{
 					"alpha": "value1",
 					"beta":  "value2",
@@ -901,15 +901,15 @@ func TestCache_KeyDeterminism(t *testing.T) {
 				}
 
 				// Second map: insert in order c, a, b
-				opts2 := core.DefaultGenerateOptions()
+				opts2 := dsgo.DefaultGenerateOptions()
 				opts2.ResponseSchema = map[string]any{
 					"gamma": "value3",
 					"alpha": "value1",
 					"beta":  "value2",
 				}
 
-				key1 := core.GenerateCacheKey("gpt-4", messages, opts1)
-				key2 := core.GenerateCacheKey("gpt-4", messages, opts2)
+				key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts1)
+				key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts2)
 				return key1, key2
 			},
 			shouldMatch: true,
@@ -917,9 +917,9 @@ func TestCache_KeyDeterminism(t *testing.T) {
 		{
 			name: "deeply nested maps with different insertion order",
 			setup: func() (string, string) {
-				messages := []core.Message{{Role: "user", Content: "test"}}
+				messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
-				opts1 := core.DefaultGenerateOptions()
+				opts1 := dsgo.DefaultGenerateOptions()
 				opts1.ResponseSchema = map[string]any{
 					"level1": map[string]any{
 						"z_key": "z_val",
@@ -931,7 +931,7 @@ func TestCache_KeyDeterminism(t *testing.T) {
 					},
 				}
 
-				opts2 := core.DefaultGenerateOptions()
+				opts2 := dsgo.DefaultGenerateOptions()
 				opts2.ResponseSchema = map[string]any{
 					"level1": map[string]any{
 						"a_key": "a_val",
@@ -943,8 +943,8 @@ func TestCache_KeyDeterminism(t *testing.T) {
 					},
 				}
 
-				key1 := core.GenerateCacheKey("gpt-4", messages, opts1)
-				key2 := core.GenerateCacheKey("gpt-4", messages, opts2)
+				key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts1)
+				key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts2)
 				return key1, key2
 			},
 			shouldMatch: true,
@@ -952,17 +952,17 @@ func TestCache_KeyDeterminism(t *testing.T) {
 		{
 			name: "repeated key generation produces same result",
 			setup: func() (string, string) {
-				messages := []core.Message{
+				messages := []dsgo.Message{
 					{Role: "system", Content: "You are a helpful assistant."},
 					{Role: "user", Content: "What is 2+2?"},
 				}
-				opts := core.DefaultGenerateOptions()
+				opts := dsgo.DefaultGenerateOptions()
 				opts.Temperature = 0.7
 				opts.MaxTokens = 100
 
 				// Generate key multiple times
-				key1 := core.GenerateCacheKey("gpt-4", messages, opts)
-				key2 := core.GenerateCacheKey("gpt-4", messages, opts)
+				key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts)
+				key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts)
 				return key1, key2
 			},
 			shouldMatch: true,
@@ -970,16 +970,16 @@ func TestCache_KeyDeterminism(t *testing.T) {
 		{
 			name: "different map values produce different keys",
 			setup: func() (string, string) {
-				messages := []core.Message{{Role: "user", Content: "test"}}
+				messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
-				opts1 := core.DefaultGenerateOptions()
+				opts1 := dsgo.DefaultGenerateOptions()
 				opts1.ResponseSchema = map[string]any{"key": "value1"}
 
-				opts2 := core.DefaultGenerateOptions()
+				opts2 := dsgo.DefaultGenerateOptions()
 				opts2.ResponseSchema = map[string]any{"key": "value2"}
 
-				key1 := core.GenerateCacheKey("gpt-4", messages, opts1)
-				key2 := core.GenerateCacheKey("gpt-4", messages, opts2)
+				key1 := dsgo.GenerateCacheKey("gpt-4", messages, opts1)
+				key2 := dsgo.GenerateCacheKey("gpt-4", messages, opts2)
 				return key1, key2
 			},
 			shouldMatch: false,
@@ -1002,8 +1002,8 @@ func TestCache_KeyDeterminism(t *testing.T) {
 
 // TestCache_KeyDeterminism_MapCanonicalMultipleIterations verifies key stability across iterations
 func TestCache_KeyDeterminism_MapCanonicalMultipleIterations(t *testing.T) {
-	messages := []core.Message{{Role: "user", Content: "test"}}
-	opts := core.DefaultGenerateOptions()
+	messages := []dsgo.Message{{Role: "user", Content: "test"}}
+	opts := dsgo.DefaultGenerateOptions()
 	opts.ResponseSchema = map[string]any{
 		"zebra":   1,
 		"alpha":   2,
@@ -1013,10 +1013,10 @@ func TestCache_KeyDeterminism_MapCanonicalMultipleIterations(t *testing.T) {
 	}
 
 	// Generate key 100 times, all should be identical
-	firstKey := core.GenerateCacheKey("gpt-4", messages, opts)
+	firstKey := dsgo.GenerateCacheKey("gpt-4", messages, opts)
 
 	for i := 0; i < 100; i++ {
-		key := core.GenerateCacheKey("gpt-4", messages, opts)
+		key := dsgo.GenerateCacheKey("gpt-4", messages, opts)
 		if key != firstKey {
 			t.Errorf("Key mismatch on iteration %d\nexpected: %s\ngot: %s", i, firstKey, key)
 		}
@@ -1068,9 +1068,9 @@ func TestCache_TTLExpiry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := core.NewLMCacheWithTTL(10, tt.ttl)
+			cache := dsgo.NewLMCacheWithTTL(10, tt.ttl)
 
-			cache.Set("key1", &core.GenerateResult{Content: "test"})
+			cache.Set("key1", &dsgo.GenerateResult{Content: "test"})
 
 			time.Sleep(tt.checkAt)
 
@@ -1086,9 +1086,9 @@ func TestCache_TTLExpiry(t *testing.T) {
 // TestCache_TTLExpiry_SequentialChecks tests multiple checks across TTL boundary
 func TestCache_TTLExpiry_SequentialChecks(t *testing.T) {
 	ttl := 100 * time.Millisecond
-	cache := core.NewLMCacheWithTTL(10, ttl)
+	cache := dsgo.NewLMCacheWithTTL(10, ttl)
 
-	cache.Set("key1", &core.GenerateResult{Content: "test"})
+	cache.Set("key1", &dsgo.GenerateResult{Content: "test"})
 
 	// Check at 50ms - should hit
 	time.Sleep(50 * time.Millisecond)
@@ -1122,19 +1122,19 @@ func TestCache_EvictionPolicy(t *testing.T) {
 	tests := []struct {
 		name              string
 		capacity          int
-		operations        func(cache core.Cache)
+		operations        func(cache dsgo.Cache)
 		expectedEvicted   []string
 		expectedRemaining []string
 	}{
 		{
 			name:     "oldest entries removed when capacity exceeded",
 			capacity: 3,
-			operations: func(cache core.Cache) {
-				cache.Set("key1", &core.GenerateResult{Content: "1"})
-				cache.Set("key2", &core.GenerateResult{Content: "2"})
-				cache.Set("key3", &core.GenerateResult{Content: "3"})
-				cache.Set("key4", &core.GenerateResult{Content: "4"})
-				cache.Set("key5", &core.GenerateResult{Content: "5"})
+			operations: func(cache dsgo.Cache) {
+				cache.Set("key1", &dsgo.GenerateResult{Content: "1"})
+				cache.Set("key2", &dsgo.GenerateResult{Content: "2"})
+				cache.Set("key3", &dsgo.GenerateResult{Content: "3"})
+				cache.Set("key4", &dsgo.GenerateResult{Content: "4"})
+				cache.Set("key5", &dsgo.GenerateResult{Content: "5"})
 			},
 			expectedEvicted:   []string{"key1", "key2"},
 			expectedRemaining: []string{"key3", "key4", "key5"},
@@ -1142,14 +1142,14 @@ func TestCache_EvictionPolicy(t *testing.T) {
 		{
 			name:     "access refreshes entry in LRU order",
 			capacity: 3,
-			operations: func(cache core.Cache) {
-				cache.Set("key1", &core.GenerateResult{Content: "1"})
-				cache.Set("key2", &core.GenerateResult{Content: "2"})
-				cache.Set("key3", &core.GenerateResult{Content: "3"})
+			operations: func(cache dsgo.Cache) {
+				cache.Set("key1", &dsgo.GenerateResult{Content: "1"})
+				cache.Set("key2", &dsgo.GenerateResult{Content: "2"})
+				cache.Set("key3", &dsgo.GenerateResult{Content: "3"})
 				// Access key1 to make it recently used
 				cache.Get("key1")
 				// Add key4, should evict key2 (oldest unused)
-				cache.Set("key4", &core.GenerateResult{Content: "4"})
+				cache.Set("key4", &dsgo.GenerateResult{Content: "4"})
 			},
 			expectedEvicted:   []string{"key2"},
 			expectedRemaining: []string{"key1", "key3", "key4"},
@@ -1157,16 +1157,16 @@ func TestCache_EvictionPolicy(t *testing.T) {
 		{
 			name:     "multiple accesses preserve entries",
 			capacity: 3,
-			operations: func(cache core.Cache) {
-				cache.Set("key1", &core.GenerateResult{Content: "1"})
-				cache.Set("key2", &core.GenerateResult{Content: "2"})
-				cache.Set("key3", &core.GenerateResult{Content: "3"})
+			operations: func(cache dsgo.Cache) {
+				cache.Set("key1", &dsgo.GenerateResult{Content: "1"})
+				cache.Set("key2", &dsgo.GenerateResult{Content: "2"})
+				cache.Set("key3", &dsgo.GenerateResult{Content: "3"})
 				// Access all in reverse order
 				cache.Get("key1")
 				cache.Get("key2")
 				cache.Get("key3")
 				// Add key4 - key1 should be evicted as least recently accessed
-				cache.Set("key4", &core.GenerateResult{Content: "4"})
+				cache.Set("key4", &dsgo.GenerateResult{Content: "4"})
 			},
 			expectedEvicted:   []string{"key1"},
 			expectedRemaining: []string{"key2", "key3", "key4"},
@@ -1174,10 +1174,10 @@ func TestCache_EvictionPolicy(t *testing.T) {
 		{
 			name:     "capacity of 1 always has latest entry",
 			capacity: 1,
-			operations: func(cache core.Cache) {
-				cache.Set("key1", &core.GenerateResult{Content: "1"})
-				cache.Set("key2", &core.GenerateResult{Content: "2"})
-				cache.Set("key3", &core.GenerateResult{Content: "3"})
+			operations: func(cache dsgo.Cache) {
+				cache.Set("key1", &dsgo.GenerateResult{Content: "1"})
+				cache.Set("key2", &dsgo.GenerateResult{Content: "2"})
+				cache.Set("key3", &dsgo.GenerateResult{Content: "3"})
 			},
 			expectedEvicted:   []string{"key1", "key2"},
 			expectedRemaining: []string{"key3"},
@@ -1186,7 +1186,7 @@ func TestCache_EvictionPolicy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := core.NewLMCache(tt.capacity)
+			cache := dsgo.NewLMCache(tt.capacity)
 
 			tt.operations(cache)
 
@@ -1217,12 +1217,12 @@ func TestCache_EvictionPolicy(t *testing.T) {
 // TestCache_EvictionPolicy_StressTest fills cache well beyond capacity
 func TestCache_EvictionPolicy_StressTest(t *testing.T) {
 	capacity := 10
-	cache := core.NewLMCache(capacity)
+	cache := dsgo.NewLMCache(capacity)
 
 	// Add 100 items - should trigger 90 evictions
 	for i := 0; i < 100; i++ {
 		key := fmt.Sprintf("key_%03d", i)
-		cache.Set(key, &core.GenerateResult{Content: key})
+		cache.Set(key, &dsgo.GenerateResult{Content: key})
 	}
 
 	// Only last 10 items should remain
@@ -1260,19 +1260,19 @@ func TestCache_EvictionPolicy_StressTest(t *testing.T) {
 func TestCache_DeepCopyIntegrity(t *testing.T) {
 	tests := []struct {
 		name          string
-		originalValue *core.GenerateResult
-		mutate        func(*core.GenerateResult)
-		verify        func(t *testing.T, cached *core.GenerateResult)
+		originalValue *dsgo.GenerateResult
+		mutate        func(*dsgo.GenerateResult)
+		verify        func(t *testing.T, cached *dsgo.GenerateResult)
 	}{
 		{
 			name: "modifying content after set does not affect cache",
-			originalValue: &core.GenerateResult{
+			originalValue: &dsgo.GenerateResult{
 				Content: "original_content",
 			},
-			mutate: func(r *core.GenerateResult) {
+			mutate: func(r *dsgo.GenerateResult) {
 				r.Content = "mutated_content"
 			},
-			verify: func(t *testing.T, cached *core.GenerateResult) {
+			verify: func(t *testing.T, cached *dsgo.GenerateResult) {
 				if cached.Content != "original_content" {
 					t.Errorf("Expected 'original_content', got '%s'", cached.Content)
 				}
@@ -1280,20 +1280,20 @@ func TestCache_DeepCopyIntegrity(t *testing.T) {
 		},
 		{
 			name: "modifying usage after set does not affect cache",
-			originalValue: &core.GenerateResult{
+			originalValue: &dsgo.GenerateResult{
 				Content: "test",
-				Usage: core.Usage{
+				Usage: dsgo.Usage{
 					PromptTokens:     100,
 					CompletionTokens: 50,
 					TotalTokens:      150,
 					Cost:             0.005,
 				},
 			},
-			mutate: func(r *core.GenerateResult) {
+			mutate: func(r *dsgo.GenerateResult) {
 				r.Usage.PromptTokens = 999
 				r.Usage.Cost = 999.99
 			},
-			verify: func(t *testing.T, cached *core.GenerateResult) {
+			verify: func(t *testing.T, cached *dsgo.GenerateResult) {
 				if cached.Usage.PromptTokens != 100 {
 					t.Errorf("Expected PromptTokens 100, got %d", cached.Usage.PromptTokens)
 				}
@@ -1304,18 +1304,18 @@ func TestCache_DeepCopyIntegrity(t *testing.T) {
 		},
 		{
 			name: "modifying metadata map after set does not affect cache",
-			originalValue: &core.GenerateResult{
+			originalValue: &dsgo.GenerateResult{
 				Content: "test",
 				Metadata: map[string]any{
 					"key1": "original_value",
 					"key2": 42,
 				},
 			},
-			mutate: func(r *core.GenerateResult) {
+			mutate: func(r *dsgo.GenerateResult) {
 				r.Metadata["key1"] = "mutated_value"
 				r.Metadata["new_key"] = "new_value"
 			},
-			verify: func(t *testing.T, cached *core.GenerateResult) {
+			verify: func(t *testing.T, cached *dsgo.GenerateResult) {
 				if cached.Metadata["key1"] != "original_value" {
 					t.Errorf("Expected 'original_value', got '%v'", cached.Metadata["key1"])
 				}
@@ -1326,7 +1326,7 @@ func TestCache_DeepCopyIntegrity(t *testing.T) {
 		},
 		{
 			name: "modifying nested metadata does not affect cache",
-			originalValue: &core.GenerateResult{
+			originalValue: &dsgo.GenerateResult{
 				Content: "test",
 				Metadata: map[string]any{
 					"nested": map[string]any{
@@ -1334,11 +1334,11 @@ func TestCache_DeepCopyIntegrity(t *testing.T) {
 					},
 				},
 			},
-			mutate: func(r *core.GenerateResult) {
+			mutate: func(r *dsgo.GenerateResult) {
 				nested := r.Metadata["nested"].(map[string]any)
 				nested["inner_key"] = "mutated_inner"
 			},
-			verify: func(t *testing.T, cached *core.GenerateResult) {
+			verify: func(t *testing.T, cached *dsgo.GenerateResult) {
 				nested := cached.Metadata["nested"].(map[string]any)
 				if nested["inner_key"] != "inner_value" {
 					t.Errorf("Expected 'inner_value', got '%v'", nested["inner_key"])
@@ -1349,7 +1349,7 @@ func TestCache_DeepCopyIntegrity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := core.NewLMCache(10)
+			cache := dsgo.NewLMCache(10)
 
 			// Set the original value
 			cache.Set("key1", tt.originalValue)
@@ -1370,11 +1370,11 @@ func TestCache_DeepCopyIntegrity(t *testing.T) {
 
 // TestCache_DeepCopyIntegrity_RetrievedValueMutation verifies retrieved values are independent
 func TestCache_DeepCopyIntegrity_RetrievedValueMutation(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "immutable",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			TotalTokens: 100,
 		},
 		Metadata: map[string]any{
@@ -1406,9 +1406,9 @@ func TestCache_DeepCopyIntegrity_RetrievedValueMutation(t *testing.T) {
 
 // TestCache_DeepCopyIntegrity_MultipleRetrievals verifies each retrieval returns independent copy
 func TestCache_DeepCopyIntegrity_MultipleRetrievals(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	cache.Set("key1", &core.GenerateResult{
+	cache.Set("key1", &dsgo.GenerateResult{
 		Content: "test",
 		Metadata: map[string]any{
 			"counter": 0,
@@ -1443,7 +1443,7 @@ func TestCache_DeepCopyIntegrity_MultipleRetrievals(t *testing.T) {
 
 // TestCache_DeepCopy_NilResult tests deep copy of nil result
 func TestCache_DeepCopy_NilResult(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
 	// This shouldn't happen normally, but deepCopyResult should handle it
 	// We'll test it indirectly by testing the cache behavior
@@ -1455,11 +1455,11 @@ func TestCache_DeepCopy_NilResult(t *testing.T) {
 
 // TestCache_DeepCopy_EmptyToolCalls tests deep copy with empty tool calls
 func TestCache_DeepCopy_EmptyToolCalls(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content:   "test",
-		ToolCalls: []core.ToolCall{},
+		ToolCalls: []dsgo.ToolCall{},
 	}
 
 	cache.Set("key1", original)
@@ -1474,7 +1474,7 @@ func TestCache_DeepCopy_EmptyToolCalls(t *testing.T) {
 	}
 
 	// Modify original
-	original.ToolCalls = append(original.ToolCalls, core.ToolCall{ID: "test", Name: "test_tool"})
+	original.ToolCalls = append(original.ToolCalls, dsgo.ToolCall{ID: "test", Name: "test_tool"})
 
 	// Verify cached value is unchanged
 	retrieved2, _ := cache.Get("key1")
@@ -1485,11 +1485,11 @@ func TestCache_DeepCopy_EmptyToolCalls(t *testing.T) {
 
 // TestCache_DeepCopy_ToolCallsWithArguments tests deep copy of tool calls with complex arguments
 func TestCache_DeepCopy_ToolCallsWithArguments(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "test",
-		ToolCalls: []core.ToolCall{
+		ToolCalls: []dsgo.ToolCall{
 			{
 				ID:   "call1",
 				Name: "tool1",
@@ -1529,9 +1529,9 @@ func TestCache_DeepCopy_ToolCallsWithArguments(t *testing.T) {
 
 // TestCache_DeepCopy_DeepMetadataNesting tests deep copy with deeply nested metadata
 func TestCache_DeepCopy_DeepMetadataNesting(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "test",
 		Metadata: map[string]any{
 			"level1": map[string]any{
@@ -1565,9 +1565,9 @@ func TestCache_DeepCopy_DeepMetadataNesting(t *testing.T) {
 
 // TestCache_DeepCopy_MetadataWithSlices tests deep copy of metadata containing slices
 func TestCache_DeepCopy_MetadataWithSlices(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "test",
 		Metadata: map[string]any{
 			"items": []any{
@@ -1604,9 +1604,9 @@ func TestCache_DeepCopy_MetadataWithSlices(t *testing.T) {
 
 // TestCache_DeepCopy_EmptyMetadata tests deep copy with empty metadata map
 func TestCache_DeepCopy_EmptyMetadata(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content:  "test",
 		Metadata: map[string]any{},
 	}
@@ -1625,9 +1625,9 @@ func TestCache_DeepCopy_EmptyMetadata(t *testing.T) {
 
 // TestCache_DeepCopy_NilMetadata tests deep copy with nil metadata
 func TestCache_DeepCopy_NilMetadata(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content:  "test",
 		Metadata: nil,
 	}
@@ -1643,11 +1643,11 @@ func TestCache_DeepCopy_NilMetadata(t *testing.T) {
 
 // TestCache_DeepCopy_MultipleToolCalls tests deep copy with multiple tool calls
 func TestCache_DeepCopy_MultipleToolCalls(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "test",
-		ToolCalls: []core.ToolCall{
+		ToolCalls: []dsgo.ToolCall{
 			{
 				ID:   "call1",
 				Name: "tool1",
@@ -1697,11 +1697,11 @@ func TestCache_DeepCopy_MultipleToolCalls(t *testing.T) {
 
 // TestCache_DeepCopy_ComplexMetadataValues tests deep copy with various data types in metadata
 func TestCache_DeepCopy_ComplexMetadataValues(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "test",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 			TotalTokens:      150,
@@ -1762,9 +1762,9 @@ func TestCache_DeepCopy_ComplexMetadataValues(t *testing.T) {
 
 // TestCache_DeepCopy_FinishReason tests deep copy preserves finish reason
 func TestCache_DeepCopy_FinishReason(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content:      "test response",
 		FinishReason: "stop",
 	}
@@ -1783,9 +1783,9 @@ func TestCache_DeepCopy_FinishReason(t *testing.T) {
 
 // TestCache_DeepCopy_EmptySlicesInMetadata tests empty slices are deep copied
 func TestCache_DeepCopy_EmptySlicesInMetadata(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "test",
 		Metadata: map[string]any{
 			"empty_slice": []any{},

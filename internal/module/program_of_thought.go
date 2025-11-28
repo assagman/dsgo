@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 // ProgramOfThought generates and executes code to solve problems

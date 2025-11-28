@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // ============================================================================
@@ -25,7 +24,7 @@ func TestMemory_NoLeaksOnSuccess(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "response"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	// Force GC before measuring
 	runtime.GC()
@@ -69,7 +68,7 @@ func TestMemory_NoLeaksOnError(t *testing.T) {
 
 	lm := NewAlwaysFailLM("test-error")
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	// Force GC before measuring
 	runtime.GC()
@@ -110,7 +109,7 @@ func TestMemory_StreamingCleanup(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "streaming response"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	// Count goroutines before
 	startGoroutines := runtime.NumGoroutine()
@@ -172,7 +171,7 @@ func TestMemory_LargeHistoryCollection(t *testing.T) {
 	bufferSize := 100
 	entryCount := 10000
 
-	collector := core.NewMemoryCollector(bufferSize)
+	collector := dsgo.NewMemoryCollector(bufferSize)
 
 	// Force GC before measuring
 	runtime.GC()
@@ -180,21 +179,21 @@ func TestMemory_LargeHistoryCollection(t *testing.T) {
 	runtime.ReadMemStats(&startMem)
 
 	for i := 0; i < entryCount; i++ {
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID:        "entry-" + string(rune(i)),
 			Timestamp: time.Now(),
 			Provider:  "test-provider",
 			Model:     "test-model",
-			Request: core.RequestMeta{
-				Messages: []core.Message{
+			Request: dsgo.RequestMeta{
+				Messages: []dsgo.Message{
 					{Role: "user", Content: "Test message with some content"},
 				},
 			},
-			Response: core.ResponseMeta{
+			Response: dsgo.ResponseMeta{
 				Content:      "Test response with some content that is reasonably sized",
 				FinishReason: "stop",
 			},
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     10,
 				CompletionTokens: 20,
 				TotalTokens:      30,
@@ -237,7 +236,7 @@ func TestMemory_CacheMemoryBounds(t *testing.T) {
 	capacity := 100
 	fillCount := 1000
 
-	cache := core.NewLMCache(capacity)
+	cache := dsgo.NewLMCache(capacity)
 
 	// Force GC before measuring
 	runtime.GC()
@@ -245,9 +244,9 @@ func TestMemory_CacheMemoryBounds(t *testing.T) {
 	runtime.ReadMemStats(&startMem)
 
 	for i := 0; i < fillCount; i++ {
-		result := &core.GenerateResult{
+		result := &dsgo.GenerateResult{
 			Content: "This is a test response with some content to take up memory",
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     10,
 				CompletionTokens: 20,
 				TotalTokens:      30,
@@ -295,7 +294,7 @@ func TestMemory_StreamingFootprint(t *testing.T) {
 	// Create a mock that returns chunks
 	lm := NewMockLMWithResponse(`{"answer": "This is a streaming response that contains some content"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	// Force GC before measuring
 	runtime.GC()
@@ -357,7 +356,7 @@ func TestMemory_ConcurrentOperations(t *testing.T) {
 		go func(id int) {
 			defer func() { done <- struct{}{} }()
 
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 			ctx := context.Background()
 
 			for j := 0; j < 100; j++ {
@@ -402,7 +401,7 @@ func TestMemory_AllocationRate(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "response"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 	ctx := context.Background()
 
 	// Force GC before measuring
@@ -438,11 +437,11 @@ func TestMemory_AllocationRate(t *testing.T) {
 
 // TestMemoryCollector_ClearRemovesAllEntries tests that Clear() removes all entries
 func TestMemoryCollector_ClearRemovesAllEntries(t *testing.T) {
-	collector := core.NewMemoryCollector(10)
+	collector := dsgo.NewMemoryCollector(10)
 
 	// Add some entries
 	for i := 0; i < 5; i++ {
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID:        "entry-" + string(rune(i)),
 			Provider:  "test-provider",
 			Model:     "test-model",
@@ -478,11 +477,11 @@ func TestMemoryCollector_ClearRemovesAllEntries(t *testing.T) {
 
 // TestMemoryCollector_ClearResetsRingBuffer tests that Clear() resets the ring buffer state
 func TestMemoryCollector_ClearResetsRingBuffer(t *testing.T) {
-	collector := core.NewMemoryCollector(3)
+	collector := dsgo.NewMemoryCollector(3)
 
 	// Fill buffer beyond capacity to wrap around
 	for i := 0; i < 6; i++ {
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID: fmt.Sprintf("entry-%d", i),
 		}
 		_ = collector.Collect(entry)
@@ -498,7 +497,7 @@ func TestMemoryCollector_ClearResetsRingBuffer(t *testing.T) {
 
 	// Add new entries - should start fresh
 	for i := 0; i < 2; i++ {
-		entry := &core.HistoryEntry{
+		entry := &dsgo.HistoryEntry{
 			ID: fmt.Sprintf("new-entry-%d", i),
 		}
 		_ = collector.Collect(entry)
@@ -525,11 +524,11 @@ func TestMemoryCollector_ClearResetsRingBuffer(t *testing.T) {
 
 // TestMemoryCollector_ClearAllowsRecollection tests that we can collect after clearing
 func TestMemoryCollector_ClearAllowsRecollection(t *testing.T) {
-	collector := core.NewMemoryCollector(5)
+	collector := dsgo.NewMemoryCollector(5)
 
 	// First collection
 	for i := 0; i < 3; i++ {
-		_ = collector.Collect(&core.HistoryEntry{ID: "first-" + string(rune(i))})
+		_ = collector.Collect(&dsgo.HistoryEntry{ID: "first-" + string(rune(i))})
 	}
 
 	firstEntries := collector.GetAll()
@@ -542,7 +541,7 @@ func TestMemoryCollector_ClearAllowsRecollection(t *testing.T) {
 
 	// Second collection with different entries
 	for i := 0; i < 4; i++ {
-		_ = collector.Collect(&core.HistoryEntry{ID: "second-" + string(rune(i))})
+		_ = collector.Collect(&dsgo.HistoryEntry{ID: "second-" + string(rune(i))})
 	}
 
 	secondEntries := collector.GetAll()
@@ -576,11 +575,11 @@ func TestMemoryCollector_ClearAllowsRecollection(t *testing.T) {
 // TestMemoryCollector_ClearLargeBuffer tests Clear() with a large buffer
 func TestMemoryCollector_ClearLargeBuffer(t *testing.T) {
 	bufferSize := 1000
-	collector := core.NewMemoryCollector(bufferSize)
+	collector := dsgo.NewMemoryCollector(bufferSize)
 
 	// Fill entire buffer
 	for i := 0; i < bufferSize; i++ {
-		_ = collector.Collect(&core.HistoryEntry{ID: string(rune(i))})
+		_ = collector.Collect(&dsgo.HistoryEntry{ID: string(rune(i))})
 	}
 
 	if collector.Len() != bufferSize {
@@ -600,11 +599,11 @@ func TestMemoryCollector_ClearLargeBuffer(t *testing.T) {
 
 // TestMemoryCollector_GetLastAfterClear tests GetLast() after clearing
 func TestMemoryCollector_GetLastAfterClear(t *testing.T) {
-	collector := core.NewMemoryCollector(10)
+	collector := dsgo.NewMemoryCollector(10)
 
 	// Add entries
 	for i := 0; i < 5; i++ {
-		_ = collector.Collect(&core.HistoryEntry{ID: string(rune(i))})
+		_ = collector.Collect(&dsgo.HistoryEntry{ID: string(rune(i))})
 	}
 
 	// Get last before clear
@@ -625,11 +624,11 @@ func TestMemoryCollector_GetLastAfterClear(t *testing.T) {
 
 // TestMemoryCollector_ClearConcurrent tests Clear() with concurrent operations
 func TestMemoryCollector_ClearConcurrent(t *testing.T) {
-	collector := core.NewMemoryCollector(100)
+	collector := dsgo.NewMemoryCollector(100)
 
 	// Populate collector
 	for i := 0; i < 50; i++ {
-		_ = collector.Collect(&core.HistoryEntry{ID: string(rune(i))})
+		_ = collector.Collect(&dsgo.HistoryEntry{ID: string(rune(i))})
 	}
 
 	clearDone := make(chan struct{})

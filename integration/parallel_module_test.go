@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // ============================================================================
@@ -32,10 +31,10 @@ func TestParallel_BatchInput(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
 	// Create parallel module
-	parallel := module.NewParallel(pred).
+	parallel := dsgo.NewParallel(pred).
 		WithMaxWorkers(4).
 		WithReturnAll(true)
 
@@ -82,11 +81,11 @@ func TestParallel_WithFactory(t *testing.T) {
 	var factoryCalls int32
 
 	// Create parallel with factory
-	parallel := module.NewParallelWithFactory(func(i int) core.Module {
+	parallel := dsgo.NewParallelWithFactory(func(i int) dsgo.Module {
 		atomic.AddInt32(&factoryCalls, 1)
 		lm := NewMockLMWithResponse(fmt.Sprintf(`{"answer": "Factory response %d"}`, i))
 		sig := fixtures.SimplePredictSig()
-		return module.NewPredict(sig, lm)
+		return dsgo.NewPredict(sig, lm)
 	}).
 		WithMaxWorkers(3).
 		WithReturnAll(true)
@@ -124,14 +123,14 @@ func TestParallel_WithInstances(t *testing.T) {
 	sig := fixtures.SimplePredictSig()
 
 	// Create multiple instances
-	instances := make([]core.Module, 3)
+	instances := make([]dsgo.Module, 3)
 	for i := 0; i < 3; i++ {
 		lm := NewMockLMWithResponse(fmt.Sprintf(`{"answer": "Instance %d response"}`, i))
-		instances[i] = module.NewPredict(sig, lm)
+		instances[i] = dsgo.NewPredict(sig, lm)
 	}
 
 	// Create parallel with instances
-	parallel := module.NewParallelWithInstances(instances).
+	parallel := dsgo.NewParallelWithInstances(instances).
 		WithReturnAll(true)
 
 	// Batch input (more items than instances to test cycling)
@@ -162,9 +161,9 @@ func TestParallel_MapOfSlices(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "Processed"}`)
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	parallel := module.NewParallel(pred).
+	parallel := dsgo.NewParallel(pred).
 		WithMaxWorkers(2).
 		WithReturnAll(true)
 
@@ -197,9 +196,9 @@ func TestParallel_WithRepeat(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	parallel := module.NewParallel(pred).
+	parallel := dsgo.NewParallel(pred).
 		WithMaxWorkers(3).
 		WithRepeat(5).
 		WithReturnAll(true)
@@ -240,10 +239,10 @@ func TestParallel_MaxFailures(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
 	// Allow up to 2 failures
-	parallel := module.NewParallel(pred).
+	parallel := dsgo.NewParallel(pred).
 		WithMaxWorkers(2).
 		WithMaxFailures(2).
 		WithReturnAll(true).
@@ -284,9 +283,9 @@ func TestParallel_FailFast(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	parallel := module.NewParallel(pred).
+	parallel := dsgo.NewParallel(pred).
 		WithMaxWorkers(1). // Sequential to control order
 		WithFailFast(true)
 
@@ -318,25 +317,25 @@ func TestParallel_FailFast(t *testing.T) {
 func TestParallel_GetSignature(t *testing.T) {
 	sig := fixtures.SimplePredictSig()
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
 	tests := []struct {
 		name     string
-		parallel *module.Parallel
+		parallel *dsgo.Parallel
 	}{
 		{
 			name:     "From shared module",
-			parallel: module.NewParallel(pred),
+			parallel: dsgo.NewParallel(pred),
 		},
 		{
 			name: "From factory",
-			parallel: module.NewParallelWithFactory(func(i int) core.Module {
-				return module.NewPredict(sig, lm)
+			parallel: dsgo.NewParallelWithFactory(func(i int) dsgo.Module {
+				return dsgo.NewPredict(sig, lm)
 			}),
 		},
 		{
 			name:     "From instances",
-			parallel: module.NewParallelWithInstances([]core.Module{pred}),
+			parallel: dsgo.NewParallelWithInstances([]dsgo.Module{pred}),
 		},
 	}
 
@@ -361,9 +360,9 @@ func TestParallel_EmptyBatch(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	parallel := module.NewParallel(pred)
+	parallel := dsgo.NewParallel(pred)
 
 	inputs := map[string]any{
 		"_batch": []map[string]any{},
@@ -383,9 +382,9 @@ func TestParallel_ContextCancellation(t *testing.T) {
 	// Slow LM
 	lm := NewLatencyLM(500*time.Millisecond, `{"answer": "slow"}`)
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	parallel := module.NewParallel(pred).
+	parallel := dsgo.NewParallel(pred).
 		WithMaxWorkers(2)
 
 	inputs := map[string]any{
@@ -414,9 +413,9 @@ func TestParallel_UsageAggregation(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	parallel := module.NewParallel(pred).
+	parallel := dsgo.NewParallel(pred).
 		WithMaxWorkers(3).
 		WithReturnAll(true)
 
@@ -449,9 +448,9 @@ func TestParallel_CustomBatchKey(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	parallel := module.NewParallel(pred).
+	parallel := dsgo.NewParallel(pred).
 		WithBatchKey("items").
 		WithReturnAll(true)
 
@@ -482,16 +481,16 @@ type CountingMockLM struct {
 	CallCount    *int32
 }
 
-func (m *CountingMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *CountingMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	idx := int(atomic.AddInt32(m.CallCount, 1) - 1)
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: m.ResponseFunc(idx),
-		Usage:   core.Usage{TotalTokens: 20, Cost: 0.001},
+		Usage:   dsgo.Usage{TotalTokens: 20, Cost: 0.001},
 	}, nil
 }
 
-func (m *CountingMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	ch := make(chan core.Chunk, 1)
+func (m *CountingMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	ch := make(chan dsgo.Chunk, 1)
 	errCh := make(chan error, 1)
 	go func() {
 		defer close(ch)
@@ -501,7 +500,7 @@ func (m *CountingMockLM) Stream(ctx context.Context, messages []core.Message, op
 			errCh <- err
 			return
 		}
-		ch <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		ch <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return ch, errCh
 }
@@ -518,19 +517,19 @@ type FailingSomeMockLM struct {
 	SuccessResp string
 }
 
-func (m *FailingSomeMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *FailingSomeMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	idx := int(atomic.AddInt32(m.CallCount, 1) - 1)
 	if m.FailIndices[idx] {
 		return nil, errors.New("simulated failure")
 	}
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: m.SuccessResp,
-		Usage:   core.Usage{TotalTokens: 20},
+		Usage:   dsgo.Usage{TotalTokens: 20},
 	}, nil
 }
 
-func (m *FailingSomeMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	ch := make(chan core.Chunk, 1)
+func (m *FailingSomeMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	ch := make(chan dsgo.Chunk, 1)
 	errCh := make(chan error, 1)
 	go func() {
 		defer close(ch)
@@ -540,7 +539,7 @@ func (m *FailingSomeMockLM) Stream(ctx context.Context, messages []core.Message,
 			errCh <- err
 			return
 		}
-		ch <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		ch <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return ch, errCh
 }
@@ -556,19 +555,19 @@ type FailAfterNMockLM struct {
 	FailAfter int
 }
 
-func (m *FailAfterNMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *FailAfterNMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	idx := int(atomic.AddInt32(m.CallCount, 1))
 	if idx > m.FailAfter {
 		return nil, errors.New("simulated failure after N")
 	}
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: `{"answer": "success"}`,
-		Usage:   core.Usage{TotalTokens: 20},
+		Usage:   dsgo.Usage{TotalTokens: 20},
 	}, nil
 }
 
-func (m *FailAfterNMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	ch := make(chan core.Chunk, 1)
+func (m *FailAfterNMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	ch := make(chan dsgo.Chunk, 1)
 	errCh := make(chan error, 1)
 	go func() {
 		defer close(ch)
@@ -578,7 +577,7 @@ func (m *FailAfterNMockLM) Stream(ctx context.Context, messages []core.Message, 
 			errCh <- err
 			return
 		}
-		ch <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		ch <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return ch, errCh
 }
@@ -595,10 +594,10 @@ type UsageTrackingMockLM struct {
 	CostPerCall   float64
 }
 
-func (m *UsageTrackingMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-	return &core.GenerateResult{
+func (m *UsageTrackingMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	return &dsgo.GenerateResult{
 		Content: m.Response,
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			TotalTokens:      m.TokensPerCall,
 			PromptTokens:     m.TokensPerCall / 2,
 			CompletionTokens: m.TokensPerCall / 2,
@@ -607,8 +606,8 @@ func (m *UsageTrackingMockLM) Generate(ctx context.Context, messages []core.Mess
 	}, nil
 }
 
-func (m *UsageTrackingMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	ch := make(chan core.Chunk, 1)
+func (m *UsageTrackingMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	ch := make(chan dsgo.Chunk, 1)
 	errCh := make(chan error, 1)
 	go func() {
 		defer close(ch)
@@ -618,7 +617,7 @@ func (m *UsageTrackingMockLM) Stream(ctx context.Context, messages []core.Messag
 			errCh <- err
 			return
 		}
-		ch <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		ch <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return ch, errCh
 }

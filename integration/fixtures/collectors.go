@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // ============================================================================
@@ -24,7 +24,7 @@ func NewCountingCollector() *CountingCollector {
 }
 
 // Collect increments the count
-func (c *CountingCollector) Collect(entry *core.HistoryEntry) error {
+func (c *CountingCollector) Collect(entry *dsgo.HistoryEntry) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.count++
@@ -65,7 +65,7 @@ func NewFailingCollector(failAfter int) *FailingCollector {
 }
 
 // Collect fails after FailAfter successful collections
-func (c *FailingCollector) Collect(entry *core.HistoryEntry) error {
+func (c *FailingCollector) Collect(entry *dsgo.HistoryEntry) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -89,7 +89,7 @@ func (c *FailingCollector) Close() error {
 type DelayedCollector struct {
 	mu      sync.Mutex
 	Delay   time.Duration
-	Entries []*core.HistoryEntry
+	Entries []*dsgo.HistoryEntry
 	MaxSize int
 }
 
@@ -102,7 +102,7 @@ func NewDelayedCollector(delay time.Duration, maxSize int) *DelayedCollector {
 }
 
 // Collect adds delay before storing the entry
-func (c *DelayedCollector) Collect(entry *core.HistoryEntry) error {
+func (c *DelayedCollector) Collect(entry *dsgo.HistoryEntry) error {
 	time.Sleep(c.Delay)
 
 	c.mu.Lock()
@@ -121,10 +121,10 @@ func (c *DelayedCollector) Close() error {
 }
 
 // GetEntries returns all collected entries
-func (c *DelayedCollector) GetEntries() []*core.HistoryEntry {
+func (c *DelayedCollector) GetEntries() []*dsgo.HistoryEntry {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	result := make([]*core.HistoryEntry, len(c.Entries))
+	result := make([]*dsgo.HistoryEntry, len(c.Entries))
 	copy(result, c.Entries)
 	return result
 }
@@ -134,7 +134,7 @@ func (c *DelayedCollector) GetEntries() []*core.HistoryEntry {
 // ============================================================================
 
 // AssertHistoryEntry validates a history entry has expected fields
-func AssertHistoryEntry(entry *core.HistoryEntry, provider, model string, hasError bool) error {
+func AssertHistoryEntry(entry *dsgo.HistoryEntry, provider, model string, hasError bool) error {
 	if entry == nil {
 		return errors.New("entry is nil")
 	}
@@ -160,7 +160,7 @@ func AssertHistoryEntry(entry *core.HistoryEntry, provider, model string, hasErr
 }
 
 // AssertUsage validates usage fields are reasonable
-func AssertUsage(usage core.Usage, minTokens, maxTokens int) error {
+func AssertUsage(usage dsgo.Usage, minTokens, maxTokens int) error {
 	if usage.TotalTokens < minTokens {
 		return errors.New("total tokens too low")
 	}
@@ -192,26 +192,26 @@ func AssertCost(cost, minCost, maxCost float64) error {
 // ============================================================================
 
 // SampleHistoryEntry creates a sample history entry for testing
-func SampleHistoryEntry(id, provider, model string) *core.HistoryEntry {
-	return &core.HistoryEntry{
+func SampleHistoryEntry(id, provider, model string) *dsgo.HistoryEntry {
+	return &dsgo.HistoryEntry{
 		ID:        id,
 		Timestamp: time.Now(),
 		SessionID: "test-session",
 		Provider:  provider,
 		Model:     model,
-		Request: core.RequestMeta{
-			Messages: []core.Message{
+		Request: dsgo.RequestMeta{
+			Messages: []dsgo.Message{
 				{Role: "user", Content: "Test message"},
 			},
 			PromptLength: 12,
 			MessageCount: 1,
 		},
-		Response: core.ResponseMeta{
+		Response: dsgo.ResponseMeta{
 			Content:        "Test response",
 			FinishReason:   "stop",
 			ResponseLength: 13,
 		},
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -221,9 +221,9 @@ func SampleHistoryEntry(id, provider, model string) *core.HistoryEntry {
 }
 
 // SampleHistoryEntryWithError creates a sample history entry with error
-func SampleHistoryEntryWithError(id, provider, model, errorMsg string) *core.HistoryEntry {
+func SampleHistoryEntryWithError(id, provider, model, errorMsg string) *dsgo.HistoryEntry {
 	entry := SampleHistoryEntry(id, provider, model)
-	entry.Error = &core.ErrorMeta{
+	entry.Error = &dsgo.ErrorMeta{
 		Message:    errorMsg,
 		Code:       "TEST_ERROR",
 		StatusCode: 500,
@@ -232,14 +232,14 @@ func SampleHistoryEntryWithError(id, provider, model, errorMsg string) *core.His
 }
 
 // SampleHistoryEntryWithToolCalls creates a sample history entry with tool calls
-func SampleHistoryEntryWithToolCalls(id, provider, model string, toolCount int) *core.HistoryEntry {
+func SampleHistoryEntryWithToolCalls(id, provider, model string, toolCount int) *dsgo.HistoryEntry {
 	entry := SampleHistoryEntry(id, provider, model)
 	entry.Request.HasTools = true
 	entry.Request.ToolCount = toolCount
 
-	toolCalls := make([]core.ToolCall, toolCount)
+	toolCalls := make([]dsgo.ToolCall, toolCount)
 	for i := 0; i < toolCount; i++ {
-		toolCalls[i] = core.ToolCall{
+		toolCalls[i] = dsgo.ToolCall{
 			ID:   id + "-tool-" + string(rune('0'+i)),
 			Name: "test_tool",
 			Arguments: map[string]any{
@@ -254,9 +254,9 @@ func SampleHistoryEntryWithToolCalls(id, provider, model string, toolCount int) 
 }
 
 // SampleHistoryEntryWithCache creates a sample history entry with cache hit
-func SampleHistoryEntryWithCache(id, provider, model string, cacheHit bool) *core.HistoryEntry {
+func SampleHistoryEntryWithCache(id, provider, model string, cacheHit bool) *dsgo.HistoryEntry {
 	entry := SampleHistoryEntry(id, provider, model)
-	entry.Cache = core.CacheMeta{
+	entry.Cache = dsgo.CacheMeta{
 		Hit:    cacheHit,
 		Source: "memory",
 		TTL:    3600,
@@ -269,8 +269,8 @@ func SampleHistoryEntryWithCache(id, provider, model string, cacheHit bool) *cor
 // ============================================================================
 
 // GenerateHistoryEntries creates n sample history entries
-func GenerateHistoryEntries(n int, provider, model string) []*core.HistoryEntry {
-	entries := make([]*core.HistoryEntry, n)
+func GenerateHistoryEntries(n int, provider, model string) []*dsgo.HistoryEntry {
+	entries := make([]*dsgo.HistoryEntry, n)
 	for i := 0; i < n; i++ {
 		entries[i] = SampleHistoryEntry(
 			"entry-"+string(rune(i)),
@@ -282,9 +282,9 @@ func GenerateHistoryEntries(n int, provider, model string) []*core.HistoryEntry 
 }
 
 // GenerateMixedHistoryEntries creates entries with mixed success/error states
-func GenerateMixedHistoryEntries(successCount, errorCount int) []*core.HistoryEntry {
+func GenerateMixedHistoryEntries(successCount, errorCount int) []*dsgo.HistoryEntry {
 	total := successCount + errorCount
-	entries := make([]*core.HistoryEntry, total)
+	entries := make([]*dsgo.HistoryEntry, total)
 
 	for i := 0; i < successCount; i++ {
 		entries[i] = SampleHistoryEntry("success-"+string(rune(i)), "openai", "gpt-4")

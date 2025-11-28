@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // ============================================================================
@@ -22,12 +21,12 @@ func TestPredict_WithOptions(t *testing.T) {
 	lm := NewMockLMWithResponse(`{"answer": "configured response"}`)
 	sig := fixtures.SimplePredictSig()
 
-	options := &core.GenerateOptions{
+	options := &dsgo.GenerateOptions{
 		Temperature: 0.7,
 		MaxTokens:   100,
 	}
 
-	pred := module.NewPredict(sig, lm).WithOptions(options)
+	pred := dsgo.NewPredict(sig, lm).WithOptions(options)
 
 	result, err := pred.Forward(ctx, map[string]any{"question": "test"})
 	if err != nil {
@@ -47,11 +46,11 @@ func TestPredict_WithHistory(t *testing.T) {
 	lm := NewMockLMWithResponse(`{"answer": "response with history"}`)
 	sig := fixtures.SimplePredictSig()
 
-	history := &core.History{}
+	history := &dsgo.History{}
 	history.AddUserMessage("Previous context")
 	history.AddAssistantMessage("Previous response")
 
-	pred := module.NewPredict(sig, lm).WithHistory(history)
+	pred := dsgo.NewPredict(sig, lm).WithHistory(history)
 
 	result, err := pred.Forward(ctx, map[string]any{"question": "test"})
 	if err != nil {
@@ -71,17 +70,17 @@ func TestChainOfThought_AllOptions(t *testing.T) {
 	lm := NewMockLMWithResponse(`{"reasoning": "Step 1, Step 2", "answer": "42"}`)
 	sig := fixtures.ChainOfThoughtSig()
 
-	options := &core.GenerateOptions{Temperature: 0.5}
-	history := &core.History{}
-	demos := []core.Example{
+	options := &dsgo.GenerateOptions{Temperature: 0.5}
+	history := &dsgo.History{}
+	demos := []dsgo.Example{
 		{Inputs: map[string]any{"problem": "2+2"}, Outputs: map[string]any{"reasoning": "Add", "answer": "4"}},
 	}
 
-	cot := module.NewChainOfThought(sig, lm).
+	cot := dsgo.NewChainOfThought(sig, lm).
 		WithOptions(options).
 		WithHistory(history).
 		WithDemos(demos).
-		WithAdapter(core.NewJSONAdapter())
+		WithAdapter(dsgo.NewJSONAdapter())
 
 	result, err := cot.Forward(ctx, map[string]any{"problem": "What is 6*7?"})
 	if err != nil {
@@ -106,7 +105,7 @@ func TestReAct_AllOptions(t *testing.T) {
 
 	// Mock LM that finishes immediately
 	lm := &FinishToolMockLM{
-		FinishCall: core.ToolCall{
+		FinishCall: dsgo.ToolCall{
 			ID:   "finish_1",
 			Name: "finish",
 			Arguments: map[string]any{
@@ -117,17 +116,17 @@ func TestReAct_AllOptions(t *testing.T) {
 	}
 
 	sig := fixtures.ReActSig()
-	tools := []core.Tool{*fixtures.CalculatorTool()}
+	tools := []dsgo.Tool{*fixtures.CalculatorTool()}
 
-	options := &core.GenerateOptions{Temperature: 0.3}
-	history := &core.History{}
-	demos := []core.Example{}
+	options := &dsgo.GenerateOptions{Temperature: 0.3}
+	history := &dsgo.History{}
+	demos := []dsgo.Example{}
 
-	react := module.NewReAct(sig, lm, tools).
+	react := dsgo.NewReAct(sig, lm, tools).
 		WithOptions(options).
 		WithHistory(history).
 		WithDemos(demos).
-		WithAdapter(core.NewChatAdapter()).
+		WithAdapter(dsgo.NewChatAdapter()).
 		WithMaxIterations(10).
 		WithVerbose(true)
 
@@ -155,12 +154,12 @@ func TestRefine_AllOptions(t *testing.T) {
 	lm := NewMockLMWithResponse(`{"output": "Refined output"}`)
 	sig := fixtures.RefineSig()
 
-	options := &core.GenerateOptions{Temperature: 0.8}
+	options := &dsgo.GenerateOptions{Temperature: 0.8}
 
 	// Note: Refine doesn't have WithHistory method, only these configuration options:
-	refine := module.NewRefine(sig, lm).
+	refine := dsgo.NewRefine(sig, lm).
 		WithOptions(options).
-		WithAdapter(core.NewJSONAdapter()).
+		WithAdapter(dsgo.NewJSONAdapter()).
 		WithMaxIterations(3).
 		WithRefinementField("feedback")
 
@@ -191,15 +190,15 @@ func TestBestOfN_AllOptions(t *testing.T) {
 		`{"answer": "Response 3", "confidence": 0.5}`,
 	})
 
-	sig := core.NewSignature("test").
-		AddInput("question", core.FieldTypeString, "").
-		AddOutput("answer", core.FieldTypeString, "").
-		AddOutput("confidence", core.FieldTypeFloat, "")
+	sig := dsgo.NewSignature("test").
+		AddInput("question", dsgo.FieldTypeString, "").
+		AddOutput("answer", dsgo.FieldTypeString, "").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "")
 
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	bestOfN := module.NewBestOfN(pred, 3).
-		WithScorer(func(inputs map[string]any, pred *core.Prediction) (float64, error) {
+	bestOfN := dsgo.NewBestOfN(pred, 3).
+		WithScorer(func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
 			conf, ok := pred.GetFloat("confidence")
 			if !ok {
 				return 0, nil
@@ -244,10 +243,10 @@ func TestBestOfN_DefaultScorer(t *testing.T) {
 	})
 
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
 	// Use default scorer (prefers longer, complete responses)
-	bestOfN := module.NewBestOfN(pred, 3).WithScorer(module.DefaultScorer())
+	bestOfN := dsgo.NewBestOfN(pred, 3).WithScorer(dsgo.DefaultScorer())
 
 	result, err := bestOfN.Forward(ctx, map[string]any{"question": "test"})
 	if err != nil {
@@ -269,16 +268,16 @@ func TestBestOfN_ConfidenceScorer(t *testing.T) {
 		`{"answer": "High confidence", "confidence": 0.95}`,
 	})
 
-	sig := core.NewSignature("test").
-		AddInput("question", core.FieldTypeString, "").
-		AddOutput("answer", core.FieldTypeString, "").
-		AddOutput("confidence", core.FieldTypeFloat, "")
+	sig := dsgo.NewSignature("test").
+		AddInput("question", dsgo.FieldTypeString, "").
+		AddOutput("answer", dsgo.FieldTypeString, "").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "")
 
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
 	// Use confidence scorer
-	bestOfN := module.NewBestOfN(pred, 2).
-		WithScorer(module.ConfidenceScorer("confidence"))
+	bestOfN := dsgo.NewBestOfN(pred, 2).
+		WithScorer(dsgo.ConfidenceScorer("confidence"))
 
 	result, err := bestOfN.Forward(ctx, map[string]any{"question": "test"})
 	if err != nil {
@@ -299,10 +298,10 @@ func TestProgramOfThought_AllOptions(t *testing.T) {
 	lm := NewMockLMWithResponse(`{"code": "print(42)", "explanation": "Simple calculation"}`)
 	sig := fixtures.ProgramOfThoughtSig()
 
-	options := &core.GenerateOptions{Temperature: 0.2}
+	options := &dsgo.GenerateOptions{Temperature: 0.2}
 
 	// NewProgramOfThought requires (sig, lm, language) - 3 params
-	pot := module.NewProgramOfThought(sig, lm, "python").
+	pot := dsgo.NewProgramOfThought(sig, lm, "python").
 		WithOptions(options).
 		WithAllowExecution(false).
 		WithExecutionTimeout(5)
@@ -328,10 +327,10 @@ func TestProgram_Methods(t *testing.T) {
 	sig := fixtures.SimplePredictSig()
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
 
-	pred1 := module.NewPredict(sig, lm)
-	pred2 := module.NewPredict(sig, lm)
+	pred1 := dsgo.NewPredict(sig, lm)
+	pred2 := dsgo.NewPredict(sig, lm)
 
-	prog := module.NewProgram("test_program").
+	prog := dsgo.NewProgram("test_program").
 		AddModule(pred1).
 		AddModule(pred2)
 
@@ -360,10 +359,10 @@ func TestProgram_Methods(t *testing.T) {
 
 // TestCache_DeepCopySlice tests deep copy of slices in cache
 func TestCache_DeepCopySlice(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
 	// Create result with slice
-	original := &core.GenerateResult{
+	original := &dsgo.GenerateResult{
 		Content: "test",
 		Metadata: map[string]any{
 			"items": []any{"a", "b", "c"},
@@ -394,11 +393,11 @@ func TestCache_DeepCopySlice(t *testing.T) {
 
 // TestCache_Clear tests cache clear functionality
 func TestCache_Clear(t *testing.T) {
-	cache := core.NewLMCache(10)
+	cache := dsgo.NewLMCache(10)
 
 	// Add items
 	for i := 0; i < 5; i++ {
-		cache.Set(string(rune('a'+i)), &core.GenerateResult{Content: "test"})
+		cache.Set(string(rune('a'+i)), &dsgo.GenerateResult{Content: "test"})
 	}
 
 	if cache.Size() != 5 {
@@ -432,7 +431,7 @@ func TestPredict_Stream(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
 	streamResult, err := pred.Stream(ctx, map[string]any{"question": "test"})
 	if err != nil {
@@ -471,15 +470,15 @@ type StreamingMockLM struct {
 	FinalContent string
 }
 
-func (m *StreamingMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-	return &core.GenerateResult{
+func (m *StreamingMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	return &dsgo.GenerateResult{
 		Content: m.FinalContent,
-		Usage:   core.Usage{TotalTokens: 20},
+		Usage:   dsgo.Usage{TotalTokens: 20},
 	}, nil
 }
 
-func (m *StreamingMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, len(m.Chunks))
+func (m *StreamingMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, len(m.Chunks))
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -491,14 +490,14 @@ func (m *StreamingMockLM) Stream(ctx context.Context, messages []core.Message, o
 			case <-ctx.Done():
 				errChan <- ctx.Err()
 				return
-			case chunkChan <- core.Chunk{Content: c}:
+			case chunkChan <- dsgo.Chunk{Content: c}:
 			}
 		}
 
 		// Final chunk with usage
-		chunkChan <- core.Chunk{
+		chunkChan <- dsgo.Chunk{
 			Content: "",
-			Usage:   core.Usage{TotalTokens: 20, Cost: 0.001},
+			Usage:   dsgo.Usage{TotalTokens: 20, Cost: 0.001},
 		}
 	}()
 
@@ -522,7 +521,7 @@ func TestPredict_WithDemos(t *testing.T) {
 	lm := NewMockLMWithResponse(`{"answer": "demo response"}`)
 	sig := fixtures.SimplePredictSig()
 
-	demos := []core.Example{
+	demos := []dsgo.Example{
 		{
 			Inputs:  map[string]any{"question": "What is 2+2?"},
 			Outputs: map[string]any{"answer": "4"},
@@ -533,7 +532,7 @@ func TestPredict_WithDemos(t *testing.T) {
 		},
 	}
 
-	pred := module.NewPredict(sig, lm).WithDemos(demos)
+	pred := dsgo.NewPredict(sig, lm).WithDemos(demos)
 
 	result, err := pred.Forward(ctx, map[string]any{"question": "What is 3+3?"})
 	if err != nil {
@@ -564,7 +563,7 @@ func TestRefine_WithFeedback(t *testing.T) {
 
 	sig := fixtures.RefineSig()
 
-	refine := module.NewRefine(sig, lm).
+	refine := dsgo.NewRefine(sig, lm).
 		WithMaxIterations(3).
 		WithRefinementField("feedback")
 
@@ -589,7 +588,7 @@ func TestBestOfN_ConfidenceScorerVariants(t *testing.T) {
 	tests := []struct {
 		name      string
 		responses []string
-		sigSetup  func() *core.Signature
+		sigSetup  func() *dsgo.Signature
 		expected  string
 	}{
 		{
@@ -598,11 +597,11 @@ func TestBestOfN_ConfidenceScorerVariants(t *testing.T) {
 				`{"answer": "Low", "confidence": 0.3}`,
 				`{"answer": "High", "confidence": 0.9}`,
 			},
-			sigSetup: func() *core.Signature {
-				return core.NewSignature("test").
-					AddInput("question", core.FieldTypeString, "").
-					AddOutput("answer", core.FieldTypeString, "").
-					AddOutput("confidence", core.FieldTypeFloat, "")
+			sigSetup: func() *dsgo.Signature {
+				return dsgo.NewSignature("test").
+					AddInput("question", dsgo.FieldTypeString, "").
+					AddOutput("answer", dsgo.FieldTypeString, "").
+					AddOutput("confidence", dsgo.FieldTypeFloat, "")
 			},
 			expected: "High",
 		},
@@ -612,11 +611,11 @@ func TestBestOfN_ConfidenceScorerVariants(t *testing.T) {
 				`{"answer": "Low", "score": 30}`,
 				`{"answer": "High", "score": 90}`,
 			},
-			sigSetup: func() *core.Signature {
-				return core.NewSignature("test").
-					AddInput("question", core.FieldTypeString, "").
-					AddOutput("answer", core.FieldTypeString, "").
-					AddOutput("score", core.FieldTypeInt, "")
+			sigSetup: func() *dsgo.Signature {
+				return dsgo.NewSignature("test").
+					AddInput("question", dsgo.FieldTypeString, "").
+					AddOutput("answer", dsgo.FieldTypeString, "").
+					AddOutput("score", dsgo.FieldTypeInt, "")
 			},
 			expected: "High",
 		},
@@ -626,7 +625,7 @@ func TestBestOfN_ConfidenceScorerVariants(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			lm := NewMockLMWithResponses(tt.responses)
 			sig := tt.sigSetup()
-			pred := module.NewPredict(sig, lm)
+			pred := dsgo.NewPredict(sig, lm)
 
 			// Extract field name from first output that isn't "answer"
 			var scoreField string
@@ -637,8 +636,8 @@ func TestBestOfN_ConfidenceScorerVariants(t *testing.T) {
 				}
 			}
 
-			bestOfN := module.NewBestOfN(pred, 2).
-				WithScorer(module.ConfidenceScorer(scoreField))
+			bestOfN := dsgo.NewBestOfN(pred, 2).
+				WithScorer(dsgo.ConfidenceScorer(scoreField))
 
 			result, err := bestOfN.Forward(ctx, map[string]any{"question": "test"})
 			if err != nil {
@@ -665,15 +664,15 @@ func TestBestOfN_ThresholdEarlyStop(t *testing.T) {
 		`{"answer": "Should not reach", "confidence": 0.2}`,
 	})
 
-	sig := core.NewSignature("test").
-		AddInput("question", core.FieldTypeString, "").
-		AddOutput("answer", core.FieldTypeString, "").
-		AddOutput("confidence", core.FieldTypeFloat, "")
+	sig := dsgo.NewSignature("test").
+		AddInput("question", dsgo.FieldTypeString, "").
+		AddOutput("answer", dsgo.FieldTypeString, "").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "")
 
-	pred := module.NewPredict(sig, lm)
+	pred := dsgo.NewPredict(sig, lm)
 
-	bestOfN := module.NewBestOfN(pred, 3).
-		WithScorer(module.ConfidenceScorer("confidence")).
+	bestOfN := dsgo.NewBestOfN(pred, 3).
+		WithScorer(dsgo.ConfidenceScorer("confidence")).
 		WithThreshold(0.9) // High threshold
 
 	result, err := bestOfN.Forward(ctx, map[string]any{"question": "test"})
@@ -697,10 +696,10 @@ func TestBestOfN_ConfidenceScorer_NumericConfidence(t *testing.T) {
 	defer cancel()
 
 	// Signature with numeric confidence field
-	sig := core.NewSignature("Rate quality").
-		AddInput("text", core.FieldTypeString, "Text").
-		AddOutput("rating", core.FieldTypeString, "Rating").
-		AddOutput("confidence", core.FieldTypeFloat, "Confidence 0-1")
+	sig := dsgo.NewSignature("Rate quality").
+		AddInput("text", dsgo.FieldTypeString, "Text").
+		AddOutput("rating", dsgo.FieldTypeString, "Rating").
+		AddOutput("confidence", dsgo.FieldTypeFloat, "Confidence 0-1")
 
 	// Multiple responses with different confidence levels
 	responses := []string{
@@ -712,9 +711,9 @@ func TestBestOfN_ConfidenceScorer_NumericConfidence(t *testing.T) {
 	lm := NewMockLMWithResponses(responses)
 
 	// BestOfN wraps a module (ChainOfThought in this case)
-	coT := module.NewChainOfThought(sig, lm)
-	bestOfN := module.NewBestOfN(coT, 3).
-		WithScorer(module.ConfidenceScorer("confidence"))
+	coT := dsgo.NewChainOfThought(sig, lm)
+	bestOfN := dsgo.NewBestOfN(coT, 3).
+		WithScorer(dsgo.ConfidenceScorer("confidence"))
 
 	result, err := bestOfN.Forward(ctx, map[string]any{"text": "test"})
 	if err != nil {
@@ -732,10 +731,10 @@ func TestBestOfN_ConfidenceScorer_StringConfidence(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Classify sentiment").
-		AddInput("text", core.FieldTypeString, "Text").
-		AddOutput("sentiment", core.FieldTypeString, "Sentiment").
-		AddOutput("confidence", core.FieldTypeString, "Confidence level")
+	sig := dsgo.NewSignature("Classify sentiment").
+		AddInput("text", dsgo.FieldTypeString, "Text").
+		AddOutput("sentiment", dsgo.FieldTypeString, "Sentiment").
+		AddOutput("confidence", dsgo.FieldTypeString, "Confidence level")
 
 	// Multiple responses with confidence as strings
 	responses := []string{
@@ -747,9 +746,9 @@ func TestBestOfN_ConfidenceScorer_StringConfidence(t *testing.T) {
 	lm := NewMockLMWithResponses(responses)
 
 	// BestOfN wraps a module
-	coT := module.NewChainOfThought(sig, lm)
-	bestOfN := module.NewBestOfN(coT, 3).
-		WithScorer(module.ConfidenceScorer("confidence"))
+	coT := dsgo.NewChainOfThought(sig, lm)
+	bestOfN := dsgo.NewBestOfN(coT, 3).
+		WithScorer(dsgo.ConfidenceScorer("confidence"))
 
 	result, err := bestOfN.Forward(ctx, map[string]any{"text": "test"})
 	if err != nil {
@@ -767,10 +766,10 @@ func TestBestOfN_ConfidenceScorer_CustomScoreField(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Quality assessment").
-		AddInput("item", core.FieldTypeString, "Item").
-		AddOutput("assessment", core.FieldTypeString, "Assessment").
-		AddOutput("score", core.FieldTypeInt, "Quality score")
+	sig := dsgo.NewSignature("Quality assessment").
+		AddInput("item", dsgo.FieldTypeString, "Item").
+		AddOutput("assessment", dsgo.FieldTypeString, "Assessment").
+		AddOutput("score", dsgo.FieldTypeInt, "Quality score")
 
 	responses := []string{
 		`{"assessment": "average", "score": 60}`,
@@ -781,9 +780,9 @@ func TestBestOfN_ConfidenceScorer_CustomScoreField(t *testing.T) {
 	lm := NewMockLMWithResponses(responses)
 
 	// BestOfN wraps a module
-	coT := module.NewChainOfThought(sig, lm)
-	bestOfN := module.NewBestOfN(coT, 3).
-		WithScorer(module.ConfidenceScorer("score"))
+	coT := dsgo.NewChainOfThought(sig, lm)
+	bestOfN := dsgo.NewBestOfN(coT, 3).
+		WithScorer(dsgo.ConfidenceScorer("score"))
 
 	result, err := bestOfN.Forward(ctx, map[string]any{"item": "test"})
 	if err != nil {
@@ -806,13 +805,13 @@ func TestRefine_GeneratePrediction_InitialGeneration(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Improve text").
-		AddInput("text", core.FieldTypeString, "Text to improve").
-		AddOutput("improved", core.FieldTypeString, "Improved text")
+	sig := dsgo.NewSignature("Improve text").
+		AddInput("text", dsgo.FieldTypeString, "Text to improve").
+		AddOutput("improved", dsgo.FieldTypeString, "Improved text")
 
 	lm := NewMockLMWithResponse(`{"improved": "This is the improved version of the text with better grammar and clarity."}`)
 
-	refine := module.NewRefine(sig, lm)
+	refine := dsgo.NewRefine(sig, lm)
 
 	result, err := refine.Forward(ctx, map[string]any{"text": "This is some text"})
 	if err != nil {
@@ -831,9 +830,9 @@ func TestRefine_GeneratePrediction_WithFeedback(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
 
 	// Multiple responses: initial answer, then refined answer
 	responses := []string{
@@ -842,7 +841,7 @@ func TestRefine_GeneratePrediction_WithFeedback(t *testing.T) {
 	}
 	lm := NewMockLMWithResponses(responses)
 
-	refine := module.NewRefine(sig, lm).
+	refine := dsgo.NewRefine(sig, lm).
 		WithMaxIterations(1).
 		WithRefinementField("feedback")
 
@@ -871,16 +870,16 @@ func TestChainOfThought_FinishReason_Length(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Explain concept").
-		AddInput("concept", core.FieldTypeString, "Concept").
-		AddOutput("explanation", core.FieldTypeString, "Explanation")
+	sig := dsgo.NewSignature("Explain concept").
+		AddInput("concept", dsgo.FieldTypeString, "Concept").
+		AddOutput("explanation", dsgo.FieldTypeString, "Explanation")
 
 	// Create mock that returns finish_reason=length
 	lmInterface := NewMockLMWithResponse(`{"explanation": "This is an explanation that got truncated..."}`)
 	// Note: We'd need to modify the mock to set finish_reason, for now just verify error handling
 	// by checking with a mock that indicates this scenario
 
-	cot := module.NewChainOfThought(sig, lmInterface)
+	cot := dsgo.NewChainOfThought(sig, lmInterface)
 
 	result, err := cot.Forward(ctx, map[string]any{"concept": "Machine Learning"})
 
@@ -900,15 +899,15 @@ func TestChainOfThought_FinishReason_ToolCalls(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
+	sig := dsgo.NewSignature("Answer question").
+		AddInput("question", dsgo.FieldTypeString, "Question").
+		AddOutput("answer", dsgo.FieldTypeString, "Answer")
 
 	// ChainOfThought doesn't use tools, so any tool calls would be unexpected
 	// Just verify we get valid output from standard JSON
 	lm := NewMockLMWithResponse(`{"answer": "The answer is 42"}`)
 
-	cot := module.NewChainOfThought(sig, lm)
+	cot := dsgo.NewChainOfThought(sig, lm)
 
 	result, err := cot.Forward(ctx, map[string]any{
 		"question": "What is the answer to everything?",
@@ -930,13 +929,13 @@ func TestChainOfThought_EmptyContent(t *testing.T) {
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
-	sig := core.NewSignature("Think deeply").
-		AddInput("prompt", core.FieldTypeString, "Prompt").
-		AddOutput("thinking", core.FieldTypeString, "Thinking")
+	sig := dsgo.NewSignature("Think deeply").
+		AddInput("prompt", dsgo.FieldTypeString, "Prompt").
+		AddOutput("thinking", dsgo.FieldTypeString, "Thinking")
 
 	lm := NewMockLMWithResponse(`{"thinking": "After deep consideration, I believe the answer is nuanced and depends on context."}`)
 
-	cot := module.NewChainOfThought(sig, lm)
+	cot := dsgo.NewChainOfThought(sig, lm)
 
 	result, err := cot.Forward(ctx, map[string]any{"prompt": "What is consciousness?"})
 

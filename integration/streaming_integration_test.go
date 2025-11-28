@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // TestStreaming_BasicChunksReceived validates that all chunks are received in order.
@@ -30,7 +29,7 @@ func TestStreaming_BasicChunksReceived(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "Say hello",
@@ -41,7 +40,7 @@ func TestStreaming_BasicChunksReceived(t *testing.T) {
 	}
 
 	// Collect all chunks
-	var receivedChunks []core.Chunk
+	var receivedChunks []dsgo.Chunk
 	var streamErr error
 
 	for {
@@ -85,7 +84,7 @@ func TestStreaming_MarkerFiltering(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "Say hello",
@@ -119,7 +118,7 @@ func TestStreaming_MarkerFiltering(t *testing.T) {
 	}
 }
 
-// TestStreaming_PredictModule validates streaming with Predict module.
+// TestStreaming_PredictModule validates streaming with Predict dsgo.
 // Scenario: Basic Predict.Stream() execution.
 // Expected: Chunks received, final prediction valid.
 func TestStreaming_PredictModule(t *testing.T) {
@@ -130,7 +129,7 @@ func TestStreaming_PredictModule(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "What is the answer?",
@@ -187,7 +186,7 @@ func TestStreaming_LargeResponses(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "test",
@@ -237,7 +236,7 @@ func TestStreaming_ErrorHandling(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "test",
@@ -283,7 +282,7 @@ func TestStreaming_ContextCancellation(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "test",
@@ -331,14 +330,14 @@ func TestStreaming_ObservabilityWithStreaming(t *testing.T) {
 	ctx := context.Background()
 
 	collector := &HistoryCollector{}
-	core.Configure(core.WithCollector(collector))
+	dsgo.Configure(dsgo.WithCollector(collector))
 
 	lm := &MockLM{
 		Response: `{"answer": "streaming response"}`,
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "test",
@@ -398,7 +397,7 @@ func TestStreaming_MultipleChunkHandling(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "test",
@@ -458,7 +457,7 @@ func TestStreaming_ConcurrentStreams(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 			result, err := predictor.Stream(ctx, map[string]any{
 				"question": "test",
 			})
@@ -513,7 +512,7 @@ func TestStreaming_EmptyResponse(t *testing.T) {
 	}
 
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	result, err := predictor.Stream(ctx, map[string]any{
 		"question": "test",
@@ -578,24 +577,24 @@ type DelayedChunkLM struct {
 	ChunkDelay    time.Duration
 	ErrorAfter    int // Emit error after this many chunks (-1 = no error)
 	ErrorToEmit   error
-	Usage         core.Usage
+	Usage         dsgo.Usage
 	mu            sync.Mutex
 	streamCounter int
 }
 
-func (m *DelayedChunkLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *DelayedChunkLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	fullContent := ""
 	for _, c := range m.Chunks {
 		fullContent += c
 	}
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: fullContent,
 		Usage:   m.Usage,
 	}, nil
 }
 
-func (m *DelayedChunkLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk)
+func (m *DelayedChunkLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk)
 	errChan := make(chan error, 1)
 
 	m.mu.Lock()
@@ -623,7 +622,7 @@ func (m *DelayedChunkLM) Stream(ctx context.Context, messages []core.Message, op
 				return
 			}
 
-			chunkChan <- core.Chunk{
+			chunkChan <- dsgo.Chunk{
 				Content: chunk,
 				Usage:   m.Usage,
 			}
@@ -688,7 +687,7 @@ func TestStreaming_ReconnectionScenario(t *testing.T) {
 				ChunkDelay:  5 * time.Millisecond,
 				ErrorAfter:  tt.errorAfter,
 				ErrorToEmit: errors.New("connection lost: stream interrupted"),
-				Usage: core.Usage{
+				Usage: dsgo.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 20,
 					TotalTokens:      30,
@@ -696,7 +695,7 @@ func TestStreaming_ReconnectionScenario(t *testing.T) {
 			}
 
 			sig := fixtures.SimplePredictSig()
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			result, err := predictor.Stream(ctx, map[string]any{
 				"question": "test reconnection",
@@ -758,24 +757,24 @@ func TestStreaming_ReconnectionScenario(t *testing.T) {
 type SlowConsumerLM struct {
 	Chunks     []string
 	ChunkDelay time.Duration
-	Usage      core.Usage
+	Usage      dsgo.Usage
 	mu         sync.Mutex
 	chunksSent int
 }
 
-func (m *SlowConsumerLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *SlowConsumerLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	fullContent := ""
 	for _, c := range m.Chunks {
 		fullContent += c
 	}
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: fullContent,
 		Usage:   m.Usage,
 	}, nil
 }
 
-func (m *SlowConsumerLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 10) // Buffered channel
+func (m *SlowConsumerLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 10) // Buffered channel
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -795,7 +794,7 @@ func (m *SlowConsumerLM) Stream(ctx context.Context, messages []core.Message, op
 			}
 
 			select {
-			case chunkChan <- core.Chunk{Content: chunk, Usage: m.Usage}:
+			case chunkChan <- dsgo.Chunk{Content: chunk, Usage: m.Usage}:
 				m.mu.Lock()
 				m.chunksSent++
 				m.mu.Unlock()
@@ -867,7 +866,7 @@ func TestStreaming_BackpressureHandling(t *testing.T) {
 			lm := &SlowConsumerLM{
 				Chunks:     chunks,
 				ChunkDelay: tt.producerDelay,
-				Usage: core.Usage{
+				Usage: dsgo.Usage{
 					PromptTokens:     10,
 					CompletionTokens: tt.numChunks * 2,
 					TotalTokens:      10 + tt.numChunks*2,
@@ -875,7 +874,7 @@ func TestStreaming_BackpressureHandling(t *testing.T) {
 			}
 
 			sig := fixtures.SimplePredictSig()
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			result, err := predictor.Stream(ctx, map[string]any{
 				"question": "test backpressure",
@@ -924,20 +923,20 @@ func TestStreaming_BackpressureHandling(t *testing.T) {
 // UsageTrackingLM is a mock LM that provides detailed usage tracking.
 type UsageTrackingLM struct {
 	Response      string
-	StreamUsage   core.Usage
-	GenerateUsage core.Usage
+	StreamUsage   dsgo.Usage
+	GenerateUsage dsgo.Usage
 	ChunkDelay    time.Duration
 }
 
-func (m *UsageTrackingLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-	return &core.GenerateResult{
+func (m *UsageTrackingLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	return &dsgo.GenerateResult{
 		Content: m.Response,
 		Usage:   m.GenerateUsage,
 	}, nil
 }
 
-func (m *UsageTrackingLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk)
+func (m *UsageTrackingLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -957,12 +956,12 @@ func (m *UsageTrackingLM) Stream(ctx context.Context, messages []core.Message, o
 				time.Sleep(m.ChunkDelay)
 			}
 
-			usage := core.Usage{}
+			usage := dsgo.Usage{}
 			if i == len(words)-1 {
 				usage = m.StreamUsage
 			}
 
-			chunkChan <- core.Chunk{
+			chunkChan <- dsgo.Chunk{
 				Content: word,
 				Usage:   usage,
 			}
@@ -1041,7 +1040,7 @@ func TestStreaming_FinalUsageAccuracy(t *testing.T) {
 
 			expectedCost := float64(tt.totalTokens) * tt.costPerToken
 
-			usage := core.Usage{
+			usage := dsgo.Usage{
 				PromptTokens:     tt.promptTokens,
 				CompletionTokens: tt.completionTokens,
 				TotalTokens:      tt.totalTokens,
@@ -1056,7 +1055,7 @@ func TestStreaming_FinalUsageAccuracy(t *testing.T) {
 			}
 
 			sig := fixtures.SimplePredictSig()
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			genResult, err := predictor.Forward(ctx, map[string]any{
 				"question": "test usage",
@@ -1072,7 +1071,7 @@ func TestStreaming_FinalUsageAccuracy(t *testing.T) {
 				t.Fatalf("Stream() failed: %v", err)
 			}
 
-			var streamPrediction *core.Prediction
+			var streamPrediction *dsgo.Prediction
 			done := false
 			for !done {
 				select {

@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // ============================================================================
@@ -45,7 +44,7 @@ This is answer number %d.`)
 			defer wg.Done()
 
 			// Each goroutine gets its own Predict instance to avoid shared state
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			result, err := predictor.Forward(ctx, map[string]any{
 				"question": fmt.Sprintf("Question from goroutine %d", id),
@@ -109,7 +108,7 @@ Concurrent answer.`)
 	sig := fixtures.SimplePredictSig()
 
 	// Single predictor instance (without history - stateless)
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	var wg sync.WaitGroup
 	var successCount int64
@@ -171,7 +170,7 @@ func TestCacheConcurrency_Contention(t *testing.T) {
 	const numGoroutines = 50
 	const numOperations = 20
 
-	cache := core.NewLMCache(100)
+	cache := dsgo.NewLMCache(100)
 
 	var wg sync.WaitGroup
 	var hitCount int64
@@ -190,9 +189,9 @@ func TestCacheConcurrency_Contention(t *testing.T) {
 
 				if op%3 == 0 {
 					// Write operation
-					result := &core.GenerateResult{
+					result := &dsgo.GenerateResult{
 						Content: fmt.Sprintf("Result from goroutine %d, op %d", id, op),
-						Usage: core.Usage{
+						Usage: dsgo.Usage{
 							PromptTokens:     10,
 							CompletionTokens: 10,
 							TotalTokens:      20,
@@ -241,14 +240,14 @@ func TestCacheConcurrency_Contention(t *testing.T) {
 func TestConcurrency_CacheIntegrity(t *testing.T) {
 	const numGoroutines = 30
 
-	cache := core.NewLMCache(100)
+	cache := dsgo.NewLMCache(100)
 
 	// Pre-populate cache with known values
 	for i := 0; i < 10; i++ {
 		key := fmt.Sprintf("integrity_key_%d", i)
-		result := &core.GenerateResult{
+		result := &dsgo.GenerateResult{
 			Content: fmt.Sprintf("Original content %d", i),
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     i * 10,
 				CompletionTokens: i * 5,
 				TotalTokens:      i * 15,
@@ -330,7 +329,7 @@ func TestConcurrency_HistoryCollector(t *testing.T) {
 	const entriesPerGoroutine = 10
 
 	collector := &ThreadSafeHistoryCollector{
-		Entries: make([]*core.HistoryEntry, 0),
+		Entries: make([]*dsgo.HistoryEntry, 0),
 	}
 
 	var wg sync.WaitGroup
@@ -341,18 +340,18 @@ func TestConcurrency_HistoryCollector(t *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < entriesPerGoroutine; j++ {
-				entry := &core.HistoryEntry{
-					Request: core.RequestMeta{
-						Messages: []core.Message{
+				entry := &dsgo.HistoryEntry{
+					Request: dsgo.RequestMeta{
+						Messages: []dsgo.Message{
 							{Role: "user", Content: fmt.Sprintf("Message from goroutine %d, entry %d", id, j)},
 						},
 						MessageCount: 1,
 					},
-					Response: core.ResponseMeta{
+					Response: dsgo.ResponseMeta{
 						Content:        fmt.Sprintf("Response %d-%d", id, j),
 						ResponseLength: 20,
 					},
-					Usage: core.Usage{
+					Usage: dsgo.Usage{
 						PromptTokens:     10,
 						CompletionTokens: 5,
 						TotalTokens:      15,
@@ -405,7 +404,7 @@ func TestConcurrency_HistoryCollector_ConcurrentRead(t *testing.T) {
 	const entriesPerWriter = 20
 
 	collector := &ThreadSafeHistoryCollector{
-		Entries: make([]*core.HistoryEntry, 0),
+		Entries: make([]*dsgo.HistoryEntry, 0),
 	}
 
 	var wg sync.WaitGroup
@@ -425,18 +424,18 @@ func TestConcurrency_HistoryCollector_ConcurrentRead(t *testing.T) {
 				default:
 				}
 
-				entry := &core.HistoryEntry{
-					Request: core.RequestMeta{
-						Messages: []core.Message{
+				entry := &dsgo.HistoryEntry{
+					Request: dsgo.RequestMeta{
+						Messages: []dsgo.Message{
 							{Role: "user", Content: fmt.Sprintf("W%d-E%d", id, j)},
 						},
 						MessageCount: 1,
 					},
-					Response: core.ResponseMeta{
+					Response: dsgo.ResponseMeta{
 						Content:        fmt.Sprintf("Response %d-%d", id, j),
 						ResponseLength: 20,
 					},
-					Usage: core.Usage{TotalTokens: 10},
+					Usage: dsgo.Usage{TotalTokens: 10},
 				}
 				_ = collector.Collect(entry)
 				time.Sleep(time.Microsecond)
@@ -506,9 +505,9 @@ func TestConcurrency_BestOfN_ParallelSafety(t *testing.T) {
 	sig := fixtures.BestOfNSig()
 
 	// Create stateless predictor (safe for parallel reuse)
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
-	scorer := func(inputs map[string]any, pred *core.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
 		result, ok := pred.GetString("result")
 		if !ok {
 			return 0, nil
@@ -517,7 +516,7 @@ func TestConcurrency_BestOfN_ParallelSafety(t *testing.T) {
 		return float64(len(result)), nil
 	}
 
-	bestOfN := module.NewBestOfN(predictor, n).
+	bestOfN := dsgo.NewBestOfN(predictor, n).
 		WithScorer(scorer).
 		WithParallel(true).
 		WithReturnAll(true)
@@ -575,12 +574,12 @@ func TestConcurrency_BestOfN_IndependentModules(t *testing.T) {
 		executionCount: &executionCount,
 	}
 
-	scorer := func(inputs map[string]any, pred *core.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
 		result, _ := pred.GetString("result")
 		return float64(len(result)), nil
 	}
 
-	bestOfN := module.NewBestOfN(predictor, n).
+	bestOfN := dsgo.NewBestOfN(predictor, n).
 		WithScorer(scorer).
 		WithParallel(true)
 
@@ -612,9 +611,9 @@ func TestConcurrency_BestOfN_FailureHandling(t *testing.T) {
 	lm := NewConcurrentSafeMockLMWithFailures(3) // 3 out of 10 will fail
 
 	sig := fixtures.BestOfNSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
-	scorer := func(inputs map[string]any, pred *core.Prediction) (float64, error) {
+	scorer := func(inputs map[string]any, pred *dsgo.Prediction) (float64, error) {
 		result, ok := pred.GetString("result")
 		if !ok {
 			return 0, nil
@@ -622,7 +621,7 @@ func TestConcurrency_BestOfN_FailureHandling(t *testing.T) {
 		return float64(len(result)), nil
 	}
 
-	bestOfN := module.NewBestOfN(predictor, n).
+	bestOfN := dsgo.NewBestOfN(predictor, n).
 		WithScorer(scorer).
 		WithParallel(true).
 		WithMaxFailures(5) // Allow up to 5 failures
@@ -662,12 +661,12 @@ func NewConcurrentSafeMockLM(responseTemplate string) *ConcurrentSafeMockLM {
 	}
 }
 
-func (m *ConcurrentSafeMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *ConcurrentSafeMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	count := atomic.AddInt64(&m.callCount, 1)
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: fmt.Sprintf(m.responseTemplate, count),
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -676,8 +675,8 @@ func (m *ConcurrentSafeMockLM) Generate(ctx context.Context, messages []core.Mes
 	}, nil
 }
 
-func (m *ConcurrentSafeMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *ConcurrentSafeMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -690,7 +689,7 @@ func (m *ConcurrentSafeMockLM) Stream(ctx context.Context, messages []core.Messa
 			return
 		}
 
-		chunkChan <- core.Chunk{
+		chunkChan <- dsgo.Chunk{
 			Content: result.Content,
 			Usage:   result.Usage,
 		}
@@ -713,7 +712,7 @@ func NewConcurrentSafeMockLMWithScoring() *ConcurrentSafeMockLMWithScoring {
 	return &ConcurrentSafeMockLMWithScoring{}
 }
 
-func (m *ConcurrentSafeMockLMWithScoring) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *ConcurrentSafeMockLMWithScoring) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	count := atomic.AddInt64(&m.callCount, 1)
 
 	// Vary response length based on call count for scoring differentiation
@@ -723,10 +722,10 @@ func (m *ConcurrentSafeMockLMWithScoring) Generate(ctx context.Context, messages
 		content += fmt.Sprintf("Result segment %d. ", i+1)
 	}
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: fmt.Sprintf(`[[ ## result ## ]]
 %s`, content),
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10 * repeatCount,
 			TotalTokens:      10 + 10*repeatCount,
@@ -735,8 +734,8 @@ func (m *ConcurrentSafeMockLMWithScoring) Generate(ctx context.Context, messages
 	}, nil
 }
 
-func (m *ConcurrentSafeMockLMWithScoring) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *ConcurrentSafeMockLMWithScoring) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -749,7 +748,7 @@ func (m *ConcurrentSafeMockLMWithScoring) Stream(ctx context.Context, messages [
 			return
 		}
 
-		chunkChan <- core.Chunk{
+		chunkChan <- dsgo.Chunk{
 			Content: result.Content,
 			Usage:   result.Usage,
 		}
@@ -775,7 +774,7 @@ func NewConcurrentSafeMockLMWithFailures(failureCount int) *ConcurrentSafeMockLM
 	}
 }
 
-func (m *ConcurrentSafeMockLMWithFailures) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *ConcurrentSafeMockLMWithFailures) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	count := atomic.AddInt64(&m.callCount, 1)
 
 	// Fail on first N requests
@@ -783,10 +782,10 @@ func (m *ConcurrentSafeMockLMWithFailures) Generate(ctx context.Context, message
 		return nil, fmt.Errorf("simulated failure %d", count)
 	}
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: fmt.Sprintf(`[[ ## result ## ]]
 Success response %d`, count),
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -795,8 +794,8 @@ Success response %d`, count),
 	}, nil
 }
 
-func (m *ConcurrentSafeMockLMWithFailures) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *ConcurrentSafeMockLMWithFailures) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
@@ -809,7 +808,7 @@ func (m *ConcurrentSafeMockLMWithFailures) Stream(ctx context.Context, messages 
 			return
 		}
 
-		chunkChan <- core.Chunk{
+		chunkChan <- dsgo.Chunk{
 			Content: result.Content,
 			Usage:   result.Usage,
 		}
@@ -830,10 +829,10 @@ func (m *ConcurrentSafeMockLMWithFailures) IsOpenAI() bool      { return false }
 // ThreadSafeHistoryCollector is a history collector safe for concurrent use
 type ThreadSafeHistoryCollector struct {
 	mu      sync.RWMutex
-	Entries []*core.HistoryEntry
+	Entries []*dsgo.HistoryEntry
 }
 
-func (c *ThreadSafeHistoryCollector) Collect(entry *core.HistoryEntry) error {
+func (c *ThreadSafeHistoryCollector) Collect(entry *dsgo.HistoryEntry) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Entries = append(c.Entries, entry)
@@ -844,11 +843,11 @@ func (c *ThreadSafeHistoryCollector) Close() error {
 	return nil
 }
 
-func (c *ThreadSafeHistoryCollector) GetEntries() []*core.HistoryEntry {
+func (c *ThreadSafeHistoryCollector) GetEntries() []*dsgo.HistoryEntry {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	// Return a copy to prevent race conditions
-	entries := make([]*core.HistoryEntry, len(c.Entries))
+	entries := make([]*dsgo.HistoryEntry, len(c.Entries))
 	copy(entries, c.Entries)
 	return entries
 }
@@ -869,12 +868,12 @@ func (c *ThreadSafeHistoryCollector) GetTotalCost() float64 {
 
 // CountingPredict is a module that counts executions
 type CountingPredict struct {
-	Signature      *core.Signature
-	LM             core.LM
+	Signature      *dsgo.Signature
+	LM             dsgo.LM
 	executionCount *int64
 }
 
-func (p *CountingPredict) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+func (p *CountingPredict) Forward(ctx context.Context, inputs map[string]any) (*dsgo.Prediction, error) {
 	atomic.AddInt64(p.executionCount, 1)
 
 	result, err := p.LM.Generate(ctx, nil, nil)
@@ -886,9 +885,9 @@ func (p *CountingPredict) Forward(ctx context.Context, inputs map[string]any) (*
 		"result": result.Content,
 	}
 
-	return core.NewPrediction(outputs).WithUsage(result.Usage), nil
+	return dsgo.NewPrediction(outputs).WithUsage(result.Usage), nil
 }
 
-func (p *CountingPredict) GetSignature() *core.Signature {
+func (p *CountingPredict) GetSignature() *dsgo.Signature {
 	return p.Signature
 }

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 // FieldInfo contains parsed information from a struct field

@@ -3,12 +3,12 @@ package integration
 import (
 	"testing"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 )
 
 // TestAssertPredictionValid_Success tests the assertion helper
 func TestAssertPredictionValid_Success(t *testing.T) {
-	pred := core.NewPrediction(map[string]any{
+	pred := dsgo.NewPrediction(map[string]any{
 		"answer": "42",
 		"count":  123,
 	})
@@ -19,7 +19,7 @@ func TestAssertPredictionValid_Success(t *testing.T) {
 
 // TestAssertPredictionValid_MissingField tests the assertion fails on missing field
 func TestAssertPredictionValid_MissingField(t *testing.T) {
-	pred := core.NewPrediction(map[string]any{
+	pred := dsgo.NewPrediction(map[string]any{
 		"answer": "42",
 	})
 
@@ -32,9 +32,9 @@ func TestAssertPredictionValid_MissingField(t *testing.T) {
 
 // TestUsageTracking verifies usage tracking
 func TestUsageTracking(t *testing.T) {
-	pred := core.NewPrediction(map[string]any{
+	pred := dsgo.NewPrediction(map[string]any{
 		"answer": "test",
-	}).WithUsage(core.Usage{
+	}).WithUsage(dsgo.Usage{
 		PromptTokens:     10,
 		CompletionTokens: 20,
 		TotalTokens:      30,
@@ -48,9 +48,9 @@ func TestUsageTracking(t *testing.T) {
 
 // TestCostCalculation verifies cost tracking
 func TestCostCalculation(t *testing.T) {
-	pred := core.NewPrediction(map[string]any{
+	pred := dsgo.NewPrediction(map[string]any{
 		"answer": "test",
-	}).WithUsage(core.Usage{
+	}).WithUsage(dsgo.Usage{
 		Cost:    0.005,
 		Latency: 50,
 	})
@@ -62,11 +62,11 @@ func TestCostCalculation(t *testing.T) {
 func TestHistoryCollection(t *testing.T) {
 	collector := &HistoryCollector{}
 
-	entry := &core.HistoryEntry{
+	entry := &dsgo.HistoryEntry{
 		ID:       "test-123",
 		Model:    "gpt-4o-mini",
 		Provider: "openai",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 5,
 			TotalTokens:      15,

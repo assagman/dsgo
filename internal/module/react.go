@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 const (

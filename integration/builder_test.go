@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
 )
 
@@ -84,7 +84,7 @@ func TestBuilder_WithTimeout(t *testing.T) {
 
 func TestBuilder_WithAdapter(t *testing.T) {
 	tc := NewTestBuilder().
-		WithAdapter(core.NewJSONAdapter()).
+		WithAdapter(dsgo.NewJSONAdapter()).
 		WithMockResponse(`{"answer": "json response"}`).
 		Build(t)
 	defer tc.Cleanup()

@@ -7,7 +7,7 @@ import (
 
 	"strings"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestProgramOfThought_Forward_Success(t *testing.T) {

@@ -5,19 +5,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // TestBuilder provides a fluent interface for setting up integration tests.
 // It reduces boilerplate and ensures consistent test configuration.
 type TestBuilder struct {
-	signature  *core.Signature
+	signature  *dsgo.Signature
 	responses  []string
 	errorMsg   string
 	timeout    time.Duration
-	adapter    core.Adapter
+	adapter    dsgo.Adapter
 	moduleType string
 	latency    time.Duration
 }
@@ -26,9 +25,9 @@ type TestBuilder struct {
 type TestContext struct {
 	Ctx       context.Context
 	Cancel    context.CancelFunc
-	LM        core.LM
-	Module    core.Module
-	Signature *core.Signature
+	LM        dsgo.LM
+	Module    dsgo.Module
+	Signature *dsgo.Signature
 	T         *testing.T
 }
 
@@ -42,8 +41,8 @@ func NewTestBuilder() *TestBuilder {
 	}
 }
 
-// WithSignature sets the signature for the test module.
-func (b *TestBuilder) WithSignature(sig *core.Signature) *TestBuilder {
+// WithSignature sets the signature for the test dsgo.
+func (b *TestBuilder) WithSignature(sig *dsgo.Signature) *TestBuilder {
 	b.signature = sig
 	return b
 }
@@ -73,7 +72,7 @@ func (b *TestBuilder) WithTimeout(d time.Duration) *TestBuilder {
 }
 
 // WithAdapter sets a specific adapter.
-func (b *TestBuilder) WithAdapter(adapter core.Adapter) *TestBuilder {
+func (b *TestBuilder) WithAdapter(adapter dsgo.Adapter) *TestBuilder {
 	b.adapter = adapter
 	return b
 }
@@ -97,7 +96,7 @@ func (b *TestBuilder) Build(t *testing.T) *TestContext {
 	ctx, cancel := context.WithTimeout(context.Background(), b.timeout)
 
 	// Create mock LM
-	var lm core.LM
+	var lm dsgo.LM
 	if b.errorMsg != "" {
 		lm = NewAlwaysFailLM(b.errorMsg)
 	} else if len(b.responses) > 1 {
@@ -114,22 +113,22 @@ func (b *TestBuilder) Build(t *testing.T) *TestContext {
 	}
 
 	// Create module based on type
-	var mod core.Module
+	var mod dsgo.Module
 	switch b.moduleType {
 	case "predict":
-		pred := module.NewPredict(b.signature, lm)
+		pred := dsgo.NewPredict(b.signature, lm)
 		if b.adapter != nil {
 			pred = pred.WithAdapter(b.adapter)
 		}
 		mod = pred
 	case "cot":
-		cot := module.NewChainOfThought(b.signature, lm)
+		cot := dsgo.NewChainOfThought(b.signature, lm)
 		if b.adapter != nil {
 			cot = cot.WithAdapter(b.adapter)
 		}
 		mod = cot
 	case "refine":
-		refine := module.NewRefine(b.signature, lm)
+		refine := dsgo.NewRefine(b.signature, lm)
 		if b.adapter != nil {
 			refine = refine.WithAdapter(b.adapter)
 		}
@@ -154,12 +153,12 @@ func (tc *TestContext) Cleanup() {
 }
 
 // Forward executes the module with given inputs and returns the result.
-func (tc *TestContext) Forward(inputs map[string]any) (*core.Prediction, error) {
+func (tc *TestContext) Forward(inputs map[string]any) (*dsgo.Prediction, error) {
 	return tc.Module.Forward(tc.Ctx, inputs)
 }
 
 // MustForward executes the module and fails the test on error.
-func (tc *TestContext) MustForward(inputs map[string]any) *core.Prediction {
+func (tc *TestContext) MustForward(inputs map[string]any) *dsgo.Prediction {
 	tc.T.Helper()
 	result, err := tc.Module.Forward(tc.Ctx, inputs)
 	if err != nil {
@@ -169,7 +168,7 @@ func (tc *TestContext) MustForward(inputs map[string]any) *core.Prediction {
 }
 
 // AssertSuccess verifies the module execution succeeds with expected fields.
-func (tc *TestContext) AssertSuccess(inputs map[string]any, expectedFields []string) *core.Prediction {
+func (tc *TestContext) AssertSuccess(inputs map[string]any, expectedFields []string) *dsgo.Prediction {
 	tc.T.Helper()
 	result := tc.MustForward(inputs)
 	AssertPredictionValid(tc.T, result, expectedFields)

@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
-	"github.com/assagman/dsgo/module"
 )
 
 // BenchmarkPredictModule_ColdStart measures latency for first module execution.
@@ -19,7 +18,7 @@ func BenchmarkPredictModule_ColdStart(b *testing.B) {
 	sig := fixtures.SimplePredictSig()
 
 	for i := 0; i < b.N; i++ {
-		predictor := module.NewPredict(sig, lm)
+		predictor := dsgo.NewPredict(sig, lm)
 		ctx := context.Background()
 
 		_, _ = predictor.Forward(ctx, map[string]any{
@@ -33,7 +32,7 @@ func BenchmarkPredictModule_ColdStart(b *testing.B) {
 func BenchmarkPredictModule_Execution(b *testing.B) {
 	lm := NewMockLMWithResponse(`{"answer": "response"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -50,9 +49,9 @@ func BenchmarkComposition_3Modules(b *testing.B) {
 	ctx := context.Background()
 
 	sig := fixtures.SimplePredictSig()
-	m1 := module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "stage1"}`))
-	m2 := module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "stage2"}`))
-	m3 := module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "stage3"}`))
+	m1 := dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "stage1"}`))
+	m2 := dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "stage2"}`))
+	m3 := dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "stage3"}`))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -70,10 +69,10 @@ func BenchmarkParallel_3Modules(b *testing.B) {
 	ctx := context.Background()
 
 	sig := fixtures.SimplePredictSig()
-	modules := []*module.Predict{
-		module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "m1"}`)),
-		module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "m2"}`)),
-		module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "m3"}`)),
+	modules := []*dsgo.Predict{
+		dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "m1"}`)),
+		dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "m2"}`)),
+		dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "m3"}`)),
 	}
 
 	b.ResetTimer()
@@ -81,7 +80,7 @@ func BenchmarkParallel_3Modules(b *testing.B) {
 		var wg sync.WaitGroup
 		for _, mod := range modules {
 			wg.Add(1)
-			go func(m *module.Predict) {
+			go func(m *dsgo.Predict) {
 				defer wg.Done()
 				_, _ = m.Forward(ctx, map[string]any{"question": "test"})
 			}(mod)
@@ -98,7 +97,7 @@ func BenchmarkChainOfThought_Execution(b *testing.B) {
 		"answer": "The answer is clear from reasoning."
 	}`)
 	sig := fixtures.ChainOfThoughtSig()
-	module := module.NewChainOfThought(sig, lm)
+	module := dsgo.NewChainOfThought(sig, lm)
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -116,7 +115,7 @@ func TestMemoryEfficiency_LongRunning(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "response"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	// Measure starting memory
 	var startMem runtime.MemStats
@@ -157,7 +156,7 @@ func TestMemoryEfficiency_LargeOutputs(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "` + largeContent + `"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	// Measure starting memory
 	var startMem runtime.MemStats
@@ -210,7 +209,7 @@ func TestConcurrency_100Goroutines(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 			result, err := predictor.Forward(ctx, map[string]any{
 				"question": "test",
 			})
@@ -269,7 +268,7 @@ func TestConcurrency_CacheContention(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			predictor := module.NewPredict(sig, lm)
+			predictor := dsgo.NewPredict(sig, lm)
 
 			for q := 0; q < queriesPerGoroutine; q++ {
 				result, err := predictor.Forward(ctx, map[string]any{
@@ -313,7 +312,7 @@ func TestLatencyDistribution(t *testing.T) {
 
 	lm := NewMockLMWithResponse(`{"answer": "response"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	var minLatency, maxLatency, totalLatency time.Duration
 
@@ -363,7 +362,7 @@ func TestTokenProcessingSpeed(t *testing.T) {
 
 	lm := NewMockLMWithResponse(response)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 
 	totalTokens := 0
 	iterations := 1000
@@ -397,7 +396,7 @@ func TestTokenProcessingSpeed(t *testing.T) {
 // BenchmarkCache_ColdStart measures cache overhead on first access (miss).
 // Target: <1ms for cache miss path.
 func BenchmarkCache_ColdStart(b *testing.B) {
-	cache := core.NewLMCache(1000)
+	cache := dsgo.NewLMCache(1000)
 
 	for i := 0; i < b.N; i++ {
 		key := "key_" + string(rune(i%1000))
@@ -408,12 +407,12 @@ func BenchmarkCache_ColdStart(b *testing.B) {
 // BenchmarkCache_Hit measures cache retrieval latency.
 // Target: <100µs for cache hits.
 func BenchmarkCache_Hit(b *testing.B) {
-	cache := core.NewLMCache(1000)
+	cache := dsgo.NewLMCache(1000)
 
 	// Pre-populate cache
-	result := &core.GenerateResult{
+	result := &dsgo.GenerateResult{
 		Content: "cached response",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -430,11 +429,11 @@ func BenchmarkCache_Hit(b *testing.B) {
 // BenchmarkCache_Set measures cache write latency.
 // Target: <500µs for cache set operations.
 func BenchmarkCache_Set(b *testing.B) {
-	cache := core.NewLMCache(1000)
+	cache := dsgo.NewLMCache(1000)
 
-	result := &core.GenerateResult{
+	result := &dsgo.GenerateResult{
 		Content: "cached response",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -451,11 +450,11 @@ func BenchmarkCache_Set(b *testing.B) {
 // BenchmarkCache_MixedWorkload measures realistic cache workload.
 // Scenario: 70% reads, 30% writes.
 func BenchmarkCache_MixedWorkload(b *testing.B) {
-	cache := core.NewLMCache(1000)
+	cache := dsgo.NewLMCache(1000)
 
-	result := &core.GenerateResult{
+	result := &dsgo.GenerateResult{
 		Content: "cached response",
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -486,7 +485,7 @@ func BenchmarkCache_MixedWorkload(b *testing.B) {
 // BenchmarkReAct_SingleTool measures ReAct with single tool call.
 // Target: ~200ms (includes tool execution overhead).
 func BenchmarkReAct_SingleTool(b *testing.B) {
-	calcTool := core.NewTool(
+	calcTool := dsgo.NewTool(
 		"calculate",
 		"Perform calculation",
 		func(ctx context.Context, args map[string]any) (any, error) {
@@ -496,7 +495,7 @@ func BenchmarkReAct_SingleTool(b *testing.B) {
 		AddParameter("b", "number", "Second number", true)
 
 	lm := &BenchmarkToolMockLM{
-		ToolCalls: []core.ToolCall{
+		ToolCalls: []dsgo.ToolCall{
 			{
 				ID:        "call_1",
 				Name:      "calculate",
@@ -510,7 +509,7 @@ func BenchmarkReAct_SingleTool(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		react := module.NewReAct(sig, lm, []core.Tool{*calcTool})
+		react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*calcTool})
 		react.WithMaxIterations(3)
 		ctx := context.Background()
 		_, _ = react.Forward(ctx, map[string]any{"question": "test"})
@@ -529,7 +528,7 @@ func BenchmarkReAct_NoTools(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		react := module.NewReAct(sig, lm, nil)
+		react := dsgo.NewReAct(sig, lm, nil)
 		ctx := context.Background()
 		_, _ = react.Forward(ctx, map[string]any{"question": "test"})
 	}
@@ -545,9 +544,9 @@ func BenchmarkComposition_5Modules(b *testing.B) {
 	ctx := context.Background()
 
 	sig := fixtures.SimplePredictSig()
-	modules := make([]*module.Predict, 5)
+	modules := make([]*dsgo.Predict, 5)
 	for i := 0; i < 5; i++ {
-		modules[i] = module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "stage"}`))
+		modules[i] = dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "stage"}`))
 	}
 
 	b.ResetTimer()
@@ -570,9 +569,9 @@ func BenchmarkParallel_5Modules(b *testing.B) {
 	ctx := context.Background()
 
 	sig := fixtures.SimplePredictSig()
-	modules := make([]*module.Predict, 5)
+	modules := make([]*dsgo.Predict, 5)
 	for i := 0; i < 5; i++ {
-		modules[i] = module.NewPredict(sig, NewMockLMWithResponse(`{"answer": "parallel"}`))
+		modules[i] = dsgo.NewPredict(sig, NewMockLMWithResponse(`{"answer": "parallel"}`))
 	}
 
 	b.ResetTimer()
@@ -580,7 +579,7 @@ func BenchmarkParallel_5Modules(b *testing.B) {
 		var wg sync.WaitGroup
 		for _, mod := range modules {
 			wg.Add(1)
-			go func(m *module.Predict) {
+			go func(m *dsgo.Predict) {
 				defer wg.Done()
 				_, _ = m.Forward(ctx, map[string]any{"question": "test"})
 			}(mod)
@@ -598,7 +597,7 @@ func BenchmarkParallel_5Modules(b *testing.B) {
 func BenchmarkMemory_LongRunning(b *testing.B) {
 	lm := NewMockLMWithResponse(`{"answer": "response"}`)
 	sig := fixtures.SimplePredictSig()
-	predictor := module.NewPredict(sig, lm)
+	predictor := dsgo.NewPredict(sig, lm)
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -613,20 +612,20 @@ func BenchmarkMemory_LongRunning(b *testing.B) {
 
 // BenchmarkToolMockLM is a simplified tool-supporting mock for benchmarks
 type BenchmarkToolMockLM struct {
-	ToolCalls     []core.ToolCall
+	ToolCalls     []dsgo.ToolCall
 	FinalResponse string
 	callCount     int
 }
 
-func (m *BenchmarkToolMockLM) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *BenchmarkToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	m.callCount++
 
 	// First call returns tool calls, subsequent calls return final response
 	if m.callCount == 1 && len(m.ToolCalls) > 0 {
-		return &core.GenerateResult{
+		return &dsgo.GenerateResult{
 			Content:   "",
 			ToolCalls: m.ToolCalls,
-			Usage: core.Usage{
+			Usage: dsgo.Usage{
 				PromptTokens:     10,
 				CompletionTokens: 10,
 				TotalTokens:      20,
@@ -634,9 +633,9 @@ func (m *BenchmarkToolMockLM) Generate(ctx context.Context, messages []core.Mess
 		}, nil
 	}
 
-	return &core.GenerateResult{
+	return &dsgo.GenerateResult{
 		Content: m.FinalResponse,
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 10,
 			TotalTokens:      20,
@@ -644,8 +643,8 @@ func (m *BenchmarkToolMockLM) Generate(ctx context.Context, messages []core.Mess
 	}, nil
 }
 
-func (m *BenchmarkToolMockLM) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk, 1)
+func (m *BenchmarkToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(chunkChan)
@@ -655,7 +654,7 @@ func (m *BenchmarkToolMockLM) Stream(ctx context.Context, messages []core.Messag
 			errChan <- err
 			return
 		}
-		chunkChan <- core.Chunk{Content: result.Content, Usage: result.Usage}
+		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
 	}()
 	return chunkChan, errChan
 }

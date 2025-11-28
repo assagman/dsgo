@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/internal/cost"
 )
 
@@ -75,11 +75,11 @@ func TestOpenAI_HTTPErrorHandling(t *testing.T) {
 			lm := createOpenAIProvider(t, "gpt-4o-mini", server.URL)
 
 			ctx := context.Background()
-			messages := []core.Message{
+			messages := []dsgo.Message{
 				{Role: "user", Content: "Hello"},
 			}
 
-			_, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+			_, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 
 			if (err != nil) != tt.expectedError {
 				t.Errorf("expected error=%v, got=%v", tt.expectedError, err != nil)
@@ -144,11 +144,11 @@ func TestOpenAI_MalformedResponseHandling(t *testing.T) {
 
 			lm := createOpenAIProvider(t, "gpt-4o-mini", server.URL)
 			ctx := context.Background()
-			messages := []core.Message{
+			messages := []dsgo.Message{
 				{Role: "user", Content: "Hello"},
 			}
 
-			_, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+			_, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 
 			if (err != nil) != tt.expectedError {
 				t.Errorf("expected error=%v, got=%v (err=%v)", tt.expectedError, err != nil, err)
@@ -199,11 +199,11 @@ func TestOpenAI_ContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	messages := []core.Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
-	_, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+	_, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 
 	if err == nil {
 		t.Fatal("expected error due to context timeout")
@@ -228,11 +228,11 @@ func TestOpenAI_UsageTracking(t *testing.T) {
 
 	lm := createOpenAIProvider(t, "gpt-4o-mini", server.URL)
 	ctx := context.Background()
-	messages := []core.Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
-	result, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+	result, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 
 	if err != nil {
 		t.Fatalf("expected success, got error: %v", err)
@@ -272,11 +272,11 @@ func TestOpenAI_MetadataExtraction(t *testing.T) {
 
 	lm := createOpenAIProvider(t, "gpt-4o-mini", server.URL)
 	ctx := context.Background()
-	messages := []core.Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
-	result, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+	result, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 
 	if err != nil {
 		t.Fatalf("expected success, got error: %v", err)
@@ -338,11 +338,11 @@ func TestOpenRouter_HTTPErrorHandling(t *testing.T) {
 
 			lm := createOpenRouterProvider(t, "meta-llama/llama-2-70b", server.URL)
 			ctx := context.Background()
-			messages := []core.Message{
+			messages := []dsgo.Message{
 				{Role: "user", Content: "Hello"},
 			}
 
-			_, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+			_, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 
 			if (err != nil) != tt.expectedError {
 				t.Errorf("expected error=%v, got=%v", tt.expectedError, err != nil)
@@ -374,11 +374,11 @@ func TestOpenRouter_UsageTracking(t *testing.T) {
 
 	lm := createOpenRouterProvider(t, "meta-llama/llama-2-70b", server.URL)
 	ctx := context.Background()
-	messages := []core.Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: "Test message"},
 	}
 
-	result, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+	result, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 
 	if err != nil {
 		t.Fatalf("expected success, got error: %v", err)
@@ -499,17 +499,17 @@ func TestProviderConcurrency(t *testing.T) {
 
 	// Make concurrent requests
 	const numRequests = 10
-	results := make(chan *core.GenerateResult, numRequests)
+	results := make(chan *dsgo.GenerateResult, numRequests)
 	errors := make(chan error, numRequests)
 	done := make(chan bool)
 
 	for i := 0; i < numRequests; i++ {
 		go func() {
 			ctx := context.Background()
-			messages := []core.Message{
+			messages := []dsgo.Message{
 				{Role: "user", Content: "Hello"},
 			}
-			result, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+			result, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 			if err != nil {
 				errors <- err
 			} else {
@@ -607,17 +607,17 @@ func TestOpenAIProvider_RealAPI(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Create real provider using core.NewLM
-	lm, err := core.NewLM(ctx, "openai/gpt-4o-mini")
+	// Create real provider using dsgo.NewLM
+	lm, err := dsgo.NewLM(ctx, "openai/gpt-4o-mini")
 	if err != nil {
 		t.Fatalf("Failed to create LM: %v", err)
 	}
 
-	messages := []core.Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: "Say exactly: 'Hello from integration test'"},
 	}
 
-	options := core.DefaultGenerateOptions()
+	options := dsgo.DefaultGenerateOptions()
 	options.MaxTokens = 50
 
 	result, err := lm.Generate(ctx, messages, options)
@@ -666,17 +666,17 @@ func TestOpenRouterProvider_RealAPI(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Create real provider using core.NewLM
-	lm, err := core.NewLM(ctx, "openrouter/openai/gpt-4o-mini")
+	// Create real provider using dsgo.NewLM
+	lm, err := dsgo.NewLM(ctx, "openrouter/openai/gpt-4o-mini")
 	if err != nil {
 		t.Fatalf("Failed to create LM: %v", err)
 	}
 
-	messages := []core.Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: "Say exactly: 'Hello from OpenRouter test'"},
 	}
 
-	options := core.DefaultGenerateOptions()
+	options := dsgo.DefaultGenerateOptions()
 	options.MaxTokens = 50
 
 	result, err := lm.Generate(ctx, messages, options)
@@ -726,13 +726,13 @@ func TestProvider_RateLimitSimulation(t *testing.T) {
 
 	lm := createOpenAIProvider(t, "gpt-4o-mini", server.URL)
 	ctx := context.Background()
-	messages := []core.Message{
+	messages := []dsgo.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
 	// Note: The actual retry is handled by the retry package
 	// This test verifies the 429 error is returned correctly
-	_, err := lm.Generate(ctx, messages, core.DefaultGenerateOptions())
+	_, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 
 	// First call should fail with 429
 	if err == nil {
@@ -779,7 +779,7 @@ func TestProvider_StreamingWithUsage(t *testing.T) {
 
 // Helper functions
 
-func createOpenAIProvider(t *testing.T, model string, baseURL string) core.LM {
+func createOpenAIProvider(t *testing.T, model string, baseURL string) dsgo.LM {
 	t.Helper()
 
 	// Set API key
@@ -800,7 +800,7 @@ func createOpenAIProvider(t *testing.T, model string, baseURL string) core.LM {
 	}
 }
 
-func createOpenRouterProvider(t *testing.T, model string, baseURL string) core.LM {
+func createOpenRouterProvider(t *testing.T, model string, baseURL string) dsgo.LM {
 	t.Helper()
 
 	_ = os.Setenv("OPENROUTER_API_KEY", "test-key")
@@ -824,7 +824,7 @@ type mockOpenAIProvider struct {
 	model   string
 }
 
-func (m *mockOpenAIProvider) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *mockOpenAIProvider) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	// Create actual provider and override its BaseURL
 	lm := &openaiProvider_internal{
 		APIKey:  "test-key",
@@ -835,8 +835,8 @@ func (m *mockOpenAIProvider) Generate(ctx context.Context, messages []core.Messa
 	return lm.Generate(ctx, messages, options)
 }
 
-func (m *mockOpenAIProvider) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	ch := make(chan core.Chunk)
+func (m *mockOpenAIProvider) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	ch := make(chan dsgo.Chunk)
 	errCh := make(chan error, 1)
 	errCh <- fmt.Errorf("not implemented in mock")
 	close(ch)
@@ -847,7 +847,7 @@ func (m *mockOpenAIProvider) Name() string              { return m.model }
 func (m *mockOpenAIProvider) SupportsJSON() bool        { return true }
 func (m *mockOpenAIProvider) SupportsTools() bool       { return true }
 func (m *mockOpenAIProvider) IsOpenAI() bool            { return true }
-func (m *mockOpenAIProvider) SetCache(cache core.Cache) {}
+func (m *mockOpenAIProvider) SetCache(cache dsgo.Cache) {}
 
 // openaiProvider_internal is a simple wrapper to access OpenAI provider internals
 type openaiProvider_internal struct {
@@ -855,10 +855,10 @@ type openaiProvider_internal struct {
 	Model   string
 	BaseURL string
 	Client  *http.Client
-	Cache   core.Cache
+	Cache   dsgo.Cache
 }
 
-func (o *openaiProvider_internal) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (o *openaiProvider_internal) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	// Build request
 	reqBody := map[string]any{
 		"model":    o.Model,
@@ -923,10 +923,10 @@ func (o *openaiProvider_internal) Generate(ctx context.Context, messages []core.
 		return nil, fmt.Errorf("no choices in response")
 	}
 
-	result := &core.GenerateResult{
+	result := &dsgo.GenerateResult{
 		Content:      apiResp.Choices[0].Message.Content,
 		FinishReason: apiResp.Choices[0].FinishReason,
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     apiResp.Usage.PromptTokens,
 			CompletionTokens: apiResp.Usage.CompletionTokens,
 			TotalTokens:      apiResp.Usage.TotalTokens,
@@ -937,8 +937,8 @@ func (o *openaiProvider_internal) Generate(ctx context.Context, messages []core.
 	return result, nil
 }
 
-func (o *openaiProvider_internal) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	ch := make(chan core.Chunk)
+func (o *openaiProvider_internal) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	ch := make(chan dsgo.Chunk)
 	errCh := make(chan error, 1)
 	errCh <- fmt.Errorf("not implemented")
 	close(ch)
@@ -948,7 +948,7 @@ func (o *openaiProvider_internal) Name() string              { return o.Model }
 func (o *openaiProvider_internal) SupportsJSON() bool        { return true }
 func (o *openaiProvider_internal) SupportsTools() bool       { return true }
 func (o *openaiProvider_internal) IsOpenAI() bool            { return true }
-func (o *openaiProvider_internal) SetCache(cache core.Cache) { o.Cache = cache }
+func (o *openaiProvider_internal) SetCache(cache dsgo.Cache) { o.Cache = cache }
 
 // mockOpenRouterProvider is similar to mockOpenAIProvider but for OpenRouter
 type mockOpenRouterProvider struct {
@@ -956,7 +956,7 @@ type mockOpenRouterProvider struct {
 	model   string
 }
 
-func (m *mockOpenRouterProvider) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (m *mockOpenRouterProvider) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	lm := &openrouterProvider_internal{
 		APIKey:  "test-key",
 		Model:   m.model,
@@ -966,8 +966,8 @@ func (m *mockOpenRouterProvider) Generate(ctx context.Context, messages []core.M
 	return lm.Generate(ctx, messages, options)
 }
 
-func (m *mockOpenRouterProvider) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	ch := make(chan core.Chunk)
+func (m *mockOpenRouterProvider) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	ch := make(chan dsgo.Chunk)
 	errCh := make(chan error, 1)
 	errCh <- fmt.Errorf("not implemented in mock")
 	close(ch)
@@ -978,17 +978,17 @@ func (m *mockOpenRouterProvider) Name() string              { return m.model }
 func (m *mockOpenRouterProvider) SupportsJSON() bool        { return true }
 func (m *mockOpenRouterProvider) SupportsTools() bool       { return true }
 func (m *mockOpenRouterProvider) IsOpenAI() bool            { return false }
-func (m *mockOpenRouterProvider) SetCache(cache core.Cache) {}
+func (m *mockOpenRouterProvider) SetCache(cache dsgo.Cache) {}
 
 type openrouterProvider_internal struct {
 	APIKey  string
 	Model   string
 	BaseURL string
 	Client  *http.Client
-	Cache   core.Cache
+	Cache   dsgo.Cache
 }
 
-func (o *openrouterProvider_internal) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+func (o *openrouterProvider_internal) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
 	reqBody := map[string]any{
 		"model":    o.Model,
 		"messages": messages,
@@ -1051,10 +1051,10 @@ func (o *openrouterProvider_internal) Generate(ctx context.Context, messages []c
 		return nil, fmt.Errorf("no choices in response")
 	}
 
-	result := &core.GenerateResult{
+	result := &dsgo.GenerateResult{
 		Content:      apiResp.Choices[0].Message.Content,
 		FinishReason: apiResp.Choices[0].FinishReason,
-		Usage: core.Usage{
+		Usage: dsgo.Usage{
 			PromptTokens:     apiResp.Usage.PromptTokens,
 			CompletionTokens: apiResp.Usage.CompletionTokens,
 			TotalTokens:      apiResp.Usage.TotalTokens,
@@ -1065,8 +1065,8 @@ func (o *openrouterProvider_internal) Generate(ctx context.Context, messages []c
 	return result, nil
 }
 
-func (o *openrouterProvider_internal) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	ch := make(chan core.Chunk)
+func (o *openrouterProvider_internal) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	ch := make(chan dsgo.Chunk)
 	errCh := make(chan error, 1)
 	errCh <- fmt.Errorf("not implemented")
 	close(ch)
@@ -1076,7 +1076,7 @@ func (o *openrouterProvider_internal) Name() string              { return o.Mode
 func (o *openrouterProvider_internal) SupportsJSON() bool        { return true }
 func (o *openrouterProvider_internal) SupportsTools() bool       { return true }
 func (o *openrouterProvider_internal) IsOpenAI() bool            { return false }
-func (o *openrouterProvider_internal) SetCache(cache core.Cache) { o.Cache = cache }
+func (o *openrouterProvider_internal) SetCache(cache dsgo.Cache) { o.Cache = cache }
 
 // calculateCost calculates the cost based on model pricing and token counts
 func calculateCost(pricing *cost.ModelPricing, promptTokens, completionTokens int) float64 {

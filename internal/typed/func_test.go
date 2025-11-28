@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 // Mock LM for testing

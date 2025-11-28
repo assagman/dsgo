@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/dsgo/core"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestRefine_Forward_NoFeedback(t *testing.T) {
