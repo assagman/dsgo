@@ -124,10 +124,13 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 	outputs = core.NormalizeOutputKeys(pot.Signature, outputs)
 
 	// Validate non-empty code and explanation (critical for ProgramOfThought)
-	if v, ok := outputs["code"]; !ok || strings.TrimSpace(fmt.Sprintf("%v", v)) == "" {
+	// Use case-insensitive lookup since NormalizeOutputKeys may use capitalized field names
+	codeVal := getFieldCaseInsensitive(outputs, "code")
+	if codeVal == nil || strings.TrimSpace(fmt.Sprintf("%v", codeVal)) == "" {
 		return nil, fmt.Errorf("output validation failed: code field is empty or missing")
 	}
-	if v, ok := outputs["explanation"]; !ok || strings.TrimSpace(fmt.Sprintf("%v", v)) == "" {
+	explanationVal := getFieldCaseInsensitive(outputs, "explanation")
+	if explanationVal == nil || strings.TrimSpace(fmt.Sprintf("%v", explanationVal)) == "" {
 		return nil, fmt.Errorf("output validation failed: explanation field is empty or missing")
 	}
 
@@ -136,7 +139,7 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 
 	// Execute code if enabled
 	if pot.AllowExecution {
-		if code, exists := outputs["code"]; exists {
+		if code := getFieldCaseInsensitive(outputs, "code"); code != nil {
 			executionResult, err := pot.executeCode(ctx, fmt.Sprintf("%v", code))
 			if err != nil {
 				outputs["execution_error"] = err.Error()
@@ -422,4 +425,22 @@ func (pot *ProgramOfThought) fillRequiredStringFields(outputs map[string]any, st
 			}
 		}
 	}
+}
+
+// getFieldCaseInsensitive looks up a field in outputs using case-insensitive matching
+// This is needed because NormalizeOutputKeys uses signature field names (Go field names, capitalized)
+// while ProgramOfThought hardcodes lowercase field names like "code" and "explanation"
+func getFieldCaseInsensitive(outputs map[string]any, fieldName string) any {
+	// Try exact match first
+	if v, ok := outputs[fieldName]; ok {
+		return v
+	}
+	// Try case-insensitive match
+	lowerField := strings.ToLower(fieldName)
+	for k, v := range outputs {
+		if strings.ToLower(k) == lowerField {
+			return v
+		}
+	}
+	return nil
 }
