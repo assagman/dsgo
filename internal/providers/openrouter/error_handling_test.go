@@ -486,6 +486,65 @@ func TestGenerate_HTTP405_JSONSchemaFallback(t *testing.T) {
 	}
 }
 
+// TestGenerate_HTTP400_ResponseFormatFallback tests automatic fallback when response_format is unavailable (400 Bad Request)
+func TestGenerate_HTTP400_ResponseFormatFallback(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+
+		var reqBody map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+
+		// First call with json_object should return 400
+		if callCount == 1 {
+			if respFormat, ok := reqBody["response_format"].(map[string]interface{}); ok {
+				if respFormat["type"] == "json_object" {
+					w.WriteHeader(http.StatusBadRequest)
+					_, _ = w.Write([]byte(`{"error":{"message":"This response_format type is unavailable now","type":"invalid_request_error","code":"invalid_request_error"}}`))
+					return
+				}
+			} else {
+				// Also check if it was sent as map[string]string (which the code does for json_object)
+				// The decoder might have decoded it as map[string]interface{}
+				t.Logf("response_format: %T %v", reqBody["response_format"], reqBody["response_format"])
+			}
+		}
+
+		// Second call without response_format should succeed
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"id": "test-123",
+			"choices": [{
+				"message": {"role": "assistant", "content": "{\"result\": \"success\"}"},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+		}`))
+	}))
+	defer server.Close()
+
+	lm := newOpenRouter("test-model")
+	lm.BaseURL = server.URL
+	lm.APIKey = "test-key"
+
+	messages := []core.Message{{Role: "user", Content: "test"}}
+	opts := &core.GenerateOptions{
+		ResponseFormat: "json", // implies json_object since no schema
+	}
+
+	result, err := lm.Generate(context.Background(), messages, opts)
+
+	if err != nil {
+		t.Fatalf("Expected automatic fallback to succeed, got error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Expected result, got nil")
+	}
+	if callCount != 2 {
+		t.Errorf("Expected 2 calls (json_object -> plain), got %d", callCount)
+	}
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))

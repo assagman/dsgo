@@ -139,13 +139,13 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 
-		// Check for 405 with json format unsupported - automatic fallback
-		if resp.StatusCode == http.StatusMethodNotAllowed &&
+		// Check for 405/400 with json format unsupported - automatic fallback
+		if (resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusBadRequest) &&
 			options != nil && options.ResponseFormat == "json" {
 			bodyStr := string(body)
 
 			// Fallback from json_schema to json_object
-			if options.ResponseSchema != nil && strings.Contains(bodyStr, "json_schema") {
+			if options.ResponseSchema != nil && (strings.Contains(bodyStr, "json_schema") || strings.Contains(bodyStr, "response_format")) {
 				fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support json_schema, falling back to json_object\n", o.Model)
 				fallbackOpts := *options
 				fallbackOpts.ResponseSchema = nil
@@ -153,7 +153,10 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 			}
 
 			// Fallback from json_object to plain text (adapter-based parsing)
-			if strings.Contains(bodyStr, "json_object") || strings.Contains(bodyStr, "response format") {
+			// Matches both "response format" and "response_format"
+			if strings.Contains(bodyStr, "json_object") ||
+				strings.Contains(bodyStr, "response format") ||
+				strings.Contains(bodyStr, "response_format") {
 				fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support JSON mode, using adapter-based parsing\n", o.Model)
 				fallbackOpts := *options
 				fallbackOpts.ResponseFormat = ""
