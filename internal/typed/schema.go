@@ -1,10 +1,12 @@
 package typed
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/jsonutil"
 )
 
 // StructToSignature converts a struct type with dsgo tags to a Signature
@@ -123,9 +125,60 @@ func MapToStruct(m map[string]any, target any) error {
 			fieldVal.Set(convertedVal)
 		} else if convertedVal.Type().ConvertibleTo(fieldVal.Type()) {
 			fieldVal.Set(convertedVal.Convert(fieldVal.Type()))
+		} else if fieldVal.Kind() == reflect.Struct ||
+			(fieldVal.Kind() == reflect.Slice && fieldVal.Type().Elem().Kind() == reflect.Struct) ||
+			(fieldVal.Kind() == reflect.Map && fieldVal.Type().Elem().Kind() == reflect.Struct) {
+			// Handle nested structs/complex types via JSON marshaling
+			// This handles: structs, slices of structs, maps with struct values
+			if err := convertViaJSON(value, fieldVal.Addr().Interface()); err != nil {
+				return fmt.Errorf("failed to convert nested structure for field %s: %w", field.Name, err)
+			}
 		} else {
 			return fmt.Errorf("cannot assign %s to field %s of type %s", convertedVal.Type(), field.Name, fieldVal.Type())
 		}
+	}
+
+	return nil
+}
+
+// convertViaJSON converts a value to a target type using JSON marshaling/unmarshaling
+// This is used to populate nested structs from map[string]any values
+func convertViaJSON(value any, target any) error {
+	var jsonStr string
+
+	// If value is already a string, treat it as JSON
+	if str, ok := value.(string); ok {
+		jsonStr = str
+	} else {
+		// Otherwise, marshal it to JSON first
+		jsonBytes, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("failed to marshal value: %w", err)
+		}
+		jsonStr = string(jsonBytes)
+	}
+
+	// Try to unmarshal as-is first
+	if err := json.Unmarshal([]byte(jsonStr), target); err != nil {
+		// If that fails, try to extract JSON from the string (handles markdown, mixed content, etc.)
+		extracted, extractErr := jsonutil.ExtractJSON(jsonStr, jsonutil.WithFixNewlines())
+		if extractErr == nil && extracted != jsonStr {
+			if err := json.Unmarshal([]byte(extracted), target); err == nil {
+				return nil
+			}
+		}
+
+		// Try to repair the JSON
+		repairedJSON := jsonutil.RepairJSON(jsonStr)
+		if repairedJSON != jsonStr {
+			// Repaired JSON is different, try again
+			if err := json.Unmarshal([]byte(repairedJSON), target); err != nil {
+				return fmt.Errorf("failed to unmarshal into target type: %w", err)
+			}
+			return nil
+		}
+		// Repair didn't help or returned same string, return original error
+		return fmt.Errorf("failed to unmarshal into target type: %w", err)
 	}
 
 	return nil

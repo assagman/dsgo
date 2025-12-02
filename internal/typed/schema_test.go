@@ -551,3 +551,254 @@ func TestMapToStruct_NonStructError(t *testing.T) {
 		t.Error("expected non-empty error message")
 	}
 }
+
+// TestMapToStruct_NestedStruct tests conversion of a simple nested struct
+func TestMapToStruct_NestedStruct(t *testing.T) {
+	type Address struct {
+		Street string `json:"street"`
+		City   string `json:"city"`
+	}
+
+	type Person struct {
+		Name    string  `dsgo:"output,desc=Person name"`
+		Address Address `dsgo:"output,desc=Person address"`
+	}
+
+	m := map[string]any{
+		"Name": "Alice",
+		"Address": map[string]any{
+			"street": "123 Main St",
+			"city":   "Springfield",
+		},
+	}
+
+	var p Person
+	err := MapToStruct(m, &p)
+	if err != nil {
+		t.Fatalf("MapToStruct() error = %v", err)
+	}
+
+	if p.Name != "Alice" {
+		t.Errorf("Name = %q, want %q", p.Name, "Alice")
+	}
+	if p.Address.Street != "123 Main St" {
+		t.Errorf("Address.Street = %q, want %q", p.Address.Street, "123 Main St")
+	}
+	if p.Address.City != "Springfield" {
+		t.Errorf("Address.City = %q, want %q", p.Address.City, "Springfield")
+	}
+}
+
+// TestMapToStruct_SliceOfStructs tests conversion of a slice of structs
+func TestMapToStruct_SliceOfStructs(t *testing.T) {
+	type Item struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+
+	type Container struct {
+		Items []Item `dsgo:"output,desc=List of items"`
+	}
+
+	m := map[string]any{
+		"Items": []any{
+			map[string]any{"id": float64(1), "name": "Item1"},
+			map[string]any{"id": float64(2), "name": "Item2"},
+		},
+	}
+
+	var c Container
+	err := MapToStruct(m, &c)
+	if err != nil {
+		t.Fatalf("MapToStruct() error = %v", err)
+	}
+
+	if len(c.Items) != 2 {
+		t.Fatalf("Items length = %d, want 2", len(c.Items))
+	}
+	if c.Items[0].ID != 1 || c.Items[0].Name != "Item1" {
+		t.Errorf("Items[0] = %+v, want {ID:1, Name:Item1}", c.Items[0])
+	}
+	if c.Items[1].ID != 2 || c.Items[1].Name != "Item2" {
+		t.Errorf("Items[1] = %+v, want {ID:2, Name:Item2}", c.Items[1])
+	}
+}
+
+// TestMapToStruct_DeeplyNested tests deeply nested struct conversion
+func TestMapToStruct_DeeplyNested(t *testing.T) {
+	type Level3 struct {
+		Value string `json:"value"`
+	}
+	type Level2 struct {
+		L3 Level3 `json:"l3"`
+	}
+	type Level1 struct {
+		L2 Level2 `json:"l2"`
+	}
+	type Root struct {
+		L1 Level1 `dsgo:"output,desc=Level 1"`
+	}
+
+	m := map[string]any{
+		"L1": map[string]any{
+			"l2": map[string]any{
+				"l3": map[string]any{
+					"value": "deep",
+				},
+			},
+		},
+	}
+
+	var r Root
+	err := MapToStruct(m, &r)
+	if err != nil {
+		t.Fatalf("MapToStruct() error = %v", err)
+	}
+
+	if r.L1.L2.L3.Value != "deep" {
+		t.Errorf("L1.L2.L3.Value = %q, want %q", r.L1.L2.L3.Value, "deep")
+	}
+}
+
+// TestMapToStruct_AgenticTypes tests the actual agentic types used in the integration test
+func TestMapToStruct_AgenticTypes(t *testing.T) {
+	type PlanStep struct {
+		ID           int    `json:"id"`
+		Description  string `json:"description"`
+		Dependencies []int  `json:"dependencies,omitempty"`
+		AgentRole    string `json:"agent_role"`
+	}
+
+	type Plan struct {
+		Objective string     `json:"objective"`
+		Steps     []PlanStep `json:"steps"`
+	}
+
+	type PlannerOutput struct {
+		Plan Plan `dsgo:"output,desc=The structured plan"`
+	}
+
+	m := map[string]any{
+		"Plan": map[string]any{
+			"objective": "Test objective",
+			"steps": []any{
+				map[string]any{
+					"id":          float64(1),
+					"description": "Step 1",
+					"agent_role":  "planner",
+				},
+				map[string]any{
+					"id":           float64(2),
+					"description":  "Step 2",
+					"dependencies": []any{float64(1)},
+					"agent_role":   "coder",
+				},
+			},
+		},
+	}
+
+	var output PlannerOutput
+	err := MapToStruct(m, &output)
+	if err != nil {
+		t.Fatalf("MapToStruct() error = %v", err)
+	}
+
+	if output.Plan.Objective != "Test objective" {
+		t.Errorf("Plan.Objective = %q, want %q", output.Plan.Objective, "Test objective")
+	}
+	if len(output.Plan.Steps) != 2 {
+		t.Fatalf("Plan.Steps length = %d, want 2", len(output.Plan.Steps))
+	}
+	if output.Plan.Steps[0].ID != 1 {
+		t.Errorf("Plan.Steps[0].ID = %d, want 1", output.Plan.Steps[0].ID)
+	}
+	if output.Plan.Steps[1].ID != 2 {
+		t.Errorf("Plan.Steps[1].ID = %d, want 2", output.Plan.Steps[1].ID)
+	}
+	if len(output.Plan.Steps[1].Dependencies) != 1 || output.Plan.Steps[1].Dependencies[0] != 1 {
+		t.Errorf("Plan.Steps[1].Dependencies = %v, want [1]", output.Plan.Steps[1].Dependencies)
+	}
+}
+
+// TestMapToStruct_NilNestedStruct tests that nil nested structs are skipped
+func TestMapToStruct_NilNestedStruct(t *testing.T) {
+	type Nested struct {
+		Value string `json:"value"`
+	}
+	type Container struct {
+		N Nested `dsgo:"output,desc=Nested struct"`
+	}
+
+	m := map[string]any{
+		"N": nil,
+	}
+
+	var c Container
+	c.N.Value = "initial"
+
+	err := MapToStruct(m, &c)
+	if err != nil {
+		t.Fatalf("MapToStruct() error = %v", err)
+	}
+
+	// Nil values should be skipped
+	if c.N.Value != "initial" {
+		t.Errorf("N.Value = %q, want 'initial' (nil should be skipped)", c.N.Value)
+	}
+}
+
+// TestMapToStruct_InvalidNestedStructure tests error handling for invalid nested structures
+func TestMapToStruct_InvalidNestedStructure(t *testing.T) {
+	type Nested struct {
+		Value string `json:"value"`
+	}
+	type Container struct {
+		N Nested `dsgo:"output,desc=Nested struct"`
+	}
+
+	// Provide invalid structure (string instead of map)
+	m := map[string]any{
+		"N": "not a map",
+	}
+
+	var c Container
+	err := MapToStruct(m, &c)
+	if err == nil {
+		t.Error("MapToStruct() should return error for invalid nested structure")
+	}
+}
+
+// TestMapToStruct_JSONStringNested tests conversion of a JSON string for nested struct
+func TestMapToStruct_JSONStringNested(t *testing.T) {
+	type Address struct {
+		Street string `json:"street"`
+		City   string `json:"city"`
+	}
+
+	type Person struct {
+		Name    string  `dsgo:"output,desc=Person name"`
+		Address Address `dsgo:"output,desc=Person address"`
+	}
+
+	// LM might return JSON as a string instead of parsed map
+	m := map[string]any{
+		"Name":    "Bob",
+		"Address": `{"street": "456 Oak Ave", "city": "Shelbyville"}`,
+	}
+
+	var p Person
+	err := MapToStruct(m, &p)
+	if err != nil {
+		t.Fatalf("MapToStruct() error = %v", err)
+	}
+
+	if p.Name != "Bob" {
+		t.Errorf("Name = %q, want %q", p.Name, "Bob")
+	}
+	if p.Address.Street != "456 Oak Ave" {
+		t.Errorf("Address.Street = %q, want %q", p.Address.Street, "456 Oak Ave")
+	}
+	if p.Address.City != "Shelbyville" {
+		t.Errorf("Address.City = %q, want %q", p.Address.City, "Shelbyville")
+	}
+}
