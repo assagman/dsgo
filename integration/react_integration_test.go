@@ -419,13 +419,22 @@ func TestReAct_ContextCancellation(t *testing.T) {
 	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*slowTool})
 	react.WithMaxIterations(5)
 
-	_, err := react.Forward(ctx, map[string]any{
+	result, err := react.Forward(ctx, map[string]any{
 		"question": "Test",
 	})
 
-	// Should return context error or complete quickly
-	// Either timeout/cancel or success is acceptable depending on timing
-	_ = err // Context cancellation may or may not occur before first response
+	// Should return a context cancellation error since the timeout is shorter than the delay
+	if err != nil {
+		// Check if it's a context cancellation error
+		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			t.Errorf("Expected context cancellation error, got: %v", err)
+		}
+	} else {
+		// If no error, the operation completed quickly, which can happen if it finishes before timeout
+		if result == nil {
+			t.Error("Expected result to be non-nil even if there was an error")
+		}
+	}
 }
 
 // TestReAct_FinishToolDirectCall tests the finish tool being called directly.
@@ -474,14 +483,14 @@ func TestReAct_FinishToolDirectCall(t *testing.T) {
 type ToolMockLM struct {
 	ToolCalls     []dsgo.ToolCall
 	FinalResponse string
-	callCount     int
+	callCount     int32 // Use atomic operations
 }
 
 func (m *ToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	m.callCount++
+	callCount := atomic.AddInt32(&m.callCount, 1)
 
 	// First call: return tool calls
-	if m.callCount == 1 && len(m.ToolCalls) > 0 {
+	if callCount == 1 && len(m.ToolCalls) > 0 {
 		return &dsgo.GenerateResult{
 			Content:      "Let me calculate that for you.",
 			ToolCalls:    m.ToolCalls,
@@ -514,12 +523,28 @@ func (m *ToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, option
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
 		result, err := m.Generate(ctx, messages, options)
 		if err != nil {
 			errChan <- err
 			return
 		}
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -532,11 +557,13 @@ func (m *ToolMockLM) IsOpenAI() bool      { return false }
 // MultiToolMockLM simulates an LM making multiple tool calls across iterations
 type MultiToolMockLM struct {
 	ToolCallSequence [][]dsgo.ToolCall
-	callCount        int
+	callCount        int32 // Use atomic operations
 }
 
 func (m *MultiToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	if m.callCount >= len(m.ToolCallSequence) {
+	currentCallCount := atomic.LoadInt32(&m.callCount)
+
+	if int(currentCallCount) >= len(m.ToolCallSequence) {
 		return &dsgo.GenerateResult{
 			Content:      `{"answer": "Final answer", "reasoning": "Complete"}`,
 			FinishReason: "stop",
@@ -544,8 +571,8 @@ func (m *MultiToolMockLM) Generate(ctx context.Context, messages []dsgo.Message,
 		}, nil
 	}
 
-	toolCalls := m.ToolCallSequence[m.callCount]
-	m.callCount++
+	toolCalls := m.ToolCallSequence[currentCallCount]
+	atomic.AddInt32(&m.callCount, 1)
 
 	return &dsgo.GenerateResult{
 		Content:      "Processing...",
@@ -561,12 +588,28 @@ func (m *MultiToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, o
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
 		result, err := m.Generate(ctx, messages, options)
 		if err != nil {
 			errChan <- err
 			return
 		}
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -580,12 +623,10 @@ func (m *MultiToolMockLM) IsOpenAI() bool      { return false }
 type InfiniteToolMockLM struct {
 	ToolCall      dsgo.ToolCall
 	FinalResponse string
-	callCount     int
+	callCount     int32 // Use atomic operations
 }
 
 func (m *InfiniteToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	m.callCount++
-
 	// If tools are disabled (final mode), return final response
 	if len(options.Tools) == 0 {
 		return &dsgo.GenerateResult{
@@ -594,6 +635,9 @@ func (m *InfiniteToolMockLM) Generate(ctx context.Context, messages []dsgo.Messa
 			Usage:        dsgo.Usage{TotalTokens: 50, Cost: 0.001},
 		}, nil
 	}
+
+	// Increment call count to track iterations
+	atomic.AddInt32(&m.callCount, 1)
 
 	// Always return tool call
 	return &dsgo.GenerateResult{
@@ -610,12 +654,28 @@ func (m *InfiniteToolMockLM) Stream(ctx context.Context, messages []dsgo.Message
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
 		result, err := m.Generate(ctx, messages, options)
 		if err != nil {
 			errChan <- err
 			return
 		}
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -629,14 +689,14 @@ func (m *InfiniteToolMockLM) IsOpenAI() bool      { return false }
 type ToolErrorRecoveryMockLM struct {
 	FirstToolCall dsgo.ToolCall
 	FinalResponse string
-	callCount     int
+	callCount     int32 // Use atomic operations
 }
 
 func (m *ToolErrorRecoveryMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	m.callCount++
+	callCount := atomic.AddInt32(&m.callCount, 1)
 
 	// First call: return tool call
-	if m.callCount == 1 {
+	if callCount == 1 {
 		return &dsgo.GenerateResult{
 			Content:      "Let me query the database.",
 			ToolCalls:    []dsgo.ToolCall{m.FirstToolCall},
@@ -659,12 +719,28 @@ func (m *ToolErrorRecoveryMockLM) Stream(ctx context.Context, messages []dsgo.Me
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
 		result, err := m.Generate(ctx, messages, options)
 		if err != nil {
 			errChan <- err
 			return
 		}
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -678,13 +754,13 @@ func (m *ToolErrorRecoveryMockLM) IsOpenAI() bool      { return false }
 type ToolNotFoundMockLM struct {
 	FirstToolCall  dsgo.ToolCall
 	SecondToolCall dsgo.ToolCall
-	callCount      int
+	callCount      int32 // Use atomic operations
 }
 
 func (m *ToolNotFoundMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	m.callCount++
+	callCount := atomic.AddInt32(&m.callCount, 1)
 
-	if m.callCount == 1 {
+	if callCount == 1 {
 		return &dsgo.GenerateResult{
 			Content:      "Let me use this tool.",
 			ToolCalls:    []dsgo.ToolCall{m.FirstToolCall},
@@ -707,12 +783,28 @@ func (m *ToolNotFoundMockLM) Stream(ctx context.Context, messages []dsgo.Message
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
 		result, err := m.Generate(ctx, messages, options)
 		if err != nil {
 			errChan <- err
 			return
 		}
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -727,13 +819,13 @@ type ObservabilityMockLM struct {
 	ToolCall      dsgo.ToolCall
 	FinalResponse string
 	Usage         dsgo.Usage
-	callCount     int
+	callCount     int32 // Use atomic operations
 }
 
 func (m *ObservabilityMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	m.callCount++
+	callCount := atomic.AddInt32(&m.callCount, 1)
 
-	if m.callCount == 1 && m.ToolCall.Name != "" {
+	if callCount == 1 && m.ToolCall.Name != "" {
 		return &dsgo.GenerateResult{
 			Content:      "Searching...",
 			ToolCalls:    []dsgo.ToolCall{m.ToolCall},
@@ -755,12 +847,28 @@ func (m *ObservabilityMockLM) Stream(ctx context.Context, messages []dsgo.Messag
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
 		result, err := m.Generate(ctx, messages, options)
 		if err != nil {
 			errChan <- err
 			return
 		}
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -781,12 +889,18 @@ func (m *SlowGenerateMockLM) Generate(ctx context.Context, messages []dsgo.Messa
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(m.Delay):
-		return &dsgo.GenerateResult{
-			Content:      "Calling slow tool...",
-			ToolCalls:    []dsgo.ToolCall{m.ToolCall},
-			FinishReason: "tool_calls",
-			Usage:        dsgo.Usage{TotalTokens: 30},
-		}, nil
+		// Check context again after the delay to avoid race condition
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			return &dsgo.GenerateResult{
+				Content:      "Calling slow tool...",
+				ToolCalls:    []dsgo.ToolCall{m.ToolCall},
+				FinishReason: "tool_calls",
+				Usage:        dsgo.Usage{TotalTokens: 30},
+			}, nil
+		}
 	}
 }
 
@@ -796,12 +910,28 @@ func (m *SlowGenerateMockLM) Stream(ctx context.Context, messages []dsgo.Message
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
 		result, err := m.Generate(ctx, messages, options)
 		if err != nil {
 			errChan <- err
 			return
 		}
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -831,12 +961,28 @@ func (m *FinishToolMockLM) Stream(ctx context.Context, messages []dsgo.Message, 
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
 		result, err := m.Generate(ctx, messages, options)
 		if err != nil {
 			errChan <- err
 			return
 		}
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -869,14 +1015,23 @@ func TestReAct_ExtractTextOutputsFallback(t *testing.T) {
 		"question": "What is the meaning of life?",
 	})
 
-	// Should succeed with fallback extraction
+	// The fallback should handle malformed responses gracefully
 	if err != nil {
-		t.Logf("Note: Got error (may be expected): %v", err)
+		// The fallback mechanism should ideally handle this case
+		t.Logf("Got error during fallback test (may be expected for malformed output): %v", err)
+		// We don't fail the test here since malformed output handling is expected to be resilient
 	}
 
 	if result != nil {
-		answer, _ := result.GetString("answer")
-		t.Logf("Fallback extracted answer: %s", answer)
+		// Check if we got a meaningful result from the fallback
+		answer, hasAnswer := result.GetString("answer")
+		if hasAnswer && answer != "" {
+			t.Logf("Fallback successfully extracted answer: %s", answer)
+		} else {
+			t.Log("Fallback did not extract a meaningful answer from malformed content")
+		}
+	} else {
+		t.Log("No result returned from fallback path")
 	}
 }
 
@@ -919,19 +1074,28 @@ func TestReAct_SynthesizeAnswerFromHistory(t *testing.T) {
 		"question": "What is life about?",
 	})
 
-	// May succeed via synthesis fallback or fail
+	// Check if the synthesis fallback worked properly
 	if err != nil {
-		t.Logf("Note: Got error (may be expected for synthesis fallback): %v", err)
+		t.Logf("Got error during synthesis fallback test: %v", err)
+		// Don't fail the test since we're testing the fallback mechanism
 	}
 
 	if result != nil {
-		answer, _ := result.GetString("answer")
-		t.Logf("Synthesized answer: %s", answer)
+		answer, hasAnswer := result.GetString("answer")
+		if hasAnswer && answer != "" {
+			t.Logf("Synthesis fallback successfully created answer: %s", answer)
+		} else {
+			t.Log("Synthesis fallback did not create a meaningful answer")
+		}
+	} else {
+		t.Log("No result returned from synthesis fallback")
 	}
 
-	// Verify tool was called
+	// Verify tool was called as expected
 	if len(observations) == 0 {
-		t.Log("Note: Tool was not called")
+		t.Error("Expected tool to be called during synthesis fallback test")
+	} else {
+		t.Logf("Tool was called %d time(s) during synthesis fallback test", len(observations))
 	}
 }
 
@@ -965,13 +1129,21 @@ func TestReAct_MaxIterationsExceeded(t *testing.T) {
 		"question": "Keep searching forever",
 	})
 
-	// Should either succeed via runExtract or fail with max iterations error
+	// Should succeed via runExtract fallback when max iterations exceeded
 	if err != nil {
-		t.Logf("Got expected error for max iterations: %v", err)
+		t.Logf("Got error when max iterations exceeded: %v", err)
+		// Don't fail the test, as we're testing the fallback mechanism
 	}
 
 	if result != nil {
-		t.Log("Got result from runExtract fallback")
+		t.Log("Successfully got result from runExtract fallback when max iterations exceeded")
+		// Optionally verify that we have some meaningful content in the result
+		answer, hasAnswer := result.GetString("answer")
+		if hasAnswer && answer != "" {
+			t.Logf("RunExtract fallback produced meaningful answer: %s", answer)
+		}
+	} else {
+		t.Error("Expected result from runExtract fallback when max iterations exceeded")
 	}
 }
 
@@ -998,8 +1170,28 @@ func (m *MalformedOutputMockLM) Stream(ctx context.Context, messages []dsgo.Mess
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
-		result, _ := m.Generate(ctx, messages, options)
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -1012,13 +1204,13 @@ func (m *MalformedOutputMockLM) IsOpenAI() bool      { return false }
 // EmptyContentAfterToolMockLM calls tools then returns empty content
 type EmptyContentAfterToolMockLM struct {
 	ToolCalls []dsgo.ToolCall
-	callCount int
+	callCount int32 // Use atomic operations
 }
 
 func (m *EmptyContentAfterToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	m.callCount++
+	callCount := atomic.AddInt32(&m.callCount, 1)
 
-	if m.callCount == 1 && len(m.ToolCalls) > 0 {
+	if callCount == 1 && len(m.ToolCalls) > 0 {
 		// First call: return tool calls
 		return &dsgo.GenerateResult{
 			Content:      "Let me search for information.",
@@ -1042,8 +1234,28 @@ func (m *EmptyContentAfterToolMockLM) Stream(ctx context.Context, messages []dsg
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
-		result, _ := m.Generate(ctx, messages, options)
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -1073,8 +1285,28 @@ func (m *InfiniteLoopMockLM) Stream(ctx context.Context, messages []dsgo.Message
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
-		result, _ := m.Generate(ctx, messages, options)
-		chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}
+
+		// Check context before processing
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Check context again before sending result
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
 	}()
 	return chunkChan, errChan
 }
@@ -1158,7 +1390,7 @@ func TestReAct_CoerceBasicTypes_StringBoolTrue(t *testing.T) {
 
 	sig := dsgo.NewSignature("Check validity").
 		AddInput("item", dsgo.FieldTypeString, "Item").
-		AddOutput("valid", dsgo.FieldTypeBool, "Is valid")
+		AddOutput("enabled", dsgo.FieldTypeBool, "Is enabled")
 
 	// LM returns bool as string "true"
 	lm := &TypeCoercionMockLM{CoercionType: "bool-as-string"}
@@ -1173,12 +1405,11 @@ func TestReAct_CoerceBasicTypes_StringBoolTrue(t *testing.T) {
 		t.Fatalf("ReAct with string-bool coercion failed: %v", err)
 	}
 
-	valid, ok := result.GetBool("enabled")
+	enabled, ok := result.GetBool("enabled")
 	if !ok {
-		// Try alternative field name or just log
-		t.Logf("Note: Field mapping test completed with error handling")
-	} else if !valid {
-		t.Errorf("Expected valid=true, got=%v", valid)
+		t.Error("Expected enabled field to be present and coerced to bool")
+	} else if !enabled {
+		t.Errorf("Expected enabled=true, got=%v", enabled)
 	}
 }
 
@@ -1201,12 +1432,15 @@ func TestReAct_CoerceBasicTypes_StringToPercentage(t *testing.T) {
 	})
 
 	if err != nil {
-		t.Logf("ReAct percentage coercion: %v (may be expected for edge case)", err)
+		t.Logf("ReAct percentage coercion failed (may be expected for edge case): %v", err)
+		// For a test of edge case handling, we don't fail here
 	} else {
 		// If successful, verify extraction of percentage value
 		confidence, ok := result.GetFloat("confidence")
 		if ok && confidence > 0 {
 			t.Logf("Successfully coerced percentage to float: %v", confidence)
+		} else {
+			t.Log("Percentage coercion returned a result but no valid confidence value")
 		}
 	}
 }
@@ -1225,14 +1459,20 @@ func TestReAct_CoerceBasicTypes_IntToFloat(t *testing.T) {
 
 	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 
-	_, err := react.Forward(ctx, map[string]any{
+	result, err := react.Forward(ctx, map[string]any{
 		"values": "1,2,3",
 	})
 
 	if err != nil {
-		t.Logf("ReAct int coercion test: %v", err)
+		t.Logf("ReAct int coercion test failed: %v", err)
 	} else {
-		t.Logf("Successfully handled int-to-float coercion")
+		// Check if we got a meaningful result
+		average, hasAverage := result.GetFloat("average")
+		if hasAverage {
+			t.Logf("Successfully handled int-to-float coercion, average: %v", average)
+		} else {
+			t.Log("Int-to-float coercion test completed but no average value found")
+		}
 	}
 }
 
@@ -1250,13 +1490,19 @@ func TestReAct_CoerceBasicTypes_QualitativeToNumeric(t *testing.T) {
 
 	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{})
 
-	_, err := react.Forward(ctx, map[string]any{
+	result, err := react.Forward(ctx, map[string]any{
 		"text": "test",
 	})
 
 	if err != nil {
-		t.Logf("ReAct qualitative coercion test: %v (expected for complex conversion)", err)
+		t.Logf("ReAct qualitative coercion test failed: %v (expected for complex conversion)", err)
 	} else {
-		t.Logf("Qualitative confidence handling completed")
+		// Check if we got a meaningful result
+		confidence, hasConfidence := result.GetFloat("confidence")
+		if hasConfidence {
+			t.Logf("Successfully handled qualitative to numeric conversion, confidence: %v", confidence)
+		} else {
+			t.Log("Qualitative to numeric conversion test completed but no confidence value found")
+		}
 	}
 }
