@@ -295,8 +295,21 @@ func (o *openAI) convertTool(tool *core.Tool) map[string]any {
 	required := []string{}
 
 	for _, param := range tool.Parameters {
+		// Map internal types to JSON Schema types
+		jsonType := param.Type
+		switch param.Type {
+		case "int":
+			jsonType = "integer"
+		case "float":
+			jsonType = "number"
+		case "bool":
+			jsonType = "boolean"
+		case "json":
+			jsonType = "object"
+		}
+
 		prop := map[string]any{
-			"type":        param.Type,
+			"type":        jsonType,
 			"description": param.Description,
 		}
 		if len(param.Enum) > 0 {
