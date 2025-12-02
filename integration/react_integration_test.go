@@ -1317,6 +1317,123 @@ func (m *InfiniteLoopMockLM) SupportsTools() bool { return true }
 func (m *InfiniteLoopMockLM) IsOpenAI() bool      { return false }
 
 // ============================================================================
+// ReAct Implicit Finish Tests
+// ============================================================================
+
+// TestReAct_Integration_ImplicitFinish tests the Implicit Finish pattern end-to-end.
+// When the model provides a valid answer without calling any tools, ReAct should
+// accept this as a valid response (Implicit Finish pattern).
+// Validates:
+// - Forward() succeeds with direct JSON answer
+// - Tool execution function is never called
+// - Result contains expected answer
+func TestReAct_Integration_ImplicitFinish(t *testing.T) {
+	ctx, cancel := ContextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	// Track if tool was called (it shouldn't be)
+	toolWasCalled := false
+
+	// Create a search tool that tracks calls
+	searchTool := dsgo.NewTool(
+		"search",
+		"Search for information",
+		func(ctx context.Context, args map[string]any) (any, error) {
+			toolWasCalled = true
+			return "search result", nil
+		},
+	).AddParameter("query", "string", "Search query", true)
+
+	// Mock LM that returns direct JSON answer without tool calls
+	lm := &ImplicitFinishMockLM{
+		DirectAnswer: "The capital of France is Paris",
+	}
+
+	sig := fixtures.ReActSig()
+	react := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool})
+	react.WithMaxIterations(5)
+
+	result, err := react.Forward(ctx, map[string]any{
+		"question": "What is the capital of France?",
+	})
+
+	// Verify: Forward() succeeds
+	if err != nil {
+		t.Fatalf("ReAct implicit finish failed: %v", err)
+	}
+
+	// Verify: Tool execution function never called
+	if toolWasCalled {
+		t.Error("Tool should not be called in implicit finish scenario")
+	}
+
+	// Verify: Result contains expected answer
+	answer, ok := result.GetString("answer")
+	if !ok || answer == "" {
+		t.Error("Expected non-empty answer from implicit finish")
+	}
+	if answer != "The capital of France is Paris" {
+		t.Errorf("Expected 'The capital of France is Paris', got %q", answer)
+	}
+}
+
+// ImplicitFinishMockLM simulates an LM that provides a direct answer without tool calls.
+// This tests the "Implicit Finish" pattern in native tool calling APIs.
+type ImplicitFinishMockLM struct {
+	DirectAnswer string
+}
+
+func (m *ImplicitFinishMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	// Return direct JSON answer with no tool calls (implicit finish)
+	return &dsgo.GenerateResult{
+		Content:      fmt.Sprintf(`{"answer": "%s", "reasoning": "Direct answer without tools"}`, m.DirectAnswer),
+		ToolCalls:    []dsgo.ToolCall{}, // Empty - implicit finish
+		FinishReason: "stop",
+		Usage: dsgo.Usage{
+			PromptTokens:     50,
+			CompletionTokens: 30,
+			TotalTokens:      80,
+			Cost:             0.001,
+		},
+	}, nil
+}
+
+func (m *ImplicitFinishMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
+	errChan := make(chan error, 1)
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
+
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case chunkChan <- dsgo.Chunk{Content: result.Content, Usage: result.Usage}:
+		}
+	}()
+	return chunkChan, errChan
+}
+
+func (m *ImplicitFinishMockLM) Name() string        { return "implicit-finish-mock-lm" }
+func (m *ImplicitFinishMockLM) SupportsJSON() bool  { return true }
+func (m *ImplicitFinishMockLM) SupportsTools() bool { return true }
+func (m *ImplicitFinishMockLM) IsOpenAI() bool      { return false }
+
+// ============================================================================
 // Phase 2: ReAct coerceBasicTypes Tests
 // ============================================================================
 

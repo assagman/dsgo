@@ -1417,6 +1417,126 @@ func TestReAct_ExtractionWithReasoning(t *testing.T) {
 	}
 }
 
+// TestReAct_ImplicitFinish tests that ReAct accepts direct answers without tool calls.
+// This validates the "Implicit Finish" pattern where the model provides a valid answer
+// directly instead of using tools, which is correct behavior for native tool calling APIs.
+func TestReAct_ImplicitFinish(t *testing.T) {
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	callCount := 0
+	lm := &MockLM{
+		SupportsToolsVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			// Model returns valid JSON without making any tool calls (implicit finish)
+			return &core.GenerateResult{
+				Content:   `{"answer": "42"}`,
+				ToolCalls: []core.ToolCall{}, // Empty - no tool calls
+			}, nil
+		},
+	}
+
+	searchTool := core.NewTool("search", "Search for info", func(ctx context.Context, args map[string]any) (any, error) {
+		t.Error("Tool should not be executed in implicit finish scenario")
+		return "search result", nil
+	})
+
+	react := NewReAct(sig, lm, []core.Tool{*searchTool})
+	result, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "What is the answer to life?",
+	})
+
+	// Verify: err == nil (success)
+	if err != nil {
+		t.Fatalf("Forward() error = %v, want nil", err)
+	}
+
+	// Verify: callCount == 1 (single LM call, no retry)
+	if callCount != 1 {
+		t.Errorf("Expected 1 LM call for implicit finish, got %d", callCount)
+	}
+
+	// Verify: result.Outputs["answer"] == "42"
+	if result.Outputs["answer"] != "42" {
+		t.Errorf("Expected answer='42', got %v", result.Outputs["answer"])
+	}
+}
+
+// TestReAct_ImplicitFinish_MalformedRetry tests the retry mechanism when implicit finish
+// fails validation in early iterations. The model should be guided to use tools.
+// Note: This test uses int fields to ensure malformed content fails validation,
+// triggering the retry mechanism. String-only signatures would use text extraction
+// as a fallback and accept malformed content.
+func TestReAct_ImplicitFinish_MalformedRetry(t *testing.T) {
+	// Use an int output field so malformed text fails validation
+	sig := core.NewSignature("Calculate something").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("count", core.FieldTypeInt, "Count result")
+
+	callCount := 0
+	var capturedMessages []core.Message
+	lm := &MockLM{
+		SupportsToolsVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			capturedMessages = messages
+
+			if callCount == 1 {
+				// First call: return malformed text without tool calls
+				// This fails validation because "count" expects int, gets no valid int
+				return &core.GenerateResult{
+					Content:   "thinking about this problem without any numbers",
+					ToolCalls: []core.ToolCall{},
+				}, nil
+			}
+			// Second call: return valid JSON with int (recovery)
+			return &core.GenerateResult{
+				Content:   `{"count": 42}`,
+				ToolCalls: []core.ToolCall{},
+			}, nil
+		},
+	}
+
+	searchTool := core.NewTool("search", "Search for info", func(ctx context.Context, args map[string]any) (any, error) {
+		return "search result", nil
+	})
+
+	react := NewReAct(sig, lm, []core.Tool{*searchTool}).WithMaxIterations(5)
+	result, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "What is the count?",
+	})
+
+	// Verify: err == nil (success after retry)
+	if err != nil {
+		t.Fatalf("Forward() error = %v, want nil", err)
+	}
+
+	// Verify: callCount == 2 (retry occurred)
+	if callCount != 2 {
+		t.Errorf("Expected 2 LM calls (malformed + retry), got %d", callCount)
+	}
+
+	// Verify: Messages contain "Please use the available tools"
+	foundToolGuidance := false
+	for _, msg := range capturedMessages {
+		if msg.Role == "user" && contains(msg.Content, "Please use the available tools") {
+			foundToolGuidance = true
+			break
+		}
+	}
+	if !foundToolGuidance {
+		t.Error("Expected retry message containing 'Please use the available tools'")
+	}
+
+	// Verify: result.Outputs["count"] == 42
+	count, ok := result.GetInt("count")
+	if !ok || count != 42 {
+		t.Errorf("Expected count=42, got %v", result.Outputs["count"])
+	}
+}
+
 // TestReAct_WithMethods tests all ReAct configuration methods
 func TestReAct_WithMethods(t *testing.T) {
 	sig := core.NewSignature("test").

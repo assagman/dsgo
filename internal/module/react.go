@@ -194,7 +194,9 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 			return nil, fmt.Errorf("LM generation failed at iteration %d: %w", i+1, err)
 		}
 
-		// If no tool calls, this should be the final answer
+		// Implicit Finish: model chose direct answer over tools.
+		// When using native tool calling APIs, no tool calls = intentional direct answer.
+		// This is architecturally correct for LangChain/LlamaIndex-style native tool calling.
 		if len(result.ToolCalls) == 0 {
 			if r.Verbose {
 				fmt.Printf("Thought: %s\n", core.StripMarkers(result.Content))
@@ -207,7 +209,8 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 			// Use adapter to parse output
 			outputs, err := r.Adapter.Parse(r.Signature, cleanedContent)
 			if err != nil {
-				// If in early iterations and parsing fails, guide model to use tools instead of accepting bad output
+				// Safeguard: guide model to use tools if parse fails early.
+				// In early iterations, nudge the model to use tools instead of accepting malformed output.
 				if !finalMode && i < r.MaxIterations-2 {
 					if r.Verbose {
 						fmt.Println("⚠️  Parsing failed and tools available - requesting tool use")
