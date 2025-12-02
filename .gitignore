@@ -38,6 +38,7 @@ Thumbs.db
 # Examples binaries
 examples/*/main
 examples/*/*.exe
+examples/code_analysis/*.txt
 
 # Example test artifacts
 tmp_*.log
@@ -45,6 +46,3 @@ example_execution_results.txt
 
 # opencode
 .opencode
-
-# Benchmark artifacts (./examples/benchmark.go output)
-benchmark_artifacts/
