@@ -47,7 +47,7 @@ sig := dsgo.NewSignature("Task description").
 
 ```
 dsgo/
-├── Core System
+├── Core System (internal/core/)
 │   ├── signature.go      # Field definitions & validation
 │   ├── lm.go            # Language model interface
 │   ├── module.go        # Module interface
@@ -55,18 +55,24 @@ dsgo/
 │   ├── adapter.go       # JSON/Chat/TwoStep/Fallback adapters
 │   └── cache.go         # LRU caching layer
 │
-├── Primitives
+├── Primitives (internal/core/)
 │   ├── history.go       # Conversation management
 │   ├── example.go       # Few-shot learning
 │   └── tool.go          # Tool/function calling
 │
 ├── Internal Utilities
-│   └── internal/jsonutil/  # JSON extraction & repair
+│   ├── internal/jsonutil/  # JSON extraction & repair
+│   ├── internal/cost/      # Pricing tables
+│   ├── internal/ids/       # UUID generation
+│   └── internal/retry/     # Retry logic
 │
-├── Infrastructure
+├── Infrastructure (internal/logging/)
 │   └── logging/         # Structured logging & tracing
 │
-├── Modules (module/)
+├── Type Safety (internal/typed/)
+│   └── func.go          # Generic Func[I, O] wrapper
+│
+├── Modules (internal/module/)
 │   ├── predict.go
 │   ├── chain_of_thought.go
 │   ├── react.go
@@ -75,7 +81,7 @@ dsgo/
 │   ├── program_of_thought.go
 │   └── program.go
 │
-├── Providers (providers/)
+├── Providers (internal/providers/)
 │   ├── openai/
 │   └── openrouter/
 │
@@ -133,6 +139,8 @@ go run examples/<name>/main.go  # Run from project root
 ```
 
 ## API Patterns
+
+*Note: Although the implementation is organized in internal packages (internal/core/, internal/module/, etc.), the public API remains accessible through the main dsgo package via re-exports. This provides a clean public interface while maintaining a well-organized internal structure.*
 
 ### Basic Prediction
 ```go

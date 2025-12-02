@@ -550,6 +550,8 @@ fallbackPredictor := module.NewPredict(sig, lm).WithAdapter(
 
 > **OpenAI Compatibility**: DSGo automatically detects OpenAI providers and uses OpenAI-compliant JSON schemas. No manual configuration needed - structured outputs work seamlessly with GPT models.
 
+*Note: The JSON adapter and other adapter types are implemented in `internal/core/`, but the public API remains accessible through the main `dsgo` package via re-exports.*
+
 ### Observability
 
 Track all LLM interactions automatically when a collector is configured:
@@ -559,13 +561,15 @@ type ProductionCollector struct{}
 
 func (c *ProductionCollector) Collect(entry dsgo.HistoryEntry) {
     log.Printf("LLM Call: provider=%s model=%s tokens=%d cost=$%.6f latency=%dms",
-        entry.Provider, entry.Model, entry.Usage.TotalTokens, 
+        entry.Provider, entry.Model, entry.Usage.TotalTokens,
         entry.Usage.Cost, entry.Usage.Latency)
 }
 
 // Observability is automatically enabled when a collector is configured
 dsgo.Configure(dsgo.WithCollector(&ProductionCollector{}))
 ```
+
+*Note: The HistoryEntry and observability infrastructure are implemented in `internal/core/` and `internal/logging/`, but the public API remains accessible through the main `dsgo` package via re-exports.*
 
 ### Parallel Execution
 

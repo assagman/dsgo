@@ -52,7 +52,7 @@ make test-matrix              # Test all models (comprehensive)
 
 DSGo is a three-layer architecture implementing the DSPy framework in Go.
 
-### Layer 1: Core (`/` root directory)
+### Layer 1: Core (`internal/core/`)
 
 **Purpose**: Foundational primitives and interfaces
 
@@ -79,7 +79,7 @@ DSGo is a three-layer architecture implementing the DSPy framework in Go.
 - `FieldTypeImage` - Image data (partial support)
 - `FieldTypeDatetime` - Date/time values
 
-### Layer 2: Modules (`module/`)
+### Layer 2: Modules (`internal/module/`)
 
 **Purpose**: High-level LM behaviors and orchestration
 
@@ -100,7 +100,7 @@ type Module interface {
 }
 ```
 
-### Layer 3: Providers (`providers/`)
+### Layer 3: Providers (`internal/providers/`)
 
 **Purpose**: LM API implementations
 
@@ -114,13 +114,20 @@ type Module interface {
 
 - `jsonutil/` - JSON extraction and repair for malformed LM outputs
 - `cost/` - Model pricing tables for usage tracking
+- `retry/` - Retry logic and backoff strategies
 - `ids/` - UUID generation for request tracking
 
-### Infrastructure (`logging/`)
+### Infrastructure (`internal/logging/`)
 
 - Structured logging with request ID propagation
-- Span-based observability
+- Request ID generation and context propagation
 - Multiple collectors (Memory, JSONL, Composite)
+
+### Type Safety (`internal/typed/`)
+
+- Generic `Func[I, O]` wrappers for compile-time type safety
+- Automatic signature generation from struct tags
+- Type-safe few-shot examples
 
 ## Testing Commands
 
@@ -402,7 +409,7 @@ LRU cache with deterministic keys:
 
 ### Adding a New Module
 
-1. **Create file** in `module/` directory
+1. **Create file** in `internal/module/` directory
 2. **Implement Module interface**:
    ```go
    type MyModule struct {
@@ -429,14 +436,14 @@ LRU cache with deterministic keys:
        return m.Signature
    }
    ```
-3. **Write tests** in `module/mymodule_test.go`
+3. **Write tests** in `internal/module/mymodule_test.go`
 4. **Add example** in `examples/` if appropriate
 5. **Update docs** - README.md and QUICKSTART.md
 
 ### Adding a New Provider
 
-1. **Create directory** `providers/myprovider/`
-2. **Implement LM interface** in `providers/myprovider/myprovider.go`
+1. **Create directory** `internal/providers/myprovider/`
+2. **Implement LM interface** in `internal/providers/myprovider/myprovider.go`
 3. **Register provider** via `init()`:
    ```go
    func init() {
@@ -453,12 +460,12 @@ LRU cache with deterministic keys:
 
 ### Adding a New Field Type
 
-1. **Add constant** to `signature.go`:
+1. **Add constant** to `internal/core/signature.go`:
    ```go
    const FieldTypeMyType FieldType = "mytype"
    ```
-2. **Update validation** in `signature.go` `ValidateOutputs()`
-3. **Add getter** to `prediction.go`:
+2. **Update validation** in `internal/core/signature.go` `ValidateOutputs()`
+3. **Add getter** to `internal/core/prediction.go`:
    ```go
    func (p *Prediction) GetMyType(field string) (MyType, bool) {
        // Implementation

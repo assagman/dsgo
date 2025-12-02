@@ -129,11 +129,12 @@ graph TB
 
 ### Layer Responsibilities
 
-| Layer | Purpose | Components |
-|-------|---------|------------|
-| **Modules** | High-level behaviors | Predict, ChainOfThought, ReAct, Refine, BestOfN, Program |
-| **Core** | Foundational primitives | Signatures, LM interface, Adapters, Tools, Cache, History |
-| **Providers** | LLM API implementations | OpenAI, OpenRouter, Custom providers |
+| Layer | Purpose | Components | Internal Package |
+|-------|---------|------------|------------------|
+| **Modules** | High-level behaviors | Predict, ChainOfThought, ReAct, Refine, BestOfN, Program | `internal/module/` |
+| **Core** | Foundational primitives | Signatures, LM interface, Adapters, Tools, Cache, History | `internal/core/` |
+| **Providers** | LLM API implementations | OpenAI, OpenRouter, Custom providers | `internal/providers/` |
+| **Infrastructure** | Utilities and observability | Logging, typed signatures, cost tracking | `internal/logging/`, `internal/typed/`, `internal/cost/` |
 
 ---
 
@@ -208,6 +209,8 @@ program := module.NewProgram().
 
 result, _ := program.Forward(ctx, inputs)
 ```
+
+*Note: While the implementation of these modules is located in `internal/module/`, the public API remains accessible through the main `dsgo` package via re-exports.*
 
 ---
 
@@ -417,6 +420,8 @@ func (c *MyCollector) Collect(entry core.HistoryEntry) {
 dsgo.Configure(dsgo.WithCollector(&MyCollector{}))
 ```
 
+*Note: The `core` package implementation is located in `internal/core/`, but the public API is accessible through the main `dsgo` package via re-exports.*
+
 ### Streaming Support
 
 ```go
@@ -445,29 +450,41 @@ fmt.Printf("\nFinal: %s\n", result.GetString("answer"))
 
 ```
 dsgo/
-├── 📁 core/                    # Core primitives
-│   ├── signature.go           # I/O definitions
-│   ├── lm.go                  # Language model interface
-│   ├── adapter.go             # Output parsing
-│   ├── tool.go                # Function calling
-│   ├── cache.go               # LRU caching
-│   ├── history.go             # Conversation management
-│   └── prediction.go          # Result wrapper
-│
-├── 📁 module/                  # High-level behaviors
-│   ├── predict.go             # Basic prediction
-│   ├── chain_of_thought.go    # Reasoning
-│   ├── react.go               # Tool-using agent
-│   ├── refine.go              # Iterative improvement
-│   ├── best_of_n.go           # Multiple sampling
-│   ├── program.go             # Module composition
-│   └── parallel.go            # Concurrent execution
-│
-├── 📁 providers/               # LLM implementations
-│   ├── openai/                # OpenAI API
-│   └── openrouter/            # OpenRouter API
-│
-├── 📁 internal/                # Internal utilities
+├── 📁 dsgo.go                  # Main package re-exports
+├── 📁 internal/                # Core implementation
+│   ├── 📁 core/               # Core primitives
+│   │   ├── signature.go       # I/O definitions
+│   │   ├── lm.go              # Language model interface
+│   │   ├── adapter.go         # Output parsing
+│   │   ├── tool.go            # Function calling
+│   │   ├── cache.go           # LRU caching
+│   │   ├── history.go         # Conversation management
+│   │   └── prediction.go      # Result wrapper
+│   │
+│   ├── 📁 module/             # High-level behaviors
+│   │   ├── predict.go         # Basic prediction
+│   │   ├── chain_of_thought.go # Reasoning
+│   │   ├── react.go           # Tool-using agent
+│   │   ├── refine.go          # Iterative improvement
+│   │   ├── best_of_n.go       # Multiple sampling
+│   │   ├── program.go         # Module composition
+│   │   └── parallel.go        # Concurrent execution
+│   │
+│   ├── 📁 providers/          # LLM implementations
+│   │   ├── openai/            # OpenAI API
+│   │   └── openrouter/        # OpenRouter API
+│   │
+│   ├── 📁 logging/            # Observability
+│   │   ├── logger.go          # Structured logging
+│   │   └── request_id.go      # Request ID propagation
+│   │
+│   ├── 📁 typed/              # Type-safe signatures
+│   │   ├── func.go            # Generic Func[I, O] wrapper
+│   │   └── schema.go          # Struct-to-signature conversion
+│   │
+│   ├── 📁 env/                # Environment loading
+│   │   └── env.go             # .env file processing
+│   │
 │   ├── cost/                  # Pricing tables
 │   ├── jsonutil/              # JSON repair
 │   ├── retry/                 # Retry logic
@@ -479,10 +496,12 @@ dsgo/
 │   ├── 03-quality-refine-bestof/ # Quality modules
 │   └── 04-structured-programs/ # Module composition
 │
-└── 📁 logging/                 # Observability
-    ├── logger.go              # Structured logging
-    └── collectors/            # Data collectors
+└── logging/                   # Re-exported from internal/logging for backward compatibility
+    ├── logger.go              # Structured logging (re-exported)
+    └── collectors/            # Data collectors (re-exported)
 ```
+
+The public API remains accessible through the main `dsgo` package, but the implementation is organized in internal packages for better maintainability.
 
 ---
 
@@ -628,6 +647,8 @@ func init() {
 }
 ```
 
+*Note: The `core` package implementation is located in `internal/core/`, but the public API remains accessible through the main `dsgo` package via re-exports.*
+
 ### Custom Adapters
 
 ```go
@@ -641,6 +662,8 @@ func (a *MyAdapter) ParseResponse(sig *core.Signature, response string) (map[str
     // Custom response parsing
 }
 ```
+
+*Note: The `core` package implementation is located in `internal/core/`, but the public API remains accessible through the main `dsgo` package via re-exports.*
 
 ### Middleware & Hooks
 
@@ -658,6 +681,8 @@ func (c *AuditCollector) Collect(entry core.HistoryEntry) {
 // Observability is automatically enabled when a collector is configured
 dsgo.Configure(dsgo.WithCollector(&AuditCollector{logFile: auditLog}))
 ```
+
+*Note: The observability infrastructure (logging, collectors) is implemented in `internal/logging/` and `internal/core/`, but the public API remains accessible through the main `dsgo` package via re-exports.*
 
 ---
 

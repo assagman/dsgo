@@ -1,5 +1,7 @@
 # DSGo Roadmap
 
+*Note: The DSGo implementation is organized in internal packages (`internal/core/`, `internal/module/`, `internal/logging/`, `internal/typed/`, etc.) for better maintainability, while maintaining the same public API through re-exports in the main package.*
+
 ---
 
 ## ✅ COMPLETED PHASES
