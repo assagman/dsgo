@@ -75,6 +75,26 @@ func NewReAct[I, O any](lm core.LM, tools []core.Tool) (*Func[I, O], error) {
 	}, nil
 }
 
+// NewProgramOfThought creates a new typed function module using ProgramOfThought
+// The I and O types must be structs with dsgo tags
+// Language specifies the target programming language ("python", "javascript", "go")
+func NewProgramOfThought[I, O any](lm core.LM, language string) (*Func[I, O], error) {
+	sig, inputType, outputType, err := buildTypedSignature[I, O]()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the underlying ProgramOfThought module
+	pot := module.NewProgramOfThought(sig, lm, language)
+
+	return &Func[I, O]{
+		module:      pot,
+		inputType:   inputType,
+		outputType:  outputType,
+		description: sig.Description,
+	}, nil
+}
+
 // buildTypedSignature is a helper to build signature and extract types
 func buildTypedSignature[I, O any]() (*core.Signature, reflect.Type, reflect.Type, error) {
 	var i I
@@ -209,7 +229,7 @@ func (f *Func[I, O]) RunWithPrediction(ctx context.Context, input I) (O, *core.P
 }
 
 // WithOptions sets custom generation options
-// Works with all module types (Predict, ChainOfThought, ReAct, etc.)
+// Works with all module types (Predict, ChainOfThought, ReAct, ProgramOfThought, etc.)
 func (f *Func[I, O]) WithOptions(options *core.GenerateOptions) *Func[I, O] {
 	switch m := f.module.(type) {
 	case *module.Predict:
@@ -217,6 +237,8 @@ func (f *Func[I, O]) WithOptions(options *core.GenerateOptions) *Func[I, O] {
 	case *module.ChainOfThought:
 		m.WithOptions(options)
 	case *module.ReAct:
+		m.WithOptions(options)
+	case *module.ProgramOfThought:
 		m.WithOptions(options)
 	}
 	return f
@@ -278,6 +300,25 @@ func (f *Func[I, O]) WithMaxIterations(max int) *Func[I, O] {
 func (f *Func[I, O]) WithVerbose(verbose bool) *Func[I, O] {
 	if react, ok := f.module.(*module.ReAct); ok {
 		react.WithVerbose(verbose)
+	}
+	return f
+}
+
+// WithAllowExecution enables code execution for ProgramOfThought module
+// Only applicable when using NewProgramOfThought
+// CAUTION: Only enable in trusted environments
+func (f *Func[I, O]) WithAllowExecution(allow bool) *Func[I, O] {
+	if pot, ok := f.module.(*module.ProgramOfThought); ok {
+		pot.WithAllowExecution(allow)
+	}
+	return f
+}
+
+// WithExecutionTimeout sets the execution timeout for ProgramOfThought module
+// Only applicable when using NewProgramOfThought
+func (f *Func[I, O]) WithExecutionTimeout(seconds int) *Func[I, O] {
+	if pot, ok := f.module.(*module.ProgramOfThought); ok {
+		pot.WithExecutionTimeout(seconds)
 	}
 	return f
 }
