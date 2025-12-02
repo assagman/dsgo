@@ -10,11 +10,12 @@ type Option func(*Settings)
 
 // Configure applies the given options to the global settings.
 // Environment variables are loaded first, then options are applied in order.
+// This function is safe for concurrent use.
 func Configure(opts ...Option) {
-	loadEnv()
-
 	globalSettings.mu.Lock()
 	defer globalSettings.mu.Unlock()
+
+	loadEnv()
 
 	for _, opt := range opts {
 		opt(globalSettings)
