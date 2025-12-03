@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -458,4 +459,58 @@ func BenchmarkHistory_Operations(b *testing.B) {
 			_ = h.Len()
 		}
 	})
+}
+
+func TestHistoryConcurrentAdd(t *testing.T) {
+	history := NewHistory()
+	var wg sync.WaitGroup
+
+	// 10 goroutines, 100 adds each
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				history.AddUserMessage(fmt.Sprintf("msg-%d-%d", id, j))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Must have exactly 1000 messages
+	if history.Len() != 1000 {
+		t.Errorf("Expected 1000 messages, got %d", history.Len())
+	}
+}
+
+func TestHistoryConcurrentReadWrite(t *testing.T) {
+	history := NewHistoryWithLimit(50)
+	var wg sync.WaitGroup
+
+	// Writers
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 20; j++ {
+				history.AddUserMessage(fmt.Sprintf("msg-%d-%d", id, j))
+			}
+		}(i)
+	}
+
+	// Readers
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				_ = history.Get()
+				_ = history.Len()
+				_ = history.GetLast(5)
+			}
+		}()
+	}
+
+	wg.Wait()
 }

@@ -26,6 +26,13 @@ func (m *MockFailingModule) Forward(ctx context.Context, inputs map[string]any) 
 	return nil, errors.New("API request failed with status 429: rate limited")
 }
 
+func (m *MockFailingModule) Clone() core.Module {
+	return &MockFailingModule{
+		sig:         m.sig,
+		failureType: m.failureType,
+	}
+}
+
 // TestBestOfN_AllAttemptsFail tests behavior when all N attempts fail
 func TestBestOfN_AllAttemptsFail(t *testing.T) {
 	sig := core.NewSignature("Test")

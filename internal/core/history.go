@@ -1,7 +1,10 @@
 package core
 
+import "sync"
+
 // History manages conversation history for multi-turn interactions
 type History struct {
+	mu       sync.RWMutex
 	messages []Message
 	maxSize  int // 0 = unlimited
 }
@@ -24,6 +27,9 @@ func NewHistoryWithLimit(maxSize int) *History {
 
 // Add appends a message to the history
 func (h *History) Add(message Message) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	h.messages = append(h.messages, message)
 
 	// Trim if exceeds max size (keep most recent)
@@ -49,37 +55,59 @@ func (h *History) AddSystemMessage(content string) {
 
 // Get returns all messages in the history
 func (h *History) Get() []Message {
-	return h.messages
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	result := make([]Message, len(h.messages))
+	copy(result, h.messages)
+	return result
 }
 
 // GetLast returns the last n messages from history
 func (h *History) GetLast(n int) []Message {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
 	if n <= 0 {
 		return []Message{}
 	}
 	if n >= len(h.messages) {
-		return h.messages
+		result := make([]Message, len(h.messages))
+		copy(result, h.messages)
+		return result
 	}
-	return h.messages[len(h.messages)-n:]
+
+	result := make([]Message, n)
+	copy(result, h.messages[len(h.messages)-n:])
+	return result
 }
 
 // Clear removes all messages from history
 func (h *History) Clear() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.messages = []Message{}
 }
 
 // Len returns the number of messages in history
 func (h *History) Len() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	return len(h.messages)
 }
 
 // IsEmpty returns true if history has no messages
 func (h *History) IsEmpty() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	return len(h.messages) == 0
 }
 
 // Clone creates a deep copy of the history
 func (h *History) Clone() *History {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
 	cloned := &History{
 		messages: make([]Message, len(h.messages)),
 		maxSize:  h.maxSize,
@@ -90,6 +118,9 @@ func (h *History) Clone() *History {
 
 // Truncate keeps only the first n messages
 func (h *History) Truncate(n int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if n > 0 && n < len(h.messages) {
 		h.messages = h.messages[:n]
 	}
@@ -97,9 +128,12 @@ func (h *History) Truncate(n int) {
 
 // RemoveFirst removes the first n messages
 func (h *History) RemoveFirst(n int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if n > 0 && n < len(h.messages) {
 		h.messages = h.messages[n:]
 	} else if n >= len(h.messages) {
-		h.Clear()
+		h.messages = []Message{}
 	}
 }

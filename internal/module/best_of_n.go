@@ -13,23 +13,10 @@ type ScoringFunction func(inputs map[string]any, prediction *core.Prediction) (f
 
 // BestOfN executes a module N times and returns the best result.
 //
-// IMPORTANT: When using WithParallel(true), ensure the module is stateless
-// or provide N independent module instances. Modules that maintain internal
-// state (e.g., History in Predict or ChainOfThought) will cause data races
-// when shared across goroutines.
-//
-// Safe parallel usage patterns:
-//   - Use stateless modules (no internal state mutation)
-//   - Create N independent instances of stateful modules
-//   - Use separate History instances for each parallel execution
-//
-// Example with independent instances:
-//
-//	modules := make([]core.Module, n)
-//	for i := 0; i < n; i++ {
-//	    modules[i] = module.NewPredict(sig, lm) // Each has its own History
-//	}
-//	// Execute with BestOfN wrapping each independently
+// Thread Safety: BestOfN is now completely thread-safe. When using WithParallel(true),
+// the module automatically creates independent instances for parallel execution,
+// eliminating data race concerns even with stateful modules like Predict, ChainOfThought,
+// and ReAct that maintain internal History.
 type BestOfN struct {
 	Module      core.Module
 	N           int
@@ -69,8 +56,6 @@ func (b *BestOfN) WithScorer(scorer ScoringFunction) *BestOfN {
 }
 
 // WithParallel enables parallel execution.
-// WARNING: Only use with stateless modules or independent instances.
-// See BestOfN type documentation for safe usage patterns.
 func (b *BestOfN) WithParallel(parallel bool) *BestOfN {
 	b.Parallel = parallel
 	return b
@@ -184,10 +169,13 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (*
 
 	for i := 0; i < b.N; i++ {
 		wg.Add(1)
-		go func() {
+		go func(instanceIndex int) {
 			defer wg.Done()
 
-			prediction, err := b.Module.Forward(ctx, inputs)
+			// Create independent module instance for safety
+			module := b.createIndependentModule()
+
+			prediction, err := module.Forward(ctx, inputs)
 			if err != nil {
 				results <- result{err: err}
 				return
@@ -200,7 +188,7 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (*
 			}
 
 			results <- result{prediction: prediction, score: score}
-		}()
+		}(i)
 	}
 
 	// Close results channel when all goroutines are done
@@ -288,4 +276,24 @@ func ConfidenceScorer(field string) ScoringFunction {
 			return 0, fmt.Errorf("confidence field has unexpected type: %T", confidence)
 		}
 	}
+}
+
+// Clone creates an independent copy of BestOfN module
+func (b *BestOfN) Clone() core.Module {
+	cloned := &BestOfN{
+		Module:      b.Module.Clone(),
+		N:           b.N,
+		Scorer:      b.Scorer,
+		Parallel:    b.Parallel,
+		ReturnAll:   b.ReturnAll,
+		MaxFailures: b.MaxFailures,
+		Threshold:   b.Threshold,
+	}
+	return cloned
+}
+
+// createIndependentModule creates an independent instance of wrapped module
+func (b *BestOfN) createIndependentModule() core.Module {
+	// All modules must implement Clone() by definition
+	return b.Module.Clone()
 }

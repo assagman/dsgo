@@ -387,3 +387,25 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		Errors:     errorChan,
 	}, nil
 }
+
+// Clone creates an independent copy of Predict module
+func (p *Predict) Clone() core.Module {
+	cloned := &Predict{
+		Signature: p.Signature,
+		LM:        p.LM,
+		Options:   p.Options,
+		Adapter:   p.Adapter,
+		History:   nil, // Start with fresh history
+		Demos:     make([]core.Example, len(p.Demos)),
+	}
+
+	// Copy demos
+	copy(cloned.Demos, p.Demos)
+
+	// Clone history if it exists
+	if p.History != nil {
+		cloned.History = p.History.Clone()
+	}
+
+	return cloned
+}

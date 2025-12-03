@@ -170,3 +170,23 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 
 	return prediction, nil
 }
+
+// Clone creates an independent copy of ChainOfThought module
+func (cot *ChainOfThought) Clone() core.Module {
+	cloned := &ChainOfThought{
+		Signature: cot.Signature,
+		LM:        cot.LM,
+		Options:   cot.Options,
+		Adapter:   cot.Adapter,
+		History:   nil,
+		Demos:     make([]core.Example, len(cot.Demos)),
+	}
+
+	copy(cloned.Demos, cot.Demos)
+
+	if cot.History != nil {
+		cloned.History = cot.History.Clone()
+	}
+
+	return cloned
+}

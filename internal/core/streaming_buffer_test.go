@@ -1,6 +1,8 @@
 package core
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -244,4 +246,58 @@ func ContainsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestStreamingBufferConcurrentWrite(t *testing.T) {
+	buffer := NewStreamingBuffer()
+	var wg sync.WaitGroup
+
+	// 10 goroutines writing chunks
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				buffer.Write(fmt.Sprintf("chunk-%d-%d ", id, j))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Should have content from all goroutines
+	content := buffer.String()
+	if len(content) == 0 {
+		t.Error("Buffer should have content")
+	}
+}
+
+func TestStreamingBufferConcurrentReadWrite(t *testing.T) {
+	buffer := NewStreamingBuffer()
+	var wg sync.WaitGroup
+
+	// Writers
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				buffer.Write(fmt.Sprintf("write-%d-%d ", id, j))
+			}
+		}(i)
+	}
+
+	// Readers
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 20; j++ {
+				_ = buffer.String()
+				_ = buffer.Len()
+			}
+		}()
+	}
+
+	wg.Wait()
 }

@@ -26,6 +26,14 @@ func (m *MockModule) Forward(ctx context.Context, inputs map[string]interface{})
 	return core.NewPrediction(map[string]interface{}{"result": "test"}), nil
 }
 
+func (m *MockModule) Clone() core.Module {
+	return &MockModule{
+		ForwardFunc:    m.ForwardFunc,
+		SignatureValue: m.SignatureValue,
+		CallCount:      0, // Reset call count for new instance
+	}
+}
+
 func (m *MockModule) GetSignature() *core.Signature {
 	if m.SignatureValue != nil {
 		return m.SignatureValue

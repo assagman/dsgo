@@ -591,9 +591,15 @@ func TestConcurrency_BestOfN_IndependentModules(t *testing.T) {
 		t.Fatalf("BestOfN failed: %v", err)
 	}
 
-	// Verify all N executions happened
-	if atomic.LoadInt64(&executionCount) != int64(n) {
-		t.Errorf("Expected %d executions, got %d", n, executionCount)
+	// Verify all N executions happened by checking LM call count
+	// Note: executionCount is 0 because each cloned module has its own counter
+	if atomic.LoadInt64(&lm.callCount) != int64(n) {
+		t.Errorf("Expected %d LM calls, got %d", n, lm.callCount)
+	}
+
+	// Verify the original counter wasn't incremented (proving independence)
+	if atomic.LoadInt64(&executionCount) != 0 {
+		t.Errorf("Expected original execution count to remain 0 (independent clones), got %d", executionCount)
 	}
 }
 
@@ -890,4 +896,13 @@ func (p *CountingPredict) Forward(ctx context.Context, inputs map[string]any) (*
 
 func (p *CountingPredict) GetSignature() *dsgo.Signature {
 	return p.Signature
+}
+
+func (p *CountingPredict) Clone() dsgo.Module {
+	newCount := int64(0) // Fresh counter
+	return &CountingPredict{
+		Signature:      p.Signature,
+		LM:             p.LM,
+		executionCount: &newCount,
+	}
 }

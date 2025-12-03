@@ -330,3 +330,16 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, 
 
 	return prediction, nil
 }
+
+// Clone creates an independent copy of Refine module
+func (r *Refine) Clone() core.Module {
+	cloned := &Refine{
+		Signature:       r.Signature,
+		LM:              r.LM,
+		Options:         r.Options,
+		Adapter:         r.Adapter,
+		MaxIterations:   r.MaxIterations,
+		RefinementField: r.RefinementField,
+	}
+	return cloned
+}

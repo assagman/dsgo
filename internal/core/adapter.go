@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"unicode"
 
 	"github.com/assagman/dsgo/internal/jsonutil"
@@ -860,9 +860,8 @@ func (a *ChatAdapter) FormatHistory(history *History) []Message {
 // FallbackAdapter tries multiple adapters in sequence until one succeeds
 // This implements the critical fallback chain: ChatAdapter → JSONAdapter → Salvage
 type FallbackAdapter struct {
+	lastUsedAdapter int64 // Track which adapter succeeded (for debugging) - use atomic for performance - placed first for alignment
 	adapters        []Adapter
-	mu              sync.RWMutex
-	lastUsedAdapter int // Track which adapter succeeded (for debugging)
 }
 
 // NewFallbackAdapter creates a new fallback adapter with the default chain
@@ -922,9 +921,7 @@ func (f *FallbackAdapter) Parse(sig *Signature, content string) (map[string]any,
 	for i, adapter := range f.adapters {
 		outputs, err := adapter.Parse(sig, content)
 		if err == nil {
-			f.mu.Lock()
-			f.lastUsedAdapter = i
-			f.mu.Unlock()
+			atomic.StoreInt64(&f.lastUsedAdapter, int64(i))
 			// Add adapter metadata to outputs for tracking
 			// This will be picked up by modules to add to Prediction
 			outputs["__adapter_used"] = fmt.Sprintf("%T", adapter)
@@ -956,9 +953,7 @@ func (f *FallbackAdapter) FormatHistory(history *History) []Message {
 // GetLastUsedAdapter returns the index of the adapter that last succeeded in Parse
 // Returns -1 if Parse hasn't been called or all adapters failed
 func (f *FallbackAdapter) GetLastUsedAdapter() int {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return f.lastUsedAdapter
+	return int(atomic.LoadInt64(&f.lastUsedAdapter))
 }
 
 // TwoStepAdapter implements a two-stage generation approach for reasoning models

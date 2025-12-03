@@ -104,6 +104,21 @@ func (p *Program) Name() string {
 	return p.name
 }
 
+// Clone creates an independent copy of Program module
+func (p *Program) Clone() core.Module {
+	cloned := &Program{
+		name:    p.name,
+		modules: make([]core.Module, len(p.modules)),
+	}
+
+	// Clone all modules
+	for i, module := range p.modules {
+		cloned.modules[i] = module.Clone()
+	}
+
+	return cloned
+}
+
 // ModuleCount returns the number of modules in the program
 func (p *Program) ModuleCount() int {
 	return len(p.modules)

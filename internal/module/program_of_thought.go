@@ -427,6 +427,19 @@ func (pot *ProgramOfThought) fillRequiredStringFields(outputs map[string]any, st
 	}
 }
 
+// Clone creates an independent copy of ProgramOfThought module
+func (pot *ProgramOfThought) Clone() core.Module {
+	cloned := &ProgramOfThought{
+		Signature:        pot.Signature,
+		LM:               pot.LM,
+		Options:          pot.Options,
+		Language:         pot.Language,
+		AllowExecution:   pot.AllowExecution,
+		ExecutionTimeout: pot.ExecutionTimeout,
+	}
+	return cloned
+}
+
 // getFieldCaseInsensitive looks up a field in outputs using case-insensitive matching
 // This is needed because NormalizeOutputKeys uses signature field names (Go field names, capitalized)
 // while ProgramOfThought hardcodes lowercase field names like "code" and "explanation"

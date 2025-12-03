@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // StreamingBuffer handles accumulation and recovery of streaming LM responses
 // Detects incomplete field markers and repairs them before final parsing
 type StreamingBuffer struct {
+	mu      sync.Mutex
 	content strings.Builder
 }
 
@@ -19,22 +21,31 @@ func NewStreamingBuffer() *StreamingBuffer {
 
 // Write appends a chunk to the buffer
 func (sb *StreamingBuffer) Write(chunk string) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
 	sb.content.WriteString(chunk)
 }
 
 // String returns the current accumulated content
 func (sb *StreamingBuffer) String() string {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
 	return sb.content.String()
 }
 
 // Len returns the length of accumulated content
 func (sb *StreamingBuffer) Len() int {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
 	return sb.content.Len()
 }
 
 // Finalize performs recovery and returns the final content
 // Fixes incomplete markers, trailing artifacts, and other streaming issues
 func (sb *StreamingBuffer) Finalize() string {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
 	content := sb.content.String()
 
 	// Apply recovery fixes
@@ -103,6 +114,9 @@ func (sb *StreamingBuffer) cleanTrailingArtifacts(content string) string {
 // DetectIncompleteMarker checks if the current buffer ends with an incomplete marker
 // This can be used during streaming to detect issues early
 func (sb *StreamingBuffer) DetectIncompleteMarker() (bool, string) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
 	content := sb.content.String()
 
 	// Check last 100 characters for incomplete markers
@@ -123,6 +137,9 @@ func (sb *StreamingBuffer) DetectIncompleteMarker() (bool, string) {
 
 // GetFieldMarkerCompletion returns the expected completion for an incomplete marker
 func (sb *StreamingBuffer) GetFieldMarkerCompletion(fieldName string) string {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
 	content := sb.content.String()
 
 	// Check what's already present
@@ -147,4 +164,12 @@ func (sb *StreamingBuffer) GetFieldMarkerCompletion(fieldName string) string {
 	}
 
 	return ""
+}
+
+// Reset clears the buffer content, making it ready for reuse.
+// This method is thread-safe and can be called concurrently with other operations.
+func (sb *StreamingBuffer) Reset() {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	sb.content.Reset()
 }

@@ -876,3 +876,27 @@ func (r *ReAct) buildExtractionPrompt() string {
 
 	return prompt.String()
 }
+
+// Clone creates an independent copy of ReAct module
+func (r *ReAct) Clone() core.Module {
+	cloned := &ReAct{
+		Signature:     r.Signature,
+		LM:            r.LM,
+		Tools:         make([]core.Tool, len(r.Tools)),
+		Options:       r.Options,
+		Adapter:       r.Adapter,
+		History:       nil,
+		Demos:         make([]core.Example, len(r.Demos)),
+		MaxIterations: r.MaxIterations,
+		Verbose:       r.Verbose,
+	}
+
+	copy(cloned.Demos, r.Demos)
+	copy(cloned.Tools, r.Tools)
+
+	if r.History != nil {
+		cloned.History = r.History.Clone()
+	}
+
+	return cloned
+}

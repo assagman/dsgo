@@ -506,6 +506,35 @@ func summarizeErrors(errs []error) string {
 	return summary
 }
 
+// Clone creates an independent copy of Parallel module
+func (p *Parallel) Clone() core.Module {
+	cloned := &Parallel{
+		factory:        p.factory,
+		instances:      make([]core.Module, len(p.instances)),
+		maxWorkers:     p.maxWorkers,
+		maxFailures:    p.maxFailures,
+		failFast:       p.failFast,
+		returnAll:      p.returnAll,
+		onlySuccessful: p.onlySuccessful,
+		batchKey:       p.batchKey,
+		repeat:         p.repeat,
+	}
+
+	// Only clone module if it exists
+	if p.module != nil {
+		cloned.module = p.module.Clone()
+	}
+
+	// Clone instances if they exist
+	for i, instance := range p.instances {
+		if instance != nil {
+			cloned.instances[i] = instance.Clone()
+		}
+	}
+
+	return cloned
+}
+
 // min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {

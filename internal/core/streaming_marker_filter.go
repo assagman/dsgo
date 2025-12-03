@@ -3,11 +3,13 @@ package core
 import (
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // StreamingMarkerFilter buffers streaming chunks and filters out field markers
 // as they arrive, handling cases where markers are split across multiple chunks
 type StreamingMarkerFilter struct {
+	mu               sync.Mutex
 	buffer           strings.Builder
 	outputBuffer     strings.Builder
 	possibleMarker   strings.Builder
@@ -22,6 +24,9 @@ func NewStreamingMarkerFilter() *StreamingMarkerFilter {
 // ProcessChunk processes an incoming chunk and returns the displayable content
 // Markers are buffered until complete, then discarded
 func (f *StreamingMarkerFilter) ProcessChunk(chunkContent string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.outputBuffer.Reset()
 
 	for _, char := range chunkContent {
@@ -70,6 +75,9 @@ func (f *StreamingMarkerFilter) ProcessChunk(chunkContent string) string {
 // Flush returns any remaining buffered content
 // Call this when the stream is complete
 func (f *StreamingMarkerFilter) Flush() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if f.inPossibleMarker && f.possibleMarker.Len() > 0 {
 		// If we have incomplete marker buffer, it's not a marker - return it
 		result := f.possibleMarker.String()
@@ -78,6 +86,25 @@ func (f *StreamingMarkerFilter) Flush() string {
 		return result
 	}
 	return ""
+}
+
+// Finalize returns the final filtered content and resets the filter
+func (f *StreamingMarkerFilter) Finalize() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	result := f.outputBuffer.String()
+	if f.inPossibleMarker {
+		result += f.possibleMarker.String()
+	}
+
+	// Reset for next use
+	f.buffer.Reset()
+	f.outputBuffer.Reset()
+	f.possibleMarker.Reset()
+	f.inPossibleMarker = false
+
+	return result
 }
 
 // isCompleteMarker checks if the string is a complete field marker

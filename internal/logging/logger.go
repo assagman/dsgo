@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/assagman/dsgo/internal/core"
@@ -104,10 +105,15 @@ func (n *NoOpLogger) Warn(ctx context.Context, msg string, fields map[string]any
 func (n *NoOpLogger) Error(ctx context.Context, msg string, fields map[string]any) {}
 
 // Global logger instance
-var globalLogger Logger = &NoOpLogger{}
+var (
+	globalLogger Logger = &NoOpLogger{}
+	loggerMu     sync.RWMutex
+)
 
 // SetLogger sets the global logger
 func SetLogger(logger Logger) {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
 	if logger == nil {
 		globalLogger = &NoOpLogger{}
 	} else {
@@ -117,6 +123,8 @@ func SetLogger(logger Logger) {
 
 // GetLogger returns the global logger
 func GetLogger() Logger {
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
 	return globalLogger
 }
 
@@ -138,7 +146,7 @@ func GetRequestID(ctx context.Context) string {
 
 // LogAPIRequest logs the start of an API request
 func LogAPIRequest(ctx context.Context, model string, promptLength int) {
-	globalLogger.Info(ctx, "API request started", map[string]any{
+	GetLogger().Info(ctx, "API request started", map[string]any{
 		"model":         model,
 		"prompt_length": promptLength,
 	})
@@ -146,7 +154,7 @@ func LogAPIRequest(ctx context.Context, model string, promptLength int) {
 
 // LogAPIResponse logs the end of an API request
 func LogAPIResponse(ctx context.Context, model string, statusCode int, duration time.Duration, usage core.Usage) {
-	globalLogger.Info(ctx, "API request completed", map[string]any{
+	GetLogger().Info(ctx, "API request completed", map[string]any{
 		"model":             model,
 		"status_code":       statusCode,
 		"duration_ms":       duration.Milliseconds(),
@@ -158,7 +166,7 @@ func LogAPIResponse(ctx context.Context, model string, statusCode int, duration 
 
 // LogAPIError logs an API error
 func LogAPIError(ctx context.Context, model string, err error) {
-	globalLogger.Error(ctx, "API request failed", map[string]any{
+	GetLogger().Error(ctx, "API request failed", map[string]any{
 		"model": model,
 		"error": err.Error(),
 	})
@@ -166,7 +174,7 @@ func LogAPIError(ctx context.Context, model string, err error) {
 
 // LogPredictionStart logs the start of a prediction
 func LogPredictionStart(ctx context.Context, moduleName string, signature string) {
-	globalLogger.Debug(ctx, "Prediction started", map[string]any{
+	GetLogger().Debug(ctx, "Prediction started", map[string]any{
 		"module":    moduleName,
 		"signature": signature,
 	})
@@ -180,8 +188,8 @@ func LogPredictionEnd(ctx context.Context, moduleName string, duration time.Dura
 	}
 	if err != nil {
 		fields["error"] = err.Error()
-		globalLogger.Error(ctx, "Prediction failed", fields)
+		GetLogger().Error(ctx, "Prediction failed", fields)
 	} else {
-		globalLogger.Debug(ctx, "Prediction completed", fields)
+		GetLogger().Debug(ctx, "Prediction completed", fields)
 	}
 }

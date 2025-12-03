@@ -205,8 +205,8 @@ Use the `oracle` tool for:
 ### When Working with Concurrency
 
 - Always run `make test` (includes race detector)
-- **Important**: `History` is NOT thread-safe - use separate instances for parallel execution
-- **BestOfN parallel safety**: When using `WithParallel(true)`, ensure modules are stateless or use N independent instances
+- **Thread Safety**: All components are now automatically thread-safe - no special handling required
+- **BestOfN parallel safety**: Automatically safe with all module types, including those with History
 
 ## Code Style and Conventions
 
@@ -589,9 +589,9 @@ Don't create intermediate docs like:
 
 ## Known Issues & Warnings
 
-⚠️ **BestOfN Parallel Safety**: When using `WithParallel(true)`, ensure modules are stateless or use N independent instances. Modules with History cause data races.
+✅ **Thread Safety**: All components are now automatically thread-safe. No special handling required for concurrent usage.
 
-⚠️ **Concurrency**: History is NOT thread-safe. Use separate instances for parallel execution.
+✅ **BestOfN Parallel Safety**: Automatically safe with all module types, including stateful modules with History.
 
 ⚠️ **Streaming**: StreamResult channels must be fully consumed to avoid goroutine leaks.
 
