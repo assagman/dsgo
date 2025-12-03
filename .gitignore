@@ -11,8 +11,6 @@
 # Output of the go coverage tool
 *.out
 coverage.txt
-test_matrix_logs/
-raw_responses/
 
 # Dependency directories
 vendor/
