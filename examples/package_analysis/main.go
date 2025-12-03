@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/examples/shared/tools"
 )
 
 // Constants for field names and packages to avoid hardcoding strings
@@ -49,13 +48,7 @@ func main() {
 	}
 	fmt.Printf("✅ Successfully initialized LM: %s\n", ModelName)
 
-	// Find project root
-	fmt.Println("📂 Locating project root...")
-	projectRoot, err := findProjectRoot()
-	if err != nil {
-		log.Fatalf("❌ Failed to find project root: %v\n\n💡 This error typically means:\n   • No go.mod file found in current or parent directories\n   • Permission issues accessing parent directories", err)
-	}
-	fmt.Printf("✅ Project root located: %s\n", projectRoot)
+	// Note: Project root detection is now handled automatically by shared tools
 
 	// Target packages to analyze
 	packages := []string{PkgRetry, PkgJsonUtil, PkgTyped}
@@ -68,7 +61,7 @@ func main() {
 
 	// Create filesystem tools for use by the agent
 	fmt.Println("\n🛠️  Setting up filesystem tools...")
-	fsTools := createFSTools(projectRoot)
+	fsTools := tools.GetAllFilesystemTools()
 
 	// Define signature for analysis plan
 	fmt.Println("\n📋 Defining analysis plan signature...")
@@ -179,21 +172,21 @@ STAGE 3: RELATIONSHIP AND DEPENDENCY MAPPING
 
 		// Base scoring for required fields
 		if hasExecSummary && len(execSummary) > 100 {
-			score += 2.0  // Higher weight for comprehensive executive summary
+			score += 2.0 // Higher weight for comprehensive executive summary
 		} else if hasExecSummary && len(execSummary) > 50 {
-			score += 1.0  // Partial credit for basic summary
+			score += 1.0 // Partial credit for basic summary
 		}
 
 		if hasArchDiagram && len(archDiagram) > 100 {
-			score += 2.0  // Higher weight for detailed architecture diagram
+			score += 2.0 // Higher weight for detailed architecture diagram
 		} else if hasArchDiagram && len(archDiagram) > 50 {
-			score += 1.0  // Partial credit for basic diagram
+			score += 1.0 // Partial credit for basic diagram
 		}
 
 		if hasImprovement && len(improvement) > 150 {
-			score += 2.0  // Higher weight for comprehensive improvements
+			score += 2.0 // Higher weight for comprehensive improvements
 		} else if hasImprovement && len(improvement) > 50 {
-			score += 1.0  // Partial credit for basic improvements
+			score += 1.0 // Partial credit for basic improvements
 		}
 
 		// Scoring for additional comprehensive fields
@@ -319,175 +312,11 @@ STAGE 3: RELATIONSHIP AND DEPENDENCY MAPPING
 	saveReport(combinedAnalyses, finalResult)
 }
 
-// Create filesystem tools with project root context
-func createFSTools(projectRoot string) []dsgo.Tool {
-	// ListFiles lists directory contents recursively up to a specified depth
-	listFiles := func(ctx context.Context, args map[string]any) (any, error) {
-		fmt.Printf("🛠️  Tool Call: list_files %v\n", args)
-		directory, ok := args["directory"].(string)
-		if !ok {
-			// Default to project root if no directory specified
-			directory = projectRoot
-		} else {
-			// If relative path provided, make it absolute from project root
-			if !filepath.IsAbs(directory) {
-				directory = filepath.Join(projectRoot, directory)
-			}
-		}
-
-		depthVal, ok := args["depth"].(float64)
-		if !ok {
-			depthVal = 3 // default depth
-		}
-		depth := int(depthVal)
-
-		var files []string
-		err := filepath.WalkDir(directory, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			// Calculate relative depth
-			relPath, err := filepath.Rel(projectRoot, path)
-			if err != nil {
-				return err
-			}
-			currentDepth := len(strings.Split(relPath, string(os.PathSeparator)))
-
-			if currentDepth > depth {
-				if d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-
-			if d.IsDir() {
-				files = append(files, relPath+"/")
-			} else {
-				files = append(files, relPath)
-			}
-			return nil
-		})
-
-		if err != nil {
-			return nil, fmt.Errorf("error walking directory: %w", err)
-		}
-
-		return map[string]interface{}{
-			"files":     files,
-			"directory": directory,
-		}, nil
-	}
-
-	// ReadFile reads the content of a specific file
-	readFile := func(ctx context.Context, args map[string]any) (any, error) {
-		fmt.Printf("🛠️  Tool Call: read_file %v\n", args)
-		filepathArg, ok := args["filepath"].(string)
-		if !ok {
-			return nil, fmt.Errorf("filepath parameter is required")
-		}
-
-		// If relative path provided, make it absolute from project root
-		if !filepath.IsAbs(filepathArg) {
-			filepathArg = filepath.Join(projectRoot, filepathArg)
-		}
-
-		content, err := os.ReadFile(filepathArg)
-		if err != nil {
-			return nil, fmt.Errorf("error reading file: %w", err)
-		}
-
-		// Limit content size to prevent overwhelming the LM
-		contentStr := string(content)
-		if len(contentStr) > 10000 { // 10KB limit
-			contentStr = contentStr[:10000] + "\n... [content truncated]"
-		}
-
-		return map[string]interface{}{
-			"content":  contentStr,
-			"filepath": filepathArg,
-		}, nil
-	}
-
-	// SearchFiles searches for files matching a glob pattern
-	searchFiles := func(ctx context.Context, args map[string]any) (any, error) {
-		fmt.Printf("🛠️  Tool Call: search_files %v\n", args)
-		directory, ok := args["directory"].(string)
-		if !ok {
-			directory = projectRoot
-		} else {
-			if !filepath.IsAbs(directory) {
-				directory = filepath.Join(projectRoot, directory)
-			}
-		}
-
-		pattern, ok := args["pattern"].(string)
-		if !ok {
-			return nil, fmt.Errorf("pattern parameter is required")
-		}
-
-		pattern = filepath.Join(directory, pattern)
-		matches, err := filepath.Glob(pattern)
-		if err != nil {
-			return nil, fmt.Errorf("error searching files: %w", err)
-		}
-
-		// Convert to relative paths for cleaner output
-		relativeMatches := make([]string, len(matches))
-		for i, match := range matches {
-			relativeMatches[i], _ = filepath.Rel(projectRoot, match)
-		}
-
-		return map[string]interface{}{
-			"files":     relativeMatches,
-			"directory": directory,
-			"pattern":   pattern,
-		}, nil
-	}
-
-	// Tool for listing directory contents
-	listFilesTool := dsgo.NewTool("list_files", "List files and directories in a given path up to a specified depth", listFiles).
-		AddParameter("directory", "string", "The directory path to list (relative to project root, defaults to project root)", false).
-		AddParameter("depth", "int", "Maximum depth to traverse (default: 3)", false)
-
-	// Tool for reading file content
-	readFileTool := dsgo.NewTool("read_file", "Read the content of a specific file", readFile).
-		AddParameter("filepath", "string", "The path to the file to read (relative to project root)", true)
-
-	// Tool for searching files by glob pattern
-	searchFilesTool := dsgo.NewTool("search_files", "Search for files matching a glob pattern", searchFiles).
-		AddParameter("directory", "string", "The directory to search in (relative to project root, defaults to project root)", false).
-		AddParameter("pattern", "string", "Glob pattern to match (e.g., *.go, **/*.txt)", true)
-
-	return []dsgo.Tool{*listFilesTool, *readFileTool, *searchFilesTool}
-}
-
 func getStringOrZero(prediction *dsgo.Prediction, key string) string {
 	if val, ok := prediction.GetString(key); ok {
 		return val
 	}
 	return ""
-}
-
-func findProjectRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
-	currentDir := dir
-	for {
-		goModPath := filepath.Join(dir, "go.mod")
-		if _, err := os.Stat(goModPath); err == nil {
-			return dir, nil
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("go.mod not found in current directory (%s) or any parent directory. Please run this tool from within a Go module", currentDir)
-		}
-		dir = parent
-	}
 }
 
 func saveReport(rawAnalyses string, finalResult *dsgo.Prediction) {
@@ -583,7 +412,7 @@ func performStructuralAnalysis(ctx context.Context, lm dsgo.LM, fsTools []dsgo.T
 		AddOutput("key_files", "array", "List of key files identified in the packages").
 		AddOutput("structural_findings", dsgo.FieldTypeString, "Findings about the structural organization")
 
-	react := dsgo.NewReAct(structureSig, lm, fsTools).WithVerbose(true).WithMaxIterations(256)
+	react := dsgo.NewReAct(structureSig, lm, fsTools).WithVerbose(false).WithMaxIterations(256)
 
 	result, err := react.Forward(ctx, map[string]any{
 		"packages": packages,
@@ -621,12 +450,12 @@ func performDetailedAnalysis(ctx context.Context, lm dsgo.LM, fsTools []dsgo.Too
 		AddOutput("error_handling_patterns", dsgo.FieldTypeString, "Error handling strategies and patterns").
 		AddOutput("code_quality_indicators", dsgo.FieldTypeString, "Indicators of code quality and maintainability")
 
-	react := dsgo.NewReAct(detailedSig, lm, fsTools).WithVerbose(true).WithMaxIterations(256)
+	react := dsgo.NewReAct(detailedSig, lm, fsTools).WithVerbose(false).WithMaxIterations(256)
 
 	result, err := react.Forward(ctx, map[string]any{
-		"packages":         packages,
+		"packages":          packages,
 		"previous_analysis": previousAnalysis,
-		"task":             fmt.Sprintf("Perform detailed code analysis of the %s packages. Focus on interfaces, types, core functions, API design patterns, error handling, and code quality.", strings.Join(packages, ", ")),
+		"task":              fmt.Sprintf("Perform detailed code analysis of the %s packages. Focus on interfaces, types, core functions, API design patterns, error handling, and code quality.", strings.Join(packages, ", ")),
 	})
 	if err != nil {
 		return "", err

@@ -40,7 +40,7 @@ The program will:
 1.  Display the generated **Analysis Plan**.
 2.  Show the agent's **Actions** (tool calls) as it explores the codebase (if verbose logging is enabled).
 3.  Print a **Final Analysis** summary, findings, and recommendations.
-4.  Save a detailed report to a timestamped text file (e.g., `code_analysis_2023-10-25_...txt`).
+4.  Save a detailed report to a timestamped text file (e.g., `package_analysis_2023-10-25_...txt`).
 
 ## How it Works
 

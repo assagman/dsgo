@@ -36,7 +36,7 @@ Thumbs.db
 # Examples binaries
 examples/*/main
 examples/*/*.exe
-examples/code_analysis/*.txt
+examples/**/*.txt
 
 # Example test artifacts
 tmp_*.log
