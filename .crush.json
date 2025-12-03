@@ -10,16 +10,6 @@
     }
   },
   "mcp": {
-    "tavily": {
-      "type": "stdio",
-      "command": "bunx",
-      "args": ["-y", "tavily-mcp@latest"],
-      "timeout": 300,
-      "disabled": false,
-      "headers": {
-        "Authorization": "Bearer $TAVILY_API_KEY"
-      }
-    },
     "exa": {
       "type": "stdio",
       "command": "bunx",
