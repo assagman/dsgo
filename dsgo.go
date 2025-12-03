@@ -158,14 +158,78 @@ var (
 	GenerateRequestID = logging.GenerateRequestID
 )
 
-// Re-export typed non-generic utility functions
-// Note: Generic constructor functions (NewPredict, NewCoT, NewReAct, NewPredictWithDescription)
-// cannot be assigned to variables directly. Users should use:
+// Typed constructor functions for type-safe modules
+// These functions provide compile-time type safety and better IDE support
+// compared to the traditional map-based approach
+
+// NewTypedPredict creates a new typed function module using Predict with type-safe I/O
+// The I and O types must be structs with dsgo struct tags defining input/output fields
+// Example:
 //
-//	dsgo.NewTypedPredict[Input, Output](lm)
-//	dsgo.NewTypedCoT[Input, Output](lm)
-//	dsgo.NewTypedReAct[Input, Output](lm)
-//	dsgo.NewTypedPredictWithDesc[Input, Output](lm, description)
+//	type Input struct { Query string `dsgo:"input,desc=Search query"` }
+//	type Output struct { Result string `dsgo:"output,desc=Search result"` }
+//
+//	predictor, err := dsgo.NewTypedPredict[Input, Output](lm)
+func NewTypedPredict[I, O any](lm LM) (*Func[I, O], error) {
+	return typed.NewPredict[I, O](lm)
+}
+
+// NewTypedCoT creates a new typed function module using ChainOfThought with type-safe I/O
+// ChainOfThought enables reasoning capabilities by having the model think step-by-step
+// The I and O types must be structs with dsgo struct tags defining input/output fields
+// Example:
+//
+//	type Input struct { Problem string `dsgo:"input,desc=Problem to solve"` }
+//	type Output struct { Solution string `dsgo:"output,desc=Step-by-step solution"` }
+//
+//	cot, err := dsgo.NewTypedCoT[Input, Output](lm)
+func NewTypedCoT[I, O any](lm LM) (*Func[I, O], error) {
+	return typed.NewCoT[I, O](lm)
+}
+
+// NewTypedReAct creates a new typed function module using ReAct with type-safe I/O
+// ReAct combines reasoning and acting, allowing the model to use tools to solve problems
+// The I and O types must be structs with dsgo struct tags defining input/output fields
+// Tools enable the model to interact with external systems (filesystem, APIs, etc.)
+// Example:
+//
+//	type Input struct { Task string `dsgo:"input,desc=Task requiring tool usage"` }
+//	type Output struct { Result string `dsgo:"output,desc=Result after tool usage"` }
+//
+//	react, err := dsgo.NewTypedReAct[Input, Output](lm, tools)
+func NewTypedReAct[I, O any](lm LM, tools []Tool) (*Func[I, O], error) {
+	return typed.NewReAct[I, O](lm, tools)
+}
+
+// NewTypedProgramOfThought creates a new typed function module using ProgramOfThought with type-safe I/O
+// ProgramOfThought generates and optionally executes code to solve problems
+// The I and O types must be structs with dsgo struct tags defining input/output fields
+// Language specifies the target programming language ("python", "javascript", "go", etc.)
+// Example:
+//
+//	type Input struct { Problem string `dsgo:"input,desc=Problem to solve with code"` }
+//	type Output struct { Answer string `dsgo:"output,desc=Answer computed by code"` }
+//
+//	pot, err := dsgo.NewTypedProgramOfThought[Input, Output](lm, "python")
+func NewTypedProgramOfThought[I, O any](lm LM, language string) (*Func[I, O], error) {
+	return typed.NewProgramOfThought[I, O](lm, language)
+}
+
+// NewTypedPredictWithDescription creates a typed Predict function with a custom description
+// This is useful when you want to provide more context about what the module does
+// The I and O types must be structs with dsgo struct tags defining input/output fields
+// Example:
+//
+//	type Input struct { Text string `dsgo:"input,desc=Text to analyze"` }
+//	type Output struct { Sentiment string `dsgo:"output,desc=Detected sentiment"` }
+//
+//	predictor, err := dsgo.NewTypedPredictWithDescription[Input, Output](lm, "Analyze text sentiment")
+func NewTypedPredictWithDescription[I, O any](lm LM, description string) (*Func[I, O], error) {
+	return typed.NewPredictWithDescription[I, O](lm, description)
+}
+
+// Re-export typed non-generic utility functions
+// These functions provide utilities for working with typed structs and signatures
 var (
 	StructToSignature = typed.StructToSignature
 	StructToMap       = typed.StructToMap
