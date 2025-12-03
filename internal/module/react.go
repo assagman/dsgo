@@ -141,9 +141,11 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 		// Copy options to avoid mutation
 		options := r.Options.Copy()
 
-		// In final mode, disable tools and inject instruction for final answer
+		// In final mode, signal we don't want tool calls but keep tools available
+		// for providers that require tool definitions when conversation has tool history
+		// (e.g., Amazon Bedrock requires toolConfig when toolUse/toolResult blocks exist)
 		if finalMode {
-			options.Tools = nil
+			options.Tools = r.Tools // Keep tools available for provider validation
 			options.ToolChoice = "none"
 
 			// Inject user message to prompt for final answer
@@ -738,8 +740,10 @@ func (r *ReAct) runExtract(ctx context.Context, messages []core.Message, inputs 
 	})
 
 	// Copy options and force JSON mode
+	// Keep tools available for providers that require tool definitions when
+	// conversation has tool history (e.g., Amazon Bedrock)
 	options := r.Options.Copy()
-	options.Tools = nil
+	options.Tools = r.Tools
 	options.ToolChoice = "none"
 
 	if r.LM.SupportsJSON() {

@@ -1324,9 +1324,13 @@ func TestReAct_ExtractionWithReasoning(t *testing.T) {
 		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			iterationCount++
 
-			// Always return tool calls to force hitting MaxIterations
+			// Check ToolChoice to determine mode (tools are now always present for provider compatibility)
+			// ToolChoice == "auto" means tool-using mode, ToolChoice == "none" means final/extraction mode
+			toolsEnabled := options.ToolChoice != "none" && len(options.Tools) > 0
+
+			// Tool-using mode: return tool calls to force hitting MaxIterations
 			// Use different queries to avoid stagnation detection
-			if len(options.Tools) > 0 {
+			if toolsEnabled {
 				query := fmt.Sprintf("test query %d", iterationCount)
 				return &core.GenerateResult{
 					Content: "Using search tool",

@@ -278,6 +278,10 @@ func (o *openRouter) buildRequest(messages []core.Message, options *core.Generat
 		req["presence_penalty"] = options.PresencePenalty
 	}
 
+	// Detect provider-specific models that don't support tool_choice: "none"
+	isAmazonModel := strings.Contains(o.Model, "amazon/") || strings.Contains(o.Model, "bedrock")
+	isZAIModel := strings.Contains(o.Model, "z-ai/")
+
 	// Add tools if supported
 	if len(options.Tools) > 0 {
 		tools := make([]map[string]any, 0, len(options.Tools))
@@ -288,7 +292,13 @@ func (o *openRouter) buildRequest(messages []core.Message, options *core.Generat
 
 		if options.ToolChoice != "" && options.ToolChoice != "auto" {
 			if options.ToolChoice == "none" {
-				req["tool_choice"] = "none"
+				// Some providers don't support tool_choice: "none"
+				// - Amazon Bedrock: only supports "auto", "any", or specific tool
+				// - Z.AI: only supports "auto"
+				// For these, we skip setting "none" and handle it below
+				if !isAmazonModel && !isZAIModel {
+					req["tool_choice"] = "none"
+				}
 			} else {
 				req["tool_choice"] = map[string]any{
 					"type": "function",
@@ -298,6 +308,41 @@ func (o *openRouter) buildRequest(messages []core.Message, options *core.Generat
 				}
 			}
 		}
+	}
+
+	// Check if conversation contains tool-related messages
+	hasToolContent := false
+	if isAmazonModel || isZAIModel {
+		for _, msg := range messages {
+			if msg.Role == "tool" || (msg.Role == "assistant" && len(msg.ToolCalls) > 0) {
+				hasToolContent = true
+				break
+			}
+		}
+	}
+
+	// Handle Amazon Bedrock specific requirements
+	if isAmazonModel && hasToolContent {
+		// Amazon Bedrock requires toolConfig when conversation contains toolUse/toolResult blocks
+		// CRITICAL: Bedrock does NOT support toolChoice: "none" - only "auto", "any", or specific tool
+		// When caller requests "none" (final answer mode), we must:
+		// 1. Still provide tools in the request (for validation)
+		// 2. Force toolChoice to "auto" (Bedrock limitation)
+		// 3. Rely on the prompt to discourage tool usage
+		req["tool_config"] = map[string]any{
+			"toolChoice": map[string]any{
+				"auto": map[string]any{},
+			},
+		}
+		// Override any "none" tool_choice to "auto" for Bedrock compatibility
+		req["tool_choice"] = "auto"
+	}
+
+	// Handle Z.AI specific requirements (only supports tool_choice: "auto")
+	if isZAIModel && len(options.Tools) > 0 {
+		// Z.AI models only support tool_choice: "auto"
+		// Force to "auto" regardless of what was requested
+		req["tool_choice"] = "auto"
 	}
 
 	return req
