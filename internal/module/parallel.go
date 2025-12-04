@@ -294,15 +294,15 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 		}
 	}
 
-	// Evaluate outcome
-	if len(successes) == 0 {
-		predErr = fmt.Errorf("parallel: all %d/%d tasks failed: %v", failureCount, len(batch), firstNErrors(errs, 3))
+	// With fail-fast, any failure is an error (check before all-failed case)
+	if p.failFast && failureCount > 0 {
+		predErr = fmt.Errorf("parallel: fail-fast triggered by %d failure(s) (successes: %d/%d)", failureCount, len(successes), len(batch))
 		return nil, predErr
 	}
 
-	// With fail-fast, any failure is an error
-	if p.failFast && failureCount > 0 {
-		predErr = fmt.Errorf("parallel: fail-fast triggered by %d failure(s) (successes: %d/%d)", failureCount, len(successes), len(batch))
+	// Evaluate outcome
+	if len(successes) == 0 {
+		predErr = fmt.Errorf("parallel: all %d/%d tasks failed: %v", failureCount, len(batch), firstNErrors(errs, 3))
 		return nil, predErr
 	}
 
