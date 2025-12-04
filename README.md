@@ -407,7 +407,7 @@ result, err := parallel.Forward(ctx, inputs)
 ✅ **FallbackAdapter** - Thread-safe with atomic operations  
 ✅ **All Modules** - Thread-safe including stateful modules with History  
 ✅ **BestOfN** - Automatically creates independent instances for parallel execution  
-✅ **Parallel** - Safe with shared module instances  
+✅ **Parallel** - Automatically clones modules per task for state isolation  
 ✅ **Logging** - Thread-safe global state management  
 
 ### Performance Impact
@@ -435,6 +435,9 @@ bestof := module.NewBestOfN(instances[0], n).WithParallel(true)
 // Same code is now completely safe
 predictor := module.NewPredict(sig, lm).WithHistory(core.NewHistory())
 bestof := module.NewBestOfN(predictor, n).WithParallel(true) // Automatically safe
+
+// Parallel module now also automatically safe
+parallel := module.NewParallel(predictor).WithMaxWorkers(50) // Automatically clones per task
 ```
 
 ---
@@ -665,7 +668,6 @@ make test-matrix-sample N=3
 | **[03-quality-refine-bestof](examples/03-quality-refine-bestof/)** | Output quality improvement | Refine, BestOfN modules |
 | **[04-structured-programs](examples/04-structured-programs/)** | Module composition | Program module |
 | **[05-resilience-observability](examples/05-resilience-observability/)** | Production patterns | Caching, logging, error handling |
-| **[06-parallel](examples/06-parallel/)** | Concurrent processing | Parallel module |
 
 ### Running Examples
 

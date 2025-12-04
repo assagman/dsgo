@@ -28,15 +28,14 @@ type ParallelMetrics struct {
 
 // Parallel executes a module across multiple inputs concurrently.
 //
-// IMPORTANT: When using a single shared module instance with WithMaxWorkers > 1,
-// ensure the module is stateless. Modules that maintain internal state
-// (e.g., Predict with History) MUST use either NewParallelWithFactory or
-// NewParallelWithInstances to provide isolated instances per task/worker.
+// By default, Parallel creates isolated module instances by cloning the base module
+// for each task, ensuring no shared state between parallel executions. This provides
+// semantic isolation similar to DSPy's Parallel behavior.
 //
-// Safe parallel usage patterns:
-//   - Use stateless modules (no internal state mutation)
-//   - Create N independent instances via factory function
-//   - Provide pre-created instances array
+// Advanced usage patterns:
+//   - Default: Module is cloned per task (isolated state)
+//   - NewParallelWithFactory: Custom instance creation per task
+//   - NewParallelWithInstances: Pre-created instances with controlled sharing
 //
 // Input modes:
 //   - Batch: inputs["_batch"] = []map[string]any
@@ -58,9 +57,9 @@ type Parallel struct {
 	repeat         int
 }
 
-// NewParallel creates a Parallel module with a shared module instance.
-// WARNING: Only use with stateless modules. For modules with state (e.g., History),
-// use NewParallelWithFactory or NewParallelWithInstances instead.
+// NewParallel creates a Parallel module with automatic module cloning.
+// The base module is cloned for each task to ensure state isolation.
+// This is the recommended default for all modules, including stateful ones.
 func NewParallel(module core.Module) *Parallel {
 	return &Parallel{
 		module:         module,
@@ -226,7 +225,8 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 		if len(p.instances) > 0 {
 			return p.instances[i%len(p.instances)]
 		}
-		return p.module
+		// Default: clone the base module for each task to ensure state isolation
+		return p.module.Clone()
 	}
 
 	// Start workers

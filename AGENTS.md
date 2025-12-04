@@ -593,6 +593,8 @@ Don't create intermediate docs like:
 
 ✅ **BestOfN Parallel Safety**: Automatically safe with all module types, including stateful modules with History.
 
+✅ **Parallel Module Safety**: Automatically clones modules per task to ensure state isolation, eliminating race conditions.
+
 ⚠️ **Streaming**: StreamResult channels must be fully consumed to avoid goroutine leaks.
 
 ⚠️ **Cache Mutations**: Cache entries are deep-copied to prevent mutations from affecting cached values.
