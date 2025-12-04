@@ -578,25 +578,29 @@ Run multiple modules concurrently:
 ```go
 // Create multiple modules
 translator := module.NewPredict(translateSig, lm)
-summarizer := module.NewPredict(summarizeSig, lm)
+// Create a module to run in parallel
 classifier := module.NewPredict(classifySig, lm)
 
-// Execute in parallel
-parallel := module.NewParallel().
-    AddModule("translate", translator).
-    AddModule("summarize", summarizer).
-    AddModule("classify", classifier)
+// Execute in parallel with automatic state isolation
+parallel := module.NewParallel(classifier).WithMaxWorkers(3)
 
+// Process multiple inputs in parallel
 result, _ := parallel.Forward(ctx, map[string]any{
-    "translate_text": "Hello world",
-    "summarize_text": "Long article text...",
-    "classify_text": "This is a technical document...",
+    "text": []string{
+        "I love this product!",
+        "This is terrible.",
+        "It's okay, nothing special.",
+    },
 })
 
-// Access results from all modules
-translation := result.GetString("translate:translation")
-summary := result.GetString("summarize:summary")
-category := result.GetString("classify:category")
+// Access results from parallel execution
+if completions := result.Completions; completions != nil {
+    for i, completion := range completions {
+        if sentiment, ok := completion["sentiment"].(string); ok {
+            fmt.Printf("Text %d: %s\n", i+1, sentiment)
+        }
+    }
+}
 ```
 
 ---
@@ -618,7 +622,7 @@ category := result.GetString("classify:category")
 | Improvement | Refine | `module.NewRefine(sig, lm, instruction, maxIter)` |
 | Quality | BestOfN | `module.NewBestOfN(sig, lm, n)` |
 | Composition | Program | `module.NewProgram().AddModule(...)` |
-| Parallel | Parallel | `module.NewParallel().AddModule(...)` |
+| Parallel | Parallel | `module.NewParallel(module).WithMaxWorkers(n)` |
 
 ### Common Patterns
 
