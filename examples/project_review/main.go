@@ -453,6 +453,7 @@ func main() {
 		})
 
 	fileParallel := dsgo.NewParallel(fileModule).
+		WithVerbose(true).
 		WithMaxWorkers(runtime.NumCPU()).
 		WithReturnAll(true).
 		WithMaxFailures(-1) // allow partial failures; let retry loop handle them
@@ -566,6 +567,7 @@ func main() {
 		})
 
 	pkgParallel := dsgo.NewParallel(pkgModule).
+		WithVerbose(true).
 		WithMaxWorkers(4).
 		WithReturnAll(true).
 		WithMaxFailures(-1) // allow partial failures; let retry loop handle them
@@ -671,6 +673,7 @@ func main() {
 		})
 
 	projectParallel := dsgo.NewParallel(projectModule).
+		WithVerbose(true).
 		WithRepeat(3). // run three project-level syntheses in parallel
 		WithReturnAll(true).
 		WithMaxFailures(1)
