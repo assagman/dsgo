@@ -106,7 +106,7 @@ func (n *NoOpLogger) Error(ctx context.Context, msg string, fields map[string]an
 
 // Global logger instance
 var (
-	globalLogger Logger = &NoOpLogger{}
+	globalLogger Logger = NewDefaultLogger(LevelWarn)
 	loggerMu     sync.RWMutex
 )
 

@@ -463,6 +463,35 @@ fmt.Printf("Parse attempts: %d\n", result.ParseAttempts)
 fmt.Printf("Fallback used: %v\n", result.FallbackUsed)
 ```
 
+### Logging
+
+DSGo includes built-in logging that's enabled by default at WARN level:
+
+```go
+// Logging is automatically enabled at WARN level
+// No setup required for basic warnings and errors
+
+// Optional: change log level
+dsgo.SetLogger(dsgo.NewDefaultLogger(dsgo.LevelInfo))
+
+// Optional: disable logging
+dsgo.SetLogger(nil)
+```
+
+**Verbose Module Output**
+
+Some modules support per-instance verbose output that bypasses global log level:
+
+```go
+// Parallel: shows per-task progress
+parallel := dsgo.NewParallel(module).WithVerbose(true)
+
+// ReAct: shows thought/action/observation steps
+react := dsgo.NewReAct(signature, lm, tools).WithVerbose(true)
+```
+
+Verbose output prints directly to stdout and is independent of the global logger configuration.
+
 ### Request Logging
 
 ```go

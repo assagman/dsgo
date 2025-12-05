@@ -27,7 +27,8 @@ import "github.com/assagman/dsgo/logging"
 import "github.com/assagman/dsgo/logging"
 
 func main() {
-    // Enable logging with INFO level
+    // Logging is enabled by default at WARN level
+    // Optionally change level:
     logging.SetLogger(logging.NewDefaultLogger(logging.LevelInfo))
     
     // Your DSGo code here...
@@ -186,10 +187,13 @@ func processBatch(batchID string, items []Item) {
 ### Different Log Levels
 
 ```go
+// Default: WARN and ERROR only (enabled automatically)
+// No SetLogger() needed for basic logging
+
 // Development: See everything
 logging.SetLogger(logging.NewDefaultLogger(logging.LevelDebug))
 
-// Production: API calls only
+// Production: INFO, WARN, and ERROR
 logging.SetLogger(logging.NewDefaultLogger(logging.LevelInfo))
 
 // High-volume production: Errors only
@@ -245,8 +249,8 @@ See [LOG_FORMAT.md](../examples/logging_tracing/LOG_FORMAT.md) for detailed form
 
 ## Performance
 
-- **NoOpLogger**: Zero overhead (default)
-- **DefaultLogger**: ~1-2µs per log line
+- **NoOpLogger**: Zero overhead (when explicitly set)
+- **DefaultLogger**: ~1-2µs per log line (default at WARN level)
 - **Request ID**: 8 bytes allocation, cryptographically random
 - **Context Propagation**: No copying, uses Go's context.Value
 

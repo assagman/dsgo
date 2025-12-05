@@ -141,9 +141,13 @@ func TestGlobalLogger(t *testing.T) {
 	original := GetLogger()
 	defer SetLogger(original)
 
-	// Test default (NoOpLogger)
-	if _, ok := GetLogger().(*NoOpLogger); !ok {
-		t.Error("Expected default logger to be NoOpLogger")
+	// Test default (DefaultLogger with LevelWarn)
+	defaultLogger, ok := GetLogger().(*DefaultLogger)
+	if !ok {
+		t.Error("Expected default logger to be DefaultLogger")
+	}
+	if defaultLogger.level != LevelWarn {
+		t.Errorf("Expected default logger level to be WARN, got %v", defaultLogger.level)
 	}
 
 	// Set custom logger

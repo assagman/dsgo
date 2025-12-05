@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 func TestParallelBasic(t *testing.T) {
@@ -198,7 +199,7 @@ func TestParallelWithInstances(t *testing.T) {
 
 	// Create 3 independent instances
 	instances := make([]core.Module, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		val := i + 1
 		lm := &MockLM{
 			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
@@ -679,7 +680,7 @@ func TestParallelThreadSafetyNoRaceConditions(t *testing.T) {
 
 	// Create batch inputs
 	batch := make([]map[string]any, 50)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		batch[i] = map[string]any{
 			"task_id": i,
 			"message": fmt.Sprintf("Task %d", i),
@@ -768,7 +769,7 @@ func TestParallelThreadSafetyWithFactory(t *testing.T) {
 
 	// Create batch inputs
 	batch := make([]map[string]any, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		batch[i] = map[string]any{
 			"task_id": i,
 			"message": fmt.Sprintf("Task %d", i),
@@ -821,7 +822,7 @@ func TestParallelThreadSafetyWithInstances(t *testing.T) {
 	numInstances := runtime.NumCPU()
 	instances := make([]core.Module, numInstances)
 
-	for i := 0; i < numInstances; i++ {
+	for i := range numInstances {
 		instanceID := i
 		history := core.NewHistory() // Each instance has its own History
 		lm := &MockLM{
@@ -842,7 +843,7 @@ func TestParallelThreadSafetyWithInstances(t *testing.T) {
 
 	// Create batch inputs
 	batch := make([]map[string]any, 80)
-	for i := 0; i < 80; i++ {
+	for i := range 80 {
 		batch[i] = map[string]any{
 			"task_id": i,
 			"message": fmt.Sprintf("Task %d", i),
@@ -878,7 +879,7 @@ func TestParallelThreadSafetyWithInstances(t *testing.T) {
 	}
 
 	// Each instance should have been used (roughly evenly distributed)
-	for i := 0; i < numInstances; i++ {
+	for i := range numInstances {
 		if instanceUsage[i] == 0 {
 			t.Errorf("Instance %d was not used", i)
 		}
@@ -917,7 +918,7 @@ func TestParallelThreadSafetyStatelessModule(t *testing.T) {
 
 	// Create batch inputs
 	batch := make([]map[string]any, 200)
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		batch[i] = map[string]any{
 			"task_id": i,
 		}
@@ -993,7 +994,7 @@ func TestParallelThreadSafetyStressTest(t *testing.T) {
 
 	// Create batch inputs
 	batch := make([]map[string]any, numTasks)
-	for i := 0; i < numTasks; i++ {
+	for i := range numTasks {
 		batch[i] = map[string]any{
 			"iteration": i,
 			"worker_id": i % numWorkers,
@@ -1081,7 +1082,7 @@ func TestParallelDefaultCloning(t *testing.T) {
 
 	// Create batch inputs
 	batch := make([]map[string]any, 20)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		batch[i] = map[string]any{
 			"task_id": i,
 		}
@@ -1200,7 +1201,7 @@ func TestParallelThreadSafetyHistoryCorruption(t *testing.T) {
 	}
 
 	// Initialize batch
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		inputs["_batch"].([]map[string]any)[i] = map[string]any{
 			"task_id": i,
 		}
@@ -1241,4 +1242,804 @@ func TestParallelThreadSafetyHistoryCorruption(t *testing.T) {
 	if sharedHistory.Len() > 200 { // Expected would be around 200 (2 messages per task)
 		t.Logf("WARNING: History length (%d) is much larger than expected, indicating possible corruption", sharedHistory.Len())
 	}
+}
+
+// Test Parallel logging functionality
+
+// capturingLogger is a test logger that captures log calls for verification
+type capturingLogger struct {
+	mu     sync.Mutex
+	infos  []logEntry
+	debugs []logEntry
+}
+
+type logEntry struct {
+	level   string
+	message string
+	fields  map[string]any
+}
+
+func (c *capturingLogger) Info(ctx context.Context, message string, fields map[string]any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.infos = append(c.infos, logEntry{
+		level:   "info",
+		message: message,
+		fields:  fields,
+	})
+}
+
+func (c *capturingLogger) Debug(ctx context.Context, message string, fields map[string]any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.debugs = append(c.debugs, logEntry{
+		level:   "debug",
+		message: message,
+		fields:  fields,
+	})
+}
+
+func (c *capturingLogger) Warn(ctx context.Context, message string, fields map[string]any) {
+	// Not used in these tests
+}
+
+func (c *capturingLogger) Error(ctx context.Context, message string, fields map[string]any) {
+	// Not used in these tests
+}
+
+func (c *capturingLogger) getLastInfo() *logEntry {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.infos) == 0 {
+		return nil
+	}
+	return &c.infos[len(c.infos)-1]
+}
+
+func (c *capturingLogger) getDebugEntries() []logEntry {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	result := make([]logEntry, len(c.debugs))
+	copy(result, c.debugs)
+	return result
+}
+
+func (c *capturingLogger) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.infos = c.infos[:0]
+	c.debugs = c.debugs[:0]
+}
+
+// mockLMWithName is a MockLM that returns a specific model name
+type mockLMWithName struct {
+	*MockLM
+	modelName string
+}
+
+func (m *mockLMWithName) Name() string {
+	return m.modelName
+}
+
+func TestParallelLoggingBatchLevel(t *testing.T) {
+	// Setup capturing logger
+	capturingLog := &capturingLogger{}
+	originalLogger := logging.GetLogger()
+	defer func() {
+		logging.SetLogger(originalLogger)
+	}()
+	logging.SetLogger(capturingLog)
+
+	// Create signature and LM with known model name
+	sig := core.NewSignature("Test").
+		AddInput("file_path", core.FieldTypeString, "File path").
+		AddOutput("analysis", core.FieldTypeString, "Analysis result")
+
+	lm := &mockLMWithName{
+		MockLM: &MockLM{
+			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+				return &core.GenerateResult{
+					Content: "[[ ## analysis ## ]]\nAnalysis complete",
+					Usage:   core.Usage{TotalTokens: 5},
+				}, nil
+			},
+		},
+		modelName: "test-model-gpt-4o",
+	}
+
+	predictor := NewPredict(sig, lm)
+	parallel := NewParallel(predictor).
+		WithMaxWorkers(2).
+		WithMaxFailures(1).
+		WithFailFast(false)
+
+	// Reset logger before test
+	capturingLog.reset()
+
+	inputs := map[string]any{
+		"_batch": []map[string]any{
+			{"file_path": "file1.go"},
+			{"file_path": "file2.go"},
+			{"file_path": "file3.go"},
+		},
+	}
+
+	_, err := parallel.Forward(context.Background(), inputs)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	// Verify batch-level info log
+	info := capturingLog.getLastInfo()
+	if info == nil {
+		t.Fatal("Expected at least one info log entry")
+	}
+
+	if info.message != "Parallel batch started" {
+		t.Errorf("Expected message 'Parallel batch started', got %q", info.message)
+	}
+
+	// Verify required fields
+	expectedFields := map[string]string{
+		"module":        "Parallel",
+		"inner_module":  "Predict",
+		"lm_model":      "test-model-gpt-4o",
+		"batch_size":    "3",
+		"max_workers":   "2",
+		"max_failures":  "1",
+		"fail_fast":     "false",
+		"return_all":    "true",
+		"only_success":  "true",
+		"batch_key":     "_batch",
+		"repeat_factor": "1",
+	}
+
+	for field, expectedValue := range expectedFields {
+		actualValue, ok := info.fields[field]
+		if !ok {
+			t.Errorf("Missing field %q in info log", field)
+			continue
+		}
+		actualStr := fmt.Sprintf("%v", actualValue)
+		if actualStr != expectedValue {
+			t.Errorf("Field %q: expected %q, got %q", field, expectedValue, actualStr)
+		}
+	}
+}
+
+func TestParallelLoggingPerTask(t *testing.T) {
+	// Setup capturing logger
+	capturingLog := &capturingLogger{}
+	originalLogger := logging.GetLogger()
+	defer func() {
+		logging.SetLogger(originalLogger)
+	}()
+	logging.SetLogger(capturingLog)
+
+	// Create signature and LM
+	sig := core.NewSignature("Test").
+		AddInput("package_name", core.FieldTypeString, "Package name").
+		AddInput("file_contents", core.FieldTypeString, "File contents").
+		AddOutput("result", core.FieldTypeString, "Result")
+
+	lm := &mockLMWithName{
+		MockLM: &MockLM{
+			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+				return &core.GenerateResult{
+					Content: "[[ ## result ## ]]\nProcessed",
+					Usage:   core.Usage{TotalTokens: 3},
+				}, nil
+			},
+		},
+		modelName: "openai/gpt-4o-mini",
+	}
+
+	predictor := NewPredict(sig, lm)
+	parallel := NewParallel(predictor).
+		WithMaxWorkers(2)
+
+	// Reset logger before test
+	capturingLog.reset()
+
+	// Create inputs with long content to test truncation
+	longContent := strings.Repeat("This is a very long file content that should be truncated. ", 100)
+	inputs := map[string]any{
+		"_batch": []map[string]any{
+			{
+				"package_name":  "github.com/example/pkg1",
+				"file_contents": longContent,
+			},
+			{
+				"package_name":  "github.com/example/pkg2",
+				"file_contents": "Short content",
+			},
+		},
+	}
+
+	_, err := parallel.Forward(context.Background(), inputs)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	// Verify per-task debug logs
+	debugEntries := capturingLog.getDebugEntries()
+	var taskEntries []logEntry
+	for _, entry := range debugEntries {
+		if entry.message == "Parallel task started" {
+			taskEntries = append(taskEntries, entry)
+		}
+	}
+
+	if len(taskEntries) != 2 {
+		t.Errorf("Expected 2 'Parallel task started' debug log entries, got %d", len(taskEntries))
+	}
+
+	for i, entry := range taskEntries {
+		if entry.message != "Parallel task started" {
+			t.Errorf("Debug entry %d: expected message 'Parallel task started', got %q", i, entry.message)
+		}
+
+		// Verify required fields
+		expectedFields := []string{"inner_module", "lm_model", "task_index", "inputs"}
+		for _, field := range expectedFields {
+			if _, ok := entry.fields[field]; !ok {
+				t.Errorf("Debug entry %d: missing field %q", i, field)
+			}
+		}
+
+		// Verify module info
+		if entry.fields["inner_module"] != "Predict" {
+			t.Errorf("Debug entry %d: expected inner_module 'Predict', got %q", i, entry.fields["inner_module"])
+		}
+		if entry.fields["lm_model"] != "openai/gpt-4o-mini" {
+			t.Errorf("Debug entry %d: expected lm_model 'openai/gpt-4o-mini', got %q", i, entry.fields["lm_model"])
+		}
+
+		// Verify task index
+		taskIndex, ok := entry.fields["task_index"].(int)
+		if !ok {
+			t.Errorf("Debug entry %d: task_index should be int, got %T", i, entry.fields["task_index"])
+		} else if taskIndex < 0 || taskIndex >= 2 {
+			t.Errorf("Debug entry %d: invalid task_index %d", i, taskIndex)
+		}
+
+		// Verify inputs summarization
+		inputs, ok := entry.fields["inputs"].(map[string]any)
+		if !ok {
+			t.Errorf("Debug entry %d: inputs should be map[string]any, got %T", i, entry.fields["inputs"])
+			continue
+		}
+
+		// Check that long content was truncated
+		if taskIndex == 0 { // First task has long content
+			fileContent, ok := inputs["file_contents"].(string)
+			if !ok {
+				t.Errorf("Debug entry %d: file_contents should be string, got %T", i, inputs["file_contents"])
+			} else if !strings.Contains(fileContent, "...[truncated]") {
+				t.Errorf("Debug entry %d: long content should be truncated, got length %d", i, len(fileContent))
+			}
+		}
+
+		// Check that package_name is preserved
+		packageName, ok := inputs["package_name"].(string)
+		if !ok {
+			t.Errorf("Debug entry %d: package_name should be string, got %T", i, inputs["package_name"])
+		}
+		expectedPackage := fmt.Sprintf("github.com/example/pkg%d", taskIndex+1)
+		if packageName != expectedPackage {
+			t.Errorf("Debug entry %d: expected package_name %q, got %q", i, expectedPackage, packageName)
+		}
+	}
+}
+
+func TestParallelLoggingPredictionMetadata(t *testing.T) {
+	// Setup capturing logger (not strictly needed for metadata test but keeps pattern)
+	capturingLog := &capturingLogger{}
+	originalLogger := logging.GetLogger()
+	defer func() {
+		logging.SetLogger(originalLogger)
+	}()
+	logging.SetLogger(capturingLog)
+
+	// Create signature and LM
+	sig := core.NewSignature("Test").
+		AddInput("data", core.FieldTypeString, "Input data").
+		AddOutput("output", core.FieldTypeString, "Output")
+
+	lm := &mockLMWithName{
+		MockLM: &MockLM{
+			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+				return &core.GenerateResult{
+					Content: "[[ ## output ## ]]\nResult",
+					Usage:   core.Usage{TotalTokens: 2},
+				}, nil
+			},
+		},
+		modelName: "anthropic/claude-3-sonnet",
+	}
+
+	predictor := NewPredict(sig, lm)
+	parallel := NewParallel(predictor)
+
+	inputs := map[string]any{
+		"_batch": []map[string]any{
+			{"data": "test1"},
+			{"data": "test2"},
+		},
+	}
+
+	result, err := parallel.Forward(context.Background(), inputs)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	// Verify __parallel_context metadata
+	contextRaw, ok := result.Outputs["__parallel_context"]
+	if !ok {
+		t.Fatal("Expected __parallel_context in prediction outputs")
+	}
+
+	context, ok := contextRaw.(map[string]any)
+	if !ok {
+		t.Fatalf("Expected __parallel_context to be map[string]any, got %T", contextRaw)
+	}
+
+	// Verify required fields
+	expectedFields := map[string]any{
+		"inner_module": "Predict",
+		"lm_model":     "anthropic/claude-3-sonnet",
+		"total_tasks":  2,
+	}
+
+	for field, expectedValue := range expectedFields {
+		actualValue, ok := context[field]
+		if !ok {
+			t.Errorf("Missing field %q in __parallel_context", field)
+			continue
+		}
+		if actualValue != expectedValue {
+			t.Errorf("Field %q: expected %v, got %v", field, expectedValue, actualValue)
+		}
+	}
+}
+
+func TestParallelLoggingWithChainOfThought(t *testing.T) {
+	// Test that logging works with different module types
+	capturingLog := &capturingLogger{}
+	originalLogger := logging.GetLogger()
+	defer func() {
+		logging.SetLogger(originalLogger)
+	}()
+	logging.SetLogger(capturingLog)
+
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer").
+		AddOutput("rationale", core.FieldTypeString, "Reasoning")
+
+	lm := &mockLMWithName{
+		MockLM: &MockLM{
+			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+				return &core.GenerateResult{
+					Content: "[[ ## rationale ## ]]Let me think about this.\n[[ ## answer ## ]]42",
+					Usage:   core.Usage{TotalTokens: 8},
+				}, nil
+			},
+		},
+		modelName: "google/gemini-pro",
+	}
+
+	cot := NewChainOfThought(sig, lm)
+	parallel := NewParallel(cot)
+
+	capturingLog.reset()
+
+	inputs := map[string]any{
+		"_batch": []map[string]any{
+			{"question": "What is 6*7?"},
+			{"question": "What is 8*9?"},
+		},
+	}
+
+	_, err := parallel.Forward(context.Background(), inputs)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	// Verify batch-level log shows ChainOfThought
+	info := capturingLog.getLastInfo()
+	if info == nil {
+		t.Fatal("Expected info log entry")
+	}
+
+	if info.fields["inner_module"] != "ChainOfThought" {
+		t.Errorf("Expected inner_module 'ChainOfThought', got %q", info.fields["inner_module"])
+	}
+
+	if info.fields["lm_model"] != "google/gemini-pro" {
+		t.Errorf("Expected lm_model 'google/gemini-pro', got %q", info.fields["lm_model"])
+	}
+
+	// Verify per-task debug logs also show ChainOfThought
+	debugEntries := capturingLog.getDebugEntries()
+	var taskEntries []logEntry
+	for _, entry := range debugEntries {
+		if entry.message == "Parallel task started" {
+			taskEntries = append(taskEntries, entry)
+		}
+	}
+
+	if len(taskEntries) != 2 {
+		t.Errorf("Expected 2 'Parallel task started' debug log entries, got %d", len(taskEntries))
+	}
+
+	for i, entry := range taskEntries {
+		if entry.fields["inner_module"] != "ChainOfThought" {
+			t.Errorf("Debug entry %d: expected inner_module 'ChainOfThought', got %q", i, entry.fields["inner_module"])
+		}
+	}
+}
+
+func TestParallelLoggingWithFactory(t *testing.T) {
+	// Test logging with factory pattern
+	capturingLog := &capturingLogger{}
+	originalLogger := logging.GetLogger()
+	defer func() {
+		logging.SetLogger(originalLogger)
+	}()
+	logging.SetLogger(capturingLog)
+
+	sig := core.NewSignature("Test").
+		AddInput("task_id", core.FieldTypeInt, "Task ID").
+		AddOutput("result", core.FieldTypeString, "Result")
+
+	factory := func(i int) core.Module {
+		lm := &mockLMWithName{
+			MockLM: &MockLM{
+				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+					return &core.GenerateResult{
+						Content: fmt.Sprintf("[[ ## result ## ]]\nTask %d done", i),
+						Usage:   core.Usage{TotalTokens: 3},
+					}, nil
+				},
+			},
+			modelName: fmt.Sprintf("factory-model-%d", i%3), // Rotate between 3 models
+		}
+		return NewPredict(sig, lm)
+	}
+
+	parallel := NewParallelWithFactory(factory)
+
+	capturingLog.reset()
+
+	inputs := map[string]any{
+		"_batch": []map[string]any{
+			{"task_id": 0},
+			{"task_id": 1},
+			{"task_id": 2},
+		},
+	}
+
+	_, err := parallel.Forward(context.Background(), inputs)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	// Verify batch-level log (should use first factory instance)
+	info := capturingLog.getLastInfo()
+	if info == nil {
+		t.Fatal("Expected info log entry")
+	}
+
+	if info.fields["inner_module"] != "Predict" {
+		t.Errorf("Expected inner_module 'Predict', got %q", info.fields["inner_module"])
+	}
+
+	// Factory model names vary, so just check it's not empty
+	if info.fields["lm_model"] == "" {
+		t.Error("Expected non-empty lm_model in batch log")
+	}
+
+	// Verify per-task debug logs have potentially different models
+	debugEntries := capturingLog.getDebugEntries()
+	var taskEntries []logEntry
+	for _, entry := range debugEntries {
+		if entry.message == "Parallel task started" {
+			taskEntries = append(taskEntries, entry)
+		}
+	}
+
+	if len(taskEntries) != 3 {
+		t.Errorf("Expected 3 'Parallel task started' debug entries, got %d", len(taskEntries))
+	}
+
+	for i, entry := range taskEntries {
+		if entry.fields["inner_module"] != "Predict" {
+			t.Errorf("Debug entry %d: expected inner_module 'Predict', got %q", i, entry.fields["inner_module"])
+		}
+
+		if entry.fields["lm_model"] == "" {
+			t.Errorf("Debug entry %d: expected non-empty lm_model", i)
+		}
+
+		taskIndex, ok := entry.fields["task_index"].(int)
+		if !ok {
+			t.Errorf("Debug entry %d: task_index should be int", i)
+		} else {
+			// With parallel execution, order is not guaranteed.
+			// We just check that taskIndex is valid (0, 1, or 2)
+			if taskIndex < 0 || taskIndex > 2 {
+				t.Errorf("Debug entry %d: unexpected task_index %d", i, taskIndex)
+			}
+		}
+	}
+}
+
+func TestParallelLoggingInputSummarization(t *testing.T) {
+	// Test various input types and their summarization
+	capturingLog := &capturingLogger{}
+	originalLogger := logging.GetLogger()
+	defer func() {
+		logging.SetLogger(originalLogger)
+	}()
+	logging.SetLogger(capturingLog)
+
+	sig := core.NewSignature("Test").
+		AddInput("text", core.FieldTypeString, "Text input").
+		AddInput("number", core.FieldTypeInt, "Number input").
+		AddInput("flag", core.FieldTypeBool, "Boolean input").
+		AddInput("data", core.FieldTypeJSON, "JSON data").
+		AddOutput("result", core.FieldTypeString, "Result")
+
+	lm := &mockLMWithName{
+		MockLM: &MockLM{
+			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+				return &core.GenerateResult{
+					Content: "[[ ## result ## ]]\nProcessed",
+					Usage:   core.Usage{TotalTokens: 1},
+				}, nil
+			},
+		},
+		modelName: "test-model",
+	}
+
+	predictor := NewPredict(sig, lm)
+	parallel := NewParallel(predictor)
+
+	capturingLog.reset()
+
+	// Create complex input data
+	jsonData := map[string]any{
+		"nested": map[string]any{
+			"array": []int{1, 2, 3, 4, 5},
+			"value": "test",
+		},
+	}
+
+	inputs := map[string]any{
+		"_batch": []map[string]any{
+			{
+				"text":   "short text",
+				"number": 42,
+				"flag":   true,
+				"data":   jsonData,
+			},
+		},
+	}
+
+	_, err := parallel.Forward(context.Background(), inputs)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	// Verify input summarization in debug logs
+	debugEntries := capturingLog.getDebugEntries()
+	var taskEntries []logEntry
+	for _, entry := range debugEntries {
+		if entry.message == "Parallel task started" {
+			taskEntries = append(taskEntries, entry)
+		}
+	}
+
+	if len(taskEntries) != 1 {
+		t.Fatalf("Expected 1 'Parallel task started' debug entry, got %d", len(taskEntries))
+	}
+
+	inputsSummary, ok := taskEntries[0].fields["inputs"].(map[string]any)
+	if !ok {
+		t.Fatal("Expected inputs to be map[string]any")
+	}
+
+	// Check scalar values are preserved
+	if inputsSummary["text"] != "short text" {
+		t.Errorf("Expected text 'short text', got %q", inputsSummary["text"])
+	}
+
+	if inputsSummary["number"] != 42 {
+		t.Errorf("Expected number 42, got %v", inputsSummary["number"])
+	}
+
+	if inputsSummary["flag"] != true {
+		t.Errorf("Expected flag true, got %v", inputsSummary["flag"])
+	}
+
+	// Check complex type is summarized
+	dataSummary, ok := inputsSummary["data"].(string)
+	if !ok {
+		t.Errorf("Expected data to be summarized as string, got %T", inputsSummary["data"])
+	}
+
+	expectedDataSummary := "<map[string]interface {}>"
+	if dataSummary != expectedDataSummary {
+		t.Errorf("Expected data summary %q, got %q", expectedDataSummary, dataSummary)
+	}
+}
+
+// Helper functions for finding log entries
+func findLogEntry(entries []logEntry, message string) *logEntry {
+	for _, entry := range entries {
+		if entry.message == message {
+			return &entry
+		}
+	}
+	return nil
+}
+
+func findLogEntriesByLevel(entries []logEntry, level, message string) []logEntry {
+	var result []logEntry
+	for _, entry := range entries {
+		if entry.level == level && entry.message == message {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
+func TestParallelWithVerbose(t *testing.T) {
+	// Test WithVerbose functionality
+	capturingLog := &capturingLogger{}
+	originalLogger := logging.GetLogger()
+	defer func() {
+		logging.SetLogger(originalLogger)
+	}()
+	logging.SetLogger(capturingLog)
+
+	sig := core.NewSignature("Test task").
+		AddInput("text", core.FieldTypeString, "Input text").
+		AddOutput("result", core.FieldTypeString, "Output result")
+
+	lm := &mockLMWithName{
+		MockLM: &MockLM{
+			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+				return &core.GenerateResult{
+					Content: "[[ ## result ## ]]\nsuccess",
+					Usage:   core.Usage{TotalTokens: 5},
+				}, nil
+			},
+		},
+		modelName: "test-model",
+	}
+
+	t.Run("verbose enabled uses INFO level", func(t *testing.T) {
+		predictor := NewPredict(sig, lm)
+		parallel := NewParallel(predictor).
+			WithMaxWorkers(2).
+			WithVerbose(true)
+
+		capturingLog.reset()
+
+		inputs := map[string]any{
+			"_batch": []map[string]any{
+				{"text": "task1"},
+				{"text": "task2"},
+			},
+		}
+
+		_, err := parallel.Forward(context.Background(), inputs)
+		if err != nil {
+			t.Fatalf("Forward failed: %v", err)
+		}
+
+		// Should have batch log with verbose=true
+		batchLog := findLogEntry(capturingLog.infos, "Parallel batch started")
+		if batchLog == nil {
+			t.Fatal("Expected batch log entry")
+		}
+		if batchLog.fields["verbose"] != true {
+			t.Errorf("Expected verbose=true, got %v", batchLog.fields["verbose"])
+		}
+
+		// Should have task logs at INFO level when verbose is enabled
+		infoTaskLogs := findLogEntriesByLevel(capturingLog.infos, "info", "Parallel task started")
+		if len(infoTaskLogs) < 1 {
+			t.Errorf("Expected at least 1 INFO task log, got %d", len(infoTaskLogs))
+		}
+
+		// Should NOT have task logs at DEBUG level when verbose is enabled
+		debugTaskLogs := findLogEntriesByLevel(capturingLog.debugs, "debug", "Parallel task started")
+		if len(debugTaskLogs) != 0 {
+			t.Errorf("Expected 0 DEBUG task logs when verbose, got %d", len(debugTaskLogs))
+		}
+	})
+
+	t.Run("verbose disabled uses DEBUG level", func(t *testing.T) {
+		predictor := NewPredict(sig, lm)
+		parallel := NewParallel(predictor).
+			WithMaxWorkers(2).
+			WithVerbose(false) // Explicitly disable verbose
+
+		capturingLog.reset()
+
+		inputs := map[string]any{
+			"_batch": []map[string]any{
+				{"text": "task1"},
+				{"text": "task2"},
+			},
+		}
+
+		_, err := parallel.Forward(context.Background(), inputs)
+		if err != nil {
+			t.Fatalf("Forward failed: %v", err)
+		}
+
+		// Should have batch log with verbose=false
+		batchLog := findLogEntry(capturingLog.infos, "Parallel batch started")
+		if batchLog == nil {
+			t.Fatal("Expected batch log entry")
+		}
+		if batchLog.fields["verbose"] != false {
+			t.Errorf("Expected verbose=false, got %v", batchLog.fields["verbose"])
+		}
+
+		// Should have task logs at DEBUG level when verbose is disabled
+		debugTaskLogs := findLogEntriesByLevel(capturingLog.debugs, "debug", "Parallel task started")
+		if len(debugTaskLogs) < 1 {
+			t.Errorf("Expected at least 1 DEBUG task log, got %d", len(debugTaskLogs))
+		}
+
+		// Should NOT have task logs at INFO level when verbose is disabled
+		infoTaskLogs := findLogEntriesByLevel(capturingLog.infos, "info", "Parallel task started")
+		if len(infoTaskLogs) != 0 {
+			t.Errorf("Expected 0 INFO task logs when not verbose, got %d", len(infoTaskLogs))
+		}
+	})
+
+	t.Run("default verbose is false", func(t *testing.T) {
+		predictor := NewPredict(sig, lm)
+		parallel := NewParallel(predictor). // No WithVerbose call - should default to false
+							WithMaxWorkers(2)
+
+		capturingLog.reset()
+
+		inputs := map[string]any{
+			"_batch": []map[string]any{
+				{"text": "task1"},
+			},
+		}
+
+		_, err := parallel.Forward(context.Background(), inputs)
+		if err != nil {
+			t.Fatalf("Forward failed: %v", err)
+		}
+
+		// Should have batch log with verbose=false by default
+		batchLog := findLogEntry(capturingLog.infos, "Parallel batch started")
+		if batchLog == nil {
+			t.Fatal("Expected batch log entry")
+		}
+		if batchLog.fields["verbose"] != false {
+			t.Errorf("Expected verbose=false by default, got %v", batchLog.fields["verbose"])
+		}
+
+		// Should use DEBUG level by default
+		debugTaskLogs := findLogEntriesByLevel(capturingLog.debugs, "debug", "Parallel task started")
+		if len(debugTaskLogs) < 1 {
+			t.Errorf("Expected at least 1 DEBUG task log by default, got %d", len(debugTaskLogs))
+		}
+
+		infoTaskLogs := findLogEntriesByLevel(capturingLog.infos, "info", "Parallel task started")
+		if len(infoTaskLogs) != 0 {
+			t.Errorf("Expected 0 INFO task logs by default, got %d", len(infoTaskLogs))
+		}
+	})
 }
