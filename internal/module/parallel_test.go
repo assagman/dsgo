@@ -1731,13 +1731,14 @@ func TestParallelLoggingWithFactory(t *testing.T) {
 		t.Fatal("Expected info log entry")
 	}
 
-	if info.fields["inner_module"] != "Predict" {
-		t.Errorf("Expected inner_module 'Predict', got %q", info.fields["inner_module"])
+	// For factory-based parallels, batch-level info is empty since we don't have a module yet
+	// The module info will be captured during task execution
+	if info.fields["inner_module"] != "" {
+		t.Errorf("Expected empty inner_module for factory-based parallel, got %q", info.fields["inner_module"])
 	}
 
-	// Factory model names vary, so just check it's not empty
-	if info.fields["lm_model"] == "" {
-		t.Error("Expected non-empty lm_model in batch log")
+	if info.fields["lm_model"] != "" {
+		t.Errorf("Expected empty lm_model for factory-based parallel, got %q", info.fields["lm_model"])
 	}
 
 	// Verify per-task debug logs have potentially different models
@@ -2042,4 +2043,72 @@ func TestParallelWithVerbose(t *testing.T) {
 			t.Errorf("Expected 0 INFO task logs by default, got %d", len(infoTaskLogs))
 		}
 	})
+}
+
+// mockLM for TestParallelWithFactory_ExactFactoryCalls
+type mockLMForFactoryTest struct {
+	responses []string
+	idx       int32
+}
+
+func (m *mockLMForFactoryTest) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+	resp := m.responses[atomic.AddInt32(&m.idx, 1)-1]
+	return &core.GenerateResult{Content: resp, Usage: core.Usage{TotalTokens: 10}}, nil
+}
+func (m *mockLMForFactoryTest) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+	ch := make(chan core.Chunk, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		defer close(ch)
+		defer close(errCh)
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		ch <- core.Chunk{Content: result.Content, Usage: result.Usage}
+	}()
+	return ch, errCh
+}
+func (m *mockLMForFactoryTest) Name() string        { return "mock-lm" }
+func (m *mockLMForFactoryTest) SupportsJSON() bool  { return true }
+func (m *mockLMForFactoryTest) SupportsTools() bool { return false }
+func (m *mockLMForFactoryTest) IsOpenAI() bool      { return false }
+
+func TestParallelWithFactory_ExactFactoryCalls(t *testing.T) {
+	var factoryCalls int32
+
+	// Factory that increments counter and returns a simple Predict module
+	factory := func(i int) core.Module {
+		atomic.AddInt32(&factoryCalls, 1)
+		lm := &mockLMForFactoryTest{
+			responses: []string{fmt.Sprintf(`{"answer": "task-%d"}`, i)},
+		}
+		sig := core.NewSignature("Test").
+			AddInput("question", core.FieldTypeString, "Question").
+			AddOutput("answer", core.FieldTypeString, "Answer")
+		return NewPredict(sig, lm)
+	}
+
+	parallel := NewParallelWithFactory(factory).
+		WithMaxWorkers(2).
+		WithReturnAll(true)
+
+	inputs := map[string]any{
+		"_batch": []map[string]any{
+			{"question": "q1"},
+			{"question": "q2"},
+			{"question": "q3"},
+		},
+	}
+
+	_, err := parallel.Forward(context.Background(), inputs)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	// Factory should be called exactly once per task (3 times)
+	if calls := atomic.LoadInt32(&factoryCalls); calls != 3 {
+		t.Errorf("Expected 3 factory calls, got %d", calls)
+	}
 }

@@ -3,7 +3,7 @@
 PACKAGES := $$(go list ./... | grep -v /examples/ | grep -v /scripts | grep -v /integration)
 INTEGRATION_PACKAGES := $$(go list ./integration)
 
-all: clean check check-lint test
+all: clean check check-lint test integration
 
 all-with-examples: clean check check-eof test test-matrix-quick
 

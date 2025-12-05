@@ -63,6 +63,10 @@ type Parallel struct {
 	batchKey       string
 	repeat         int
 	verbose        bool
+
+	// Runtime state for logging/context (captured once)
+	moduleInfoOnce sync.Once
+	moduleInfo     parallelModuleInfo
 }
 
 // getParallelModuleInfo extracts module type and LM model information for logging
@@ -96,16 +100,15 @@ func getParallelModuleInfo(m core.Module) parallelModuleInfo {
 }
 
 // baseModule returns a representative module for introspection
+// For factory-based parallels, this returns nil to avoid extra factory calls.
 func (p *Parallel) baseModule() core.Module {
 	if p.module != nil {
 		return p.module
 	}
-	if p.factory != nil {
-		return p.factory(0)
-	}
 	if len(p.instances) > 0 {
 		return p.instances[0]
 	}
+	// factory-only: return nil to avoid calling factory outside of tasks
 	return nil
 }
 
@@ -284,8 +287,12 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 	}
 
 	// Log batch-level information
-	base := p.baseModule()
-	info := getParallelModuleInfo(base)
+	// For factory-based parallels, we don't have module info yet
+	var info parallelModuleInfo
+	if p.module != nil || len(p.instances) > 0 {
+		info = getParallelModuleInfo(p.baseModule())
+	}
+	// For factory-based parallels, info will be captured lazily during task execution
 
 	// Include verbose flag in batch log for clarity
 	logData := map[string]any{
@@ -353,6 +360,11 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 				start := time.Now()
 				mod := getModule(j.idx)
 				info := getParallelModuleInfo(mod)
+
+				// Capture module info once for factory-based parallels (used in final metadata)
+				p.moduleInfoOnce.Do(func() {
+					p.moduleInfo = info
+				})
 
 				// Use INFO level when verbose is enabled, otherwise DEBUG
 				if p.verbose {
@@ -561,9 +573,15 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 	}
 
 	// Store parallel context metadata for programmatic access
+	// Use captured info when available (factory case); otherwise use current info.
+	contextInfo := info
+	if p.factory != nil {
+		// For factory-based parallels, use the info captured during first task
+		contextInfo = p.moduleInfo
+	}
 	prediction.Outputs["__parallel_context"] = map[string]any{
-		"inner_module": info.ModuleType,
-		"lm_model":     info.LMModel,
+		"inner_module": contextInfo.ModuleType,
+		"lm_model":     contextInfo.LMModel,
 		"total_tasks":  len(batch),
 	}
 
