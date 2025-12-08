@@ -3,8 +3,8 @@
 PACKAGES := $$(go list ./... | grep -v /scripts | grep -v /integration)
 INTEGRATION_PACKAGES := $$(go list ./integration)
 
-all: clean check check-lint
-	@$(MAKE) -j2 test integration-test
+all: clean
+	@$(MAKE) -j4 check check-lint test integration-test
 
 test:
 	@echo "Running unit tests (parallel, race detector + coverage, excluding integration tests)..."
