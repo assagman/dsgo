@@ -11,6 +11,7 @@ import (
 
 // TestCacheBehavior_BasicHitMiss tests basic cache hit and miss behavior
 func TestCacheBehavior_BasicHitMiss(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		operations     func(cache dsgo.Cache) (int, int) // Returns hits, misses
@@ -63,6 +64,7 @@ func TestCacheBehavior_BasicHitMiss(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cache := dsgo.NewLMCache(100)
 			hits, misses := tt.operations(cache)
 
@@ -78,6 +80,7 @@ func TestCacheBehavior_BasicHitMiss(t *testing.T) {
 
 // TestCacheBehavior_CacheHitRate tests cache hit rate calculation
 func TestCacheBehavior_CacheHitRate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		hits         int64
@@ -93,6 +96,7 @@ func TestCacheBehavior_CacheHitRate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			stats := dsgo.CacheStats{Hits: tt.hits, Misses: tt.misses}
 			rate := stats.HitRate()
 
@@ -105,6 +109,7 @@ func TestCacheBehavior_CacheHitRate(t *testing.T) {
 
 // TestCacheBehavior_KeyDeterminism tests that identical inputs generate identical cache keys
 func TestCacheBehavior_KeyDeterminism(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		setup         func() (string, string)
@@ -169,6 +174,7 @@ func TestCacheBehavior_KeyDeterminism(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			key1, key2 := tt.setup()
 
 			if tt.shouldBeEqual && key1 != key2 {
@@ -183,6 +189,7 @@ func TestCacheBehavior_KeyDeterminism(t *testing.T) {
 
 // TestCacheBehavior_StopSequenceOrder tests that stop sequence order doesn't affect cache key
 func TestCacheBehavior_StopSequenceOrder(t *testing.T) {
+	t.Parallel()
 	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
 	opts1 := dsgo.DefaultGenerateOptions()
@@ -201,6 +208,7 @@ func TestCacheBehavior_StopSequenceOrder(t *testing.T) {
 
 // TestCacheBehavior_MapCanonicalOrder tests that map insertion order doesn't affect cache key
 func TestCacheBehavior_MapCanonicalOrder(t *testing.T) {
+	t.Parallel()
 	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
 	// Create two maps with same content but different insertion order
@@ -232,6 +240,7 @@ func TestCacheBehavior_MapCanonicalOrder(t *testing.T) {
 
 // TestCacheBehavior_TTLExpiration tests TTL-based cache expiration
 func TestCacheBehavior_TTLExpiration(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		ttl           time.Duration
@@ -260,6 +269,7 @@ func TestCacheBehavior_TTLExpiration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cache := dsgo.NewLMCacheWithTTL(10, tt.ttl)
 
 			result := &dsgo.GenerateResult{Content: "test content"}
@@ -280,6 +290,7 @@ func TestCacheBehavior_TTLExpiration(t *testing.T) {
 
 // TestCacheBehavior_TTLRefresh tests that updating an entry refreshes its TTL
 func TestCacheBehavior_TTLRefresh(t *testing.T) {
+	t.Parallel()
 	ttl := 100 * time.Millisecond
 	cache := dsgo.NewLMCacheWithTTL(10, ttl)
 
@@ -317,6 +328,7 @@ func TestCacheBehavior_TTLRefresh(t *testing.T) {
 
 // TestCacheBehavior_TTLDisabled tests that TTL=0 means no expiration
 func TestCacheBehavior_TTLDisabled(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCacheWithTTL(10, 0)
 
 	cache.Set("key1", &dsgo.GenerateResult{Content: "test"})
@@ -333,6 +345,7 @@ func TestCacheBehavior_TTLDisabled(t *testing.T) {
 
 // TestCacheBehavior_LRUEviction tests LRU eviction under memory pressure
 func TestCacheBehavior_LRUEviction(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		capacity          int
@@ -359,6 +372,7 @@ func TestCacheBehavior_LRUEviction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cache := dsgo.NewLMCache(tt.capacity)
 
 			// Add items to trigger eviction
@@ -393,6 +407,7 @@ func TestCacheBehavior_LRUEviction(t *testing.T) {
 
 // TestCacheBehavior_DeepCopyMutation tests that cached values are protected from mutation
 func TestCacheBehavior_DeepCopyMutation(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -434,6 +449,7 @@ func TestCacheBehavior_DeepCopyMutation(t *testing.T) {
 
 // TestCacheBehavior_RetrievedValueMutation tests that modifying retrieved values doesn't affect cache
 func TestCacheBehavior_RetrievedValueMutation(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	cache.Set("key1", &dsgo.GenerateResult{
@@ -462,6 +478,7 @@ func TestCacheBehavior_RetrievedValueMutation(t *testing.T) {
 
 // TestCacheBehavior_ConcurrentAccess tests thread-safe concurrent access
 func TestCacheBehavior_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(100)
 	var wg sync.WaitGroup
 
@@ -503,6 +520,7 @@ func TestCacheBehavior_ConcurrentAccess(t *testing.T) {
 
 // TestCacheBehavior_ConcurrentEviction tests concurrent access during eviction
 func TestCacheBehavior_ConcurrentEviction(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(50)
 	var wg sync.WaitGroup
 
@@ -530,6 +548,7 @@ func TestCacheBehavior_ConcurrentEviction(t *testing.T) {
 
 // TestCacheBehavior_ConcurrentStatistics tests statistics accuracy under concurrent access
 func TestCacheBehavior_ConcurrentStatistics(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(100)
 	var wg sync.WaitGroup
 
@@ -567,6 +586,7 @@ func TestCacheBehavior_ConcurrentStatistics(t *testing.T) {
 
 // TestCacheBehavior_MultipleKeysTracking tests tracking multiple cache keys
 func TestCacheBehavior_MultipleKeysTracking(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(100)
 
 	// Simulate multiple different LM requests with different keys
@@ -618,6 +638,7 @@ func TestCacheBehavior_MultipleKeysTracking(t *testing.T) {
 
 // TestCacheBehavior_ClearResetsStats tests that Clear() resets statistics
 func TestCacheBehavior_ClearResetsStats(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	// Add some data and generate stats
@@ -643,6 +664,7 @@ func TestCacheBehavior_ClearResetsStats(t *testing.T) {
 
 // TestCacheBehavior_CapacityRespected tests that cache respects capacity limits
 func TestCacheBehavior_CapacityRespected(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		capacity        int
@@ -656,6 +678,7 @@ func TestCacheBehavior_CapacityRespected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cache := dsgo.NewLMCache(tt.capacity)
 
 			for i := 0; i < tt.itemsToAdd; i++ {
@@ -677,6 +700,7 @@ func TestCacheBehavior_CapacityRespected(t *testing.T) {
 
 // TestCacheBehavior_UpdateExistingEntry tests updating existing cache entries
 func TestCacheBehavior_UpdateExistingEntry(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	// Set initial entry
@@ -705,6 +729,7 @@ func TestCacheBehavior_UpdateExistingEntry(t *testing.T) {
 
 // TestCacheBehavior_KeyGenerationEdgeCases tests edge cases in key generation
 func TestCacheBehavior_KeyGenerationEdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		setup func() (string, error)
@@ -756,6 +781,7 @@ func TestCacheBehavior_KeyGenerationEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			key, err := tt.setup()
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
@@ -769,6 +795,7 @@ func TestCacheBehavior_KeyGenerationEdgeCases(t *testing.T) {
 
 // TestCacheBehavior_ToolsInCacheKey tests that tools are included in cache key
 func TestCacheBehavior_ToolsInCacheKey(t *testing.T) {
+	t.Parallel()
 	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
 	tool1 := dsgo.Tool{
@@ -814,6 +841,7 @@ func TestCacheBehavior_ToolsInCacheKey(t *testing.T) {
 
 // TestCacheBehavior_PenaltiesInCacheKey tests that penalties affect cache key
 func TestCacheBehavior_PenaltiesInCacheKey(t *testing.T) {
+	t.Parallel()
 	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 
 	opts1 := dsgo.DefaultGenerateOptions()
@@ -841,6 +869,7 @@ func TestCacheBehavior_PenaltiesInCacheKey(t *testing.T) {
 
 // TestCacheBehavior_LargeScaleOperation tests cache performance with many items
 func TestCacheBehavior_LargeScaleOperation(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(1000)
 
 	// Add 5000 items (should trigger many evictions)
@@ -882,6 +911,7 @@ func TestCacheBehavior_LargeScaleOperation(t *testing.T) {
 
 // TestCache_KeyDeterminism tests that cache keys are stable regardless of map iteration order
 func TestCache_KeyDeterminism(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		setup       func() (string, string)
@@ -988,6 +1018,7 @@ func TestCache_KeyDeterminism(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			key1, key2 := tt.setup()
 
 			if tt.shouldMatch && key1 != key2 {
@@ -1002,6 +1033,7 @@ func TestCache_KeyDeterminism(t *testing.T) {
 
 // TestCache_KeyDeterminism_MapCanonicalMultipleIterations verifies key stability across iterations
 func TestCache_KeyDeterminism_MapCanonicalMultipleIterations(t *testing.T) {
+	t.Parallel()
 	messages := []dsgo.Message{{Role: "user", Content: "test"}}
 	opts := dsgo.DefaultGenerateOptions()
 	opts.ResponseSchema = map[string]any{
@@ -1029,6 +1061,7 @@ func TestCache_KeyDeterminism_MapCanonicalMultipleIterations(t *testing.T) {
 
 // TestCache_TTLExpiry tests precise TTL behavior with specific timing
 func TestCache_TTLExpiry(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		ttl         time.Duration
@@ -1068,6 +1101,7 @@ func TestCache_TTLExpiry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cache := dsgo.NewLMCacheWithTTL(10, tt.ttl)
 
 			cache.Set("key1", &dsgo.GenerateResult{Content: "test"})
@@ -1085,6 +1119,7 @@ func TestCache_TTLExpiry(t *testing.T) {
 
 // TestCache_TTLExpiry_SequentialChecks tests multiple checks across TTL boundary
 func TestCache_TTLExpiry_SequentialChecks(t *testing.T) {
+	t.Parallel()
 	ttl := 100 * time.Millisecond
 	cache := dsgo.NewLMCacheWithTTL(10, ttl)
 
@@ -1119,6 +1154,7 @@ func TestCache_TTLExpiry_SequentialChecks(t *testing.T) {
 
 // TestCache_EvictionPolicy tests LRU eviction when cache exceeds capacity
 func TestCache_EvictionPolicy(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		capacity          int
@@ -1186,6 +1222,7 @@ func TestCache_EvictionPolicy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cache := dsgo.NewLMCache(tt.capacity)
 
 			tt.operations(cache)
@@ -1216,6 +1253,7 @@ func TestCache_EvictionPolicy(t *testing.T) {
 
 // TestCache_EvictionPolicy_StressTest fills cache well beyond capacity
 func TestCache_EvictionPolicy_StressTest(t *testing.T) {
+	t.Parallel()
 	capacity := 10
 	cache := dsgo.NewLMCache(capacity)
 
@@ -1258,6 +1296,7 @@ func TestCache_EvictionPolicy_StressTest(t *testing.T) {
 
 // TestCache_DeepCopyIntegrity verifies that cached values are isolated from modifications
 func TestCache_DeepCopyIntegrity(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		originalValue *dsgo.GenerateResult
@@ -1349,6 +1388,7 @@ func TestCache_DeepCopyIntegrity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cache := dsgo.NewLMCache(10)
 
 			// Set the original value
@@ -1370,6 +1410,7 @@ func TestCache_DeepCopyIntegrity(t *testing.T) {
 
 // TestCache_DeepCopyIntegrity_RetrievedValueMutation verifies retrieved values are independent
 func TestCache_DeepCopyIntegrity_RetrievedValueMutation(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1406,6 +1447,7 @@ func TestCache_DeepCopyIntegrity_RetrievedValueMutation(t *testing.T) {
 
 // TestCache_DeepCopyIntegrity_MultipleRetrievals verifies each retrieval returns independent copy
 func TestCache_DeepCopyIntegrity_MultipleRetrievals(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	cache.Set("key1", &dsgo.GenerateResult{
@@ -1443,6 +1485,7 @@ func TestCache_DeepCopyIntegrity_MultipleRetrievals(t *testing.T) {
 
 // TestCache_DeepCopy_NilResult tests deep copy of nil result
 func TestCache_DeepCopy_NilResult(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	// This shouldn't happen normally, but deepCopyResult should handle it
@@ -1455,6 +1498,7 @@ func TestCache_DeepCopy_NilResult(t *testing.T) {
 
 // TestCache_DeepCopy_EmptyToolCalls tests deep copy with empty tool calls
 func TestCache_DeepCopy_EmptyToolCalls(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1485,6 +1529,7 @@ func TestCache_DeepCopy_EmptyToolCalls(t *testing.T) {
 
 // TestCache_DeepCopy_ToolCallsWithArguments tests deep copy of tool calls with complex arguments
 func TestCache_DeepCopy_ToolCallsWithArguments(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1529,6 +1574,7 @@ func TestCache_DeepCopy_ToolCallsWithArguments(t *testing.T) {
 
 // TestCache_DeepCopy_DeepMetadataNesting tests deep copy with deeply nested metadata
 func TestCache_DeepCopy_DeepMetadataNesting(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1565,6 +1611,7 @@ func TestCache_DeepCopy_DeepMetadataNesting(t *testing.T) {
 
 // TestCache_DeepCopy_MetadataWithSlices tests deep copy of metadata containing slices
 func TestCache_DeepCopy_MetadataWithSlices(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1604,6 +1651,7 @@ func TestCache_DeepCopy_MetadataWithSlices(t *testing.T) {
 
 // TestCache_DeepCopy_EmptyMetadata tests deep copy with empty metadata map
 func TestCache_DeepCopy_EmptyMetadata(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1625,6 +1673,7 @@ func TestCache_DeepCopy_EmptyMetadata(t *testing.T) {
 
 // TestCache_DeepCopy_NilMetadata tests deep copy with nil metadata
 func TestCache_DeepCopy_NilMetadata(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1643,6 +1692,7 @@ func TestCache_DeepCopy_NilMetadata(t *testing.T) {
 
 // TestCache_DeepCopy_MultipleToolCalls tests deep copy with multiple tool calls
 func TestCache_DeepCopy_MultipleToolCalls(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1697,6 +1747,7 @@ func TestCache_DeepCopy_MultipleToolCalls(t *testing.T) {
 
 // TestCache_DeepCopy_ComplexMetadataValues tests deep copy with various data types in metadata
 func TestCache_DeepCopy_ComplexMetadataValues(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1762,6 +1813,7 @@ func TestCache_DeepCopy_ComplexMetadataValues(t *testing.T) {
 
 // TestCache_DeepCopy_FinishReason tests deep copy preserves finish reason
 func TestCache_DeepCopy_FinishReason(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{
@@ -1783,6 +1835,7 @@ func TestCache_DeepCopy_FinishReason(t *testing.T) {
 
 // TestCache_DeepCopy_EmptySlicesInMetadata tests empty slices are deep copied
 func TestCache_DeepCopy_EmptySlicesInMetadata(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	original := &dsgo.GenerateResult{

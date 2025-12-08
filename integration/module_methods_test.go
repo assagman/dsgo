@@ -15,6 +15,7 @@ import (
 
 // TestPredict_WithOptions tests Predict WithOptions configuration
 func TestPredict_WithOptions(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -40,6 +41,7 @@ func TestPredict_WithOptions(t *testing.T) {
 
 // TestPredict_WithHistory tests Predict WithHistory configuration
 func TestPredict_WithHistory(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -64,6 +66,7 @@ func TestPredict_WithHistory(t *testing.T) {
 
 // TestChainOfThought_AllOptions tests all ChainOfThought configuration options
 func TestChainOfThought_AllOptions(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -100,6 +103,7 @@ func TestChainOfThought_AllOptions(t *testing.T) {
 
 // TestReAct_AllOptions tests all ReAct configuration options
 func TestReAct_AllOptions(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -148,6 +152,7 @@ func TestReAct_AllOptions(t *testing.T) {
 
 // TestRefine_AllOptions tests all Refine configuration options
 func TestRefine_AllOptions(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -181,6 +186,7 @@ func TestRefine_AllOptions(t *testing.T) {
 
 // TestBestOfN_AllOptions tests all BestOfN configuration options
 func TestBestOfN_AllOptions(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -233,6 +239,7 @@ func TestBestOfN_AllOptions(t *testing.T) {
 
 // TestBestOfN_DefaultScorer tests BestOfN with default scorer
 func TestBestOfN_DefaultScorer(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -260,6 +267,7 @@ func TestBestOfN_DefaultScorer(t *testing.T) {
 
 // TestBestOfN_ConfidenceScorer tests BestOfN with confidence scorer
 func TestBestOfN_ConfidenceScorer(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -292,6 +300,7 @@ func TestBestOfN_ConfidenceScorer(t *testing.T) {
 
 // TestProgramOfThought_AllOptions tests all ProgramOfThought options
 func TestProgramOfThought_AllOptions(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -324,6 +333,7 @@ func TestProgramOfThought_AllOptions(t *testing.T) {
 
 // TestProgram_Methods tests Program module methods
 func TestProgram_Methods(t *testing.T) {
+	t.Parallel()
 	sig := fixtures.SimplePredictSig()
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
 
@@ -359,6 +369,7 @@ func TestProgram_Methods(t *testing.T) {
 
 // TestCache_DeepCopySlice tests deep copy of slices in cache
 func TestCache_DeepCopySlice(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	// Create result with slice
@@ -393,6 +404,7 @@ func TestCache_DeepCopySlice(t *testing.T) {
 
 // TestCache_Clear tests cache clear functionality
 func TestCache_Clear(t *testing.T) {
+	t.Parallel()
 	cache := dsgo.NewLMCache(10)
 
 	// Add items
@@ -418,6 +430,7 @@ func TestCache_Clear(t *testing.T) {
 
 // TestPredict_Stream tests streaming with Predict module
 func TestPredict_Stream(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -515,6 +528,7 @@ func (m *StreamingMockLM) IsOpenAI() bool      { return false }
 
 // TestPredict_WithDemos tests Predict.WithDemos configuration (was 0% coverage)
 func TestPredict_WithDemos(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -551,6 +565,7 @@ func TestPredict_WithDemos(t *testing.T) {
 
 // TestRefine_WithFeedback tests Refine module with actual refinement loop
 func TestRefine_WithFeedback(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -582,6 +597,7 @@ func TestRefine_WithFeedback(t *testing.T) {
 
 // TestBestOfN_ConfidenceScorer tests ConfidenceScorer with various field types
 func TestBestOfN_ConfidenceScorerVariants(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -623,6 +639,7 @@ func TestBestOfN_ConfidenceScorerVariants(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			lm := NewMockLMWithResponses(tt.responses)
 			sig := tt.sigSetup()
 			pred := dsgo.NewPredict(sig, lm)
@@ -654,6 +671,7 @@ func TestBestOfN_ConfidenceScorerVariants(t *testing.T) {
 
 // TestBestOfN_ThresholdEarlyStop tests threshold-based early stopping
 func TestBestOfN_ThresholdEarlyStop(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -692,6 +710,7 @@ func TestBestOfN_ThresholdEarlyStop(t *testing.T) {
 
 // TestBestOfN_ConfidenceScorer_NumericConfidence tests confidence extraction from numeric field
 func TestBestOfN_ConfidenceScorer_NumericConfidence(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -728,6 +747,7 @@ func TestBestOfN_ConfidenceScorer_NumericConfidence(t *testing.T) {
 
 // TestBestOfN_ConfidenceScorer_StringConfidence tests confidence extraction from string field
 func TestBestOfN_ConfidenceScorer_StringConfidence(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -763,6 +783,7 @@ func TestBestOfN_ConfidenceScorer_StringConfidence(t *testing.T) {
 
 // TestBestOfN_ConfidenceScorer_CustomScoreField tests confidence from custom field name
 func TestBestOfN_ConfidenceScorer_CustomScoreField(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -802,6 +823,7 @@ func TestBestOfN_ConfidenceScorer_CustomScoreField(t *testing.T) {
 // TestRefine_GeneratePrediction_InitialGeneration tests initial prediction generation
 // Validates the initial LM call for Refine module
 func TestRefine_GeneratePrediction_InitialGeneration(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -827,6 +849,7 @@ func TestRefine_GeneratePrediction_InitialGeneration(t *testing.T) {
 // TestRefine_GeneratePrediction_WithFeedback tests prediction refinement with feedback
 // Validates the iterative refinement loop
 func TestRefine_GeneratePrediction_WithFeedback(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -867,6 +890,7 @@ func TestRefine_GeneratePrediction_WithFeedback(t *testing.T) {
 // TestChainOfThought_FinishReason_Length tests handling of finish_reason=length
 // Model hit max_tokens, output was truncated
 func TestChainOfThought_FinishReason_Length(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -896,6 +920,7 @@ func TestChainOfThought_FinishReason_Length(t *testing.T) {
 // TestChainOfThought_FinishReason_ToolCalls tests handling of finish_reason=tool_calls
 // Model requested tool execution but ChainOfThought doesn't support it
 func TestChainOfThought_FinishReason_ToolCalls(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -926,6 +951,7 @@ func TestChainOfThought_FinishReason_ToolCalls(t *testing.T) {
 // TestChainOfThought_EmptyContent tests handling of empty content
 // Some models might return empty content even with finish_reason=stop
 func TestChainOfThought_EmptyContent(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 

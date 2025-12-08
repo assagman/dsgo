@@ -11,6 +11,7 @@ import (
 )
 
 func TestProgramOfThought_Forward_Success(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Solve math").
 		AddInput("problem", core.FieldTypeString, "Problem").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -43,6 +44,7 @@ func TestProgramOfThought_Forward_Success(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_InvalidInput(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("required", core.FieldTypeString, "Required")
 
@@ -56,6 +58,7 @@ func TestProgramOfThought_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_LMError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("problem", core.FieldTypeString, "Problem")
 
@@ -76,6 +79,7 @@ func TestProgramOfThought_Forward_LMError(t *testing.T) {
 }
 
 func TestProgramOfThought_WithOptions(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	pot := NewProgramOfThought(sig, lm, "python")
@@ -89,6 +93,7 @@ func TestProgramOfThought_WithOptions(t *testing.T) {
 }
 
 func TestProgramOfThought_WithAllowExecution(t *testing.T) {
+	t.Parallel()
 	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "python")
 
 	if pot.AllowExecution {
@@ -103,6 +108,7 @@ func TestProgramOfThought_WithAllowExecution(t *testing.T) {
 }
 
 func TestProgramOfThought_WithExecutionTimeout(t *testing.T) {
+	t.Parallel()
 	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "python")
 	pot.WithExecutionTimeout(60)
 
@@ -112,6 +118,7 @@ func TestProgramOfThought_WithExecutionTimeout(t *testing.T) {
 }
 
 func TestProgramOfThought_GetSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	pot := NewProgramOfThought(sig, &MockLM{}, "python")
 
@@ -121,17 +128,23 @@ func TestProgramOfThought_GetSignature(t *testing.T) {
 }
 
 func TestProgramOfThought_Language(t *testing.T) {
+	t.Parallel()
 	tests := []string{"python", "javascript", "go"}
 
 	for _, lang := range tests {
-		pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, lang)
-		if pot.Language != lang {
-			t.Errorf("Expected language '%s', got '%s'", lang, pot.Language)
-		}
+		tt := lang // Capture range variable
+		t.Run(tt, func(t *testing.T) {
+			t.Parallel()
+			pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, tt)
+			if pot.Language != tt {
+				t.Errorf("Expected language '%s', got '%s'", tt, pot.Language)
+			}
+		})
 	}
 }
 
 func TestProgramOfThought_ExecuteCode_UnsupportedLanguage(t *testing.T) {
+	t.Parallel()
 	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "unsupported")
 
 	_, err := pot.executeCode(context.Background(), "some code")
@@ -141,6 +154,7 @@ func TestProgramOfThought_ExecuteCode_UnsupportedLanguage(t *testing.T) {
 }
 
 func TestProgramOfThought_ExecuteCode_GoNotSupported(t *testing.T) {
+	t.Parallel()
 	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "go")
 
 	_, err := pot.executeCode(context.Background(), "package main")
@@ -150,6 +164,7 @@ func TestProgramOfThought_ExecuteCode_GoNotSupported(t *testing.T) {
 }
 
 func TestProgramOfThought_BuildPrompt_NoDescription(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("").
 		AddInput("problem", core.FieldTypeString, "Problem")
 
@@ -169,6 +184,7 @@ func TestProgramOfThought_BuildPrompt_NoDescription(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_WithCodeExecution(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Calculate").
 		AddInput("problem", core.FieldTypeString, "Problem").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -196,6 +212,7 @@ func TestProgramOfThought_Forward_WithCodeExecution(t *testing.T) {
 }
 
 func TestProgramOfThought_BuildPrompt_NoOutputFields(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("problem", core.FieldTypeString, "Problem")
 
@@ -215,6 +232,7 @@ func TestProgramOfThought_BuildPrompt_NoOutputFields(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_WithCodeExecutionError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("problem", core.FieldTypeString, "Problem").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -242,6 +260,7 @@ func TestProgramOfThought_Forward_WithCodeExecutionError(t *testing.T) {
 }
 
 func TestProgramOfThought_Forward_ForcesJSONMode(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Solve math").
 		AddInput("problem", core.FieldTypeString, "Problem").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -276,6 +295,7 @@ func TestProgramOfThought_Forward_ForcesJSONMode(t *testing.T) {
 }
 
 func TestProgramOfThought_ExtractTextOutputs_ShortContent(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("code", core.FieldTypeString, "Code")
 
@@ -289,6 +309,7 @@ func TestProgramOfThought_ExtractTextOutputs_ShortContent(t *testing.T) {
 }
 
 func TestProgramOfThought_ExtractTextOutputs_NoStringFields(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("count", core.FieldTypeInt, "Count")
 
@@ -301,6 +322,7 @@ func TestProgramOfThought_ExtractTextOutputs_NoStringFields(t *testing.T) {
 }
 
 func TestProgramOfThought_ExtractTextOutputs_WithLanguageCodeBlock(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("code", core.FieldTypeString, "Code").
 		AddOutput("explanation", core.FieldTypeString, "Explanation")
@@ -324,6 +346,7 @@ func TestProgramOfThought_ExtractTextOutputs_WithLanguageCodeBlock(t *testing.T)
 }
 
 func TestProgramOfThought_ExtractTextOutputs_GenericCodeBlock(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("code", core.FieldTypeString, "Code").
 		AddOutput("explanation", core.FieldTypeString, "Explanation")
@@ -343,6 +366,7 @@ func TestProgramOfThought_ExtractTextOutputs_GenericCodeBlock(t *testing.T) {
 }
 
 func TestProgramOfThought_ExtractTextOutputs_PlainCode(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("code", core.FieldTypeString, "Code").
 		AddOutput("explanation", core.FieldTypeString, "Explanation")
@@ -367,6 +391,7 @@ func TestProgramOfThought_ExtractTextOutputs_PlainCode(t *testing.T) {
 }
 
 func TestProgramOfThought_FillRequiredStringFields_StandardFields(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("explanation", core.FieldTypeString, "Explanation").
 		AddOutput("result", core.FieldTypeString, "Result").
@@ -389,6 +414,7 @@ func TestProgramOfThought_FillRequiredStringFields_StandardFields(t *testing.T) 
 }
 
 func TestProgramOfThought_FillRequiredStringFields_CustomField(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("custom_field", core.FieldTypeString, "Custom")
 
@@ -403,6 +429,7 @@ func TestProgramOfThought_FillRequiredStringFields_CustomField(t *testing.T) {
 }
 
 func TestProgramOfThought_FillRequiredStringFields_SkipsOptional(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOptionalOutput("optional_field", core.FieldTypeString, "Optional")
 
@@ -418,6 +445,7 @@ func TestProgramOfThought_FillRequiredStringFields_SkipsOptional(t *testing.T) {
 }
 
 func TestProgramOfThought_FillRequiredStringFields_SkipsExisting(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("answer", core.FieldTypeString, "Answer")
 
@@ -436,6 +464,7 @@ func TestProgramOfThought_FillRequiredStringFields_SkipsExisting(t *testing.T) {
 
 // TestProgramOfThought_FinishReasonHandling tests finish_reason scenarios
 func TestProgramOfThought_FinishReasonHandling(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test signature").
 		AddOutput("code", core.FieldTypeString, "Code").
 		AddOutput("explanation", core.FieldTypeString, "Explanation")
@@ -470,7 +499,9 @@ func TestProgramOfThought_FinishReasonHandling(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // Capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockLM := &MockLM{
 				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 					return &core.GenerateResult{

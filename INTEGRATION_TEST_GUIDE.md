@@ -5,16 +5,14 @@ This guide explains how to run, write, and maintain integration tests for DSGo.
 ## Quick Start
 
 ```bash
-# Run all integration tests
-make integration
+# Run all integration tests (parallel, race, coverage)
+make integration-test
 
-# Run with race detector (recommended)
-go test -race ./integration/...
+# Run with race detector directly
+go test -race -parallel 4 ./integration/...
 
-# Run specific test category
-make integration-compose      # Module composition tests
-make integration-providers    # Provider tests
-make integration-performance  # Benchmarks
+# Benchmarks
+make integration-performance # Optional benchmarks (build tags required)
 ```
 
 ## Test Organization
@@ -55,9 +53,9 @@ integration/
 ### All Integration Tests
 
 ```bash
-make integration
+make integration-test
 # or
-go test -v -race ./integration/...
+go test -v -race -parallel 4 ./integration/...
 ```
 
 ### By Category

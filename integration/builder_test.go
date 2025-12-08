@@ -9,6 +9,7 @@ import (
 )
 
 func TestBuilder_DefaultConfiguration(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().Build(t)
 	defer tc.Cleanup()
 
@@ -23,6 +24,7 @@ func TestBuilder_DefaultConfiguration(t *testing.T) {
 }
 
 func TestBuilder_CustomSignature(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().
 		WithSignature(fixtures.ClassificationSig()).
 		WithMockResponse(`{"sentiment": "positive"}`).
@@ -40,6 +42,7 @@ func TestBuilder_CustomSignature(t *testing.T) {
 }
 
 func TestBuilder_MultipleResponses(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().
 		WithMockResponses([]string{
 			`{"answer": "first"}`,
@@ -64,6 +67,7 @@ func TestBuilder_MultipleResponses(t *testing.T) {
 }
 
 func TestBuilder_WithError(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().
 		WithError("test error").
 		Build(t)
@@ -73,6 +77,7 @@ func TestBuilder_WithError(t *testing.T) {
 }
 
 func TestBuilder_WithTimeout(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().
 		WithTimeout(100 * time.Millisecond).
 		Build(t)
@@ -83,6 +88,7 @@ func TestBuilder_WithTimeout(t *testing.T) {
 }
 
 func TestBuilder_WithAdapter(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().
 		WithAdapter(dsgo.NewJSONAdapter()).
 		WithMockResponse(`{"answer": "json response"}`).
@@ -97,6 +103,7 @@ func TestBuilder_WithAdapter(t *testing.T) {
 }
 
 func TestBuilder_ChainOfThought(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().
 		WithSignature(fixtures.ChainOfThoughtSig()).
 		WithModuleType("cot").
@@ -112,6 +119,7 @@ func TestBuilder_ChainOfThought(t *testing.T) {
 }
 
 func TestBuilder_Refine(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().
 		WithSignature(fixtures.RefineSig()).
 		WithModuleType("refine").
@@ -131,6 +139,7 @@ func TestBuilder_Refine(t *testing.T) {
 }
 
 func TestBuilder_AssertSuccess(t *testing.T) {
+	t.Parallel()
 	tc := NewTestBuilder().Build(t)
 	defer tc.Cleanup()
 

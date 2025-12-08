@@ -199,9 +199,12 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 	var apiResp openRouterResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		logging.LogAPIError(ctx, o.Model, err)
-		// Save failed response for debugging
-		if err := saveRawExchange(o.Model+"_DECODE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
+
+		if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
+			// Save failed response for debugging
+			if err := saveRawExchange(o.Model+"_DECODE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
+			}
 		}
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -209,9 +212,12 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 	result, err := o.parseResponse(&apiResp)
 	if err != nil {
 		logging.LogAPIError(ctx, o.Model, err)
-		// Save raw response on parse error
-		if err := saveRawExchange(o.Model+"_PARSE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
+
+		if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
+			// Save raw response on parse error
+			if err := saveRawExchange(o.Model+"_PARSE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
+			}
 		}
 		return nil, err
 	}

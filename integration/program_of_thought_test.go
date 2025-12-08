@@ -17,6 +17,7 @@ import (
 // - Explanation field is populated
 // - Reasoning is captured
 func TestProgramOfThought_CodeGeneration(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -70,6 +71,7 @@ func TestProgramOfThought_CodeGeneration(t *testing.T) {
 // - Language-specific code generation works
 // - Code is syntactically appropriate for target language
 func TestProgramOfThought_JavaScriptGeneration(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -110,6 +112,7 @@ func TestProgramOfThought_JavaScriptGeneration(t *testing.T) {
 // - Numerical accuracy is maintained
 // - Intermediate steps are documented
 func TestProgramOfThought_ComplexMath(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -155,6 +158,7 @@ func TestProgramOfThought_ComplexMath(t *testing.T) {
 // - Execution result is captured when enabled
 // - Error handling for execution failures
 func TestProgramOfThought_WithExecution(t *testing.T) {
+	t.Parallel()
 	// Skip execution tests if python3 is not available
 	// This is a unit-level test that just verifies the execution flag works
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
@@ -201,6 +205,7 @@ func TestProgramOfThought_WithExecution(t *testing.T) {
 // - Execution is off by default
 // - No execution_result field when disabled
 func TestProgramOfThought_ExecutionDisabled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -240,6 +245,7 @@ func TestProgramOfThought_ExecutionDisabled(t *testing.T) {
 // - Empty code is rejected
 // - Appropriate error message
 func TestProgramOfThought_EmptyCodeHandling(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -271,6 +277,7 @@ func TestProgramOfThought_EmptyCodeHandling(t *testing.T) {
 // - Empty explanation is rejected
 // - Appropriate error message
 func TestProgramOfThought_EmptyExplanationHandling(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -302,6 +309,7 @@ func TestProgramOfThought_EmptyExplanationHandling(t *testing.T) {
 // - Fallback extraction from markdown code blocks
 // - Graceful degradation
 func TestProgramOfThought_MalformedJSON(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -341,6 +349,7 @@ func TestProgramOfThought_MalformedJSON(t *testing.T) {
 // - Token usage is tracked
 // - Module metadata is recorded
 func TestProgramOfThought_UsageTracking(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -381,6 +390,7 @@ func TestProgramOfThought_UsageTracking(t *testing.T) {
 
 // TestProgramOfThought_MultipleLanguages tests different language outputs.
 func TestProgramOfThought_MultipleLanguages(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		language string
@@ -405,6 +415,7 @@ func TestProgramOfThought_MultipleLanguages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := ContextWithTimeout(10 * time.Second)
 			defer cancel()
 
@@ -438,6 +449,7 @@ func TestProgramOfThought_MultipleLanguages(t *testing.T) {
 
 // TestProgramOfThought_AdapterMetadata tests adapter metadata tracking.
 func TestProgramOfThought_AdapterMetadata(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -476,6 +488,7 @@ func TestProgramOfThought_AdapterMetadata(t *testing.T) {
 // TestProgramOfThought_ExtractTextOutputs_CodeBlock tests extraction from markdown code blocks
 // This validates extractTextOutputs fallback when JSON parsing fails
 func TestProgramOfThought_ExtractTextOutputs_CodeBlock(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -515,6 +528,7 @@ func TestProgramOfThought_ExtractTextOutputs_CodeBlock(t *testing.T) {
 // TestProgramOfThought_ExtractTextOutputs_ExplanationMarker tests extraction with "Explanation:" marker
 // This validates extraction strategy 2 in extractTextOutputs
 func TestProgramOfThought_ExtractTextOutputs_ExplanationMarker(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -548,6 +562,7 @@ func TestProgramOfThought_ExtractTextOutputs_ExplanationMarker(t *testing.T) {
 // TestProgramOfThought_ExtractTextOutputs_DirectContent tests fallback with direct code content
 // Validates extraction strategy 3 when code block isn't found
 func TestProgramOfThought_ExtractTextOutputs_DirectContent(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -587,6 +602,7 @@ func TestProgramOfThought_ExtractTextOutputs_DirectContent(t *testing.T) {
 // TestProgramOfThought_FillRequiredStringFields tests default field population
 // Validates fillRequiredStringFields with different required fields
 func TestProgramOfThought_FillRequiredStringFields(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -636,6 +652,7 @@ func TestProgramOfThought_FillRequiredStringFields(t *testing.T) {
 // TestProgramOfThought_ExtractTextOutputs_TooShortContent tests handling of very short content
 // Content < 10 chars should return nil from extractTextOutputs
 func TestProgramOfThought_ExtractTextOutputs_TooShortContent(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 

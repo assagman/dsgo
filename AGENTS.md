@@ -20,10 +20,11 @@ This guide provides all the information needed to understand, develop, and contr
 ### Essential Commands
 
 ```bash
-# Development cycle
-make test          # Run all tests with race detector + coverage
-make check         # Format, vet, and build
-make all           # Complete validation (clean, check, test, eof-check)
+# Development cycle (always finish with make all)
+make test               # Run all unit tests (parallel, race, coverage; excludes integration)
+make integration-test   # Run all integration tests (parallel, race, coverage)
+make check              # Format, vet, and build
+make all                # Clean, check, lint, unit + integration tests
 
 # Specific tasks
 make lint          # Run golangci-lint (requires v2.6.0)
@@ -134,17 +135,22 @@ type Module interface {
 ### Unit Tests
 
 ```bash
-# Run all tests with race detector and coverage
+# Run all unit tests (parallel, race, coverage; excludes integration)
 make test
-
-# Run specific package tests
-go test -v ./core/...
-go test -v ./module/...
-go test -v ./internal/providers/openai/...
 
 # Run single test by name
 go test -v -run TestPredictForward
 go test -v -run TestReActWithTools ./module/
+```
+
+### Integration Tests
+
+```bash
+# Run all integration tests (parallel, race, coverage)
+make integration-test
+
+# Integration tests with coverage (alias)
+make integration-coverage
 ```
 
 ### Example Testing

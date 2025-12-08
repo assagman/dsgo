@@ -44,3 +44,7 @@ example_execution_results.txt
 
 # opencode
 .opencode
+
+.plans/
+.reviews/
+.tasks/

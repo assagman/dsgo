@@ -12,6 +12,7 @@ import (
 )
 
 func TestIsRetryable(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		statusCode int
@@ -28,7 +29,9 @@ func TestIsRetryable(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := IsRetryable(tt.statusCode); got != tt.want {
 				t.Errorf("IsRetryable(%d) = %v, want %v", tt.statusCode, got, tt.want)
 			}
@@ -37,6 +40,7 @@ func TestIsRetryable(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -59,6 +63,7 @@ func TestWithExponentialBackoff_Success(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_RetryOn429(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
@@ -90,6 +95,7 @@ func TestWithExponentialBackoff_RetryOn429(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_NetworkError(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	ctx := context.Background()
 
@@ -116,6 +122,7 @@ func TestWithExponentialBackoff_NetworkError(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_MaxRetriesExceeded(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	ctx := context.Background()
 
@@ -133,6 +140,7 @@ func TestWithExponentialBackoff_MaxRetriesExceeded(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_ContextCanceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -150,6 +158,7 @@ func TestWithExponentialBackoff_ContextCanceled(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_ContextTimeout(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
@@ -173,6 +182,7 @@ func TestWithExponentialBackoff_ContextTimeout(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_Non200Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	}))
@@ -195,6 +205,7 @@ func TestWithExponentialBackoff_Non200Success(t *testing.T) {
 }
 
 func TestCalculateBackoff(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		attempt     int
 		minExpected time.Duration
@@ -208,7 +219,9 @@ func TestCalculateBackoff(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run("", func(t *testing.T) {
+			t.Parallel()
 			backoff := calculateBackoff(tt.attempt)
 			if backoff < tt.minExpected || backoff > tt.maxExpected {
 				t.Errorf("calculateBackoff(%d) = %v, want between %v and %v",
@@ -219,6 +232,7 @@ func TestCalculateBackoff(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_MixedErrors(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	ctx := context.Background()
 
@@ -251,6 +265,7 @@ func TestWithExponentialBackoff_MixedErrors(t *testing.T) {
 }
 
 func TestIsQuotaExhausted_InsufficientQuota(t *testing.T) {
+	t.Parallel()
 	body := `{"error":{"code":"insufficient_quota","message":"You exceeded your current quota"}}`
 	resp := &http.Response{
 		StatusCode: http.StatusTooManyRequests,
@@ -263,6 +278,7 @@ func TestIsQuotaExhausted_InsufficientQuota(t *testing.T) {
 }
 
 func TestIsQuotaExhausted_BillingHardLimit(t *testing.T) {
+	t.Parallel()
 	body := `{"error":{"code":"billing_hard_limit_reached","message":"Billing limit reached"}}`
 	resp := &http.Response{
 		StatusCode: http.StatusTooManyRequests,
@@ -275,6 +291,7 @@ func TestIsQuotaExhausted_BillingHardLimit(t *testing.T) {
 }
 
 func TestIsQuotaExhausted_TypeInsufficientQuota(t *testing.T) {
+	t.Parallel()
 	body := `{"error":{"type":"insufficient_quota","message":"Quota exceeded"}}`
 	resp := &http.Response{
 		StatusCode: http.StatusTooManyRequests,
@@ -287,6 +304,7 @@ func TestIsQuotaExhausted_TypeInsufficientQuota(t *testing.T) {
 }
 
 func TestIsQuotaExhausted_RateLimitNotQuota(t *testing.T) {
+	t.Parallel()
 	body := `{"error":{"code":"rate_limit_exceeded","message":"Rate limit"}}`
 	resp := &http.Response{
 		StatusCode: http.StatusTooManyRequests,
@@ -299,6 +317,7 @@ func TestIsQuotaExhausted_RateLimitNotQuota(t *testing.T) {
 }
 
 func TestIsQuotaExhausted_Non429Status(t *testing.T) {
+	t.Parallel()
 	body := `{"error":{"code":"insufficient_quota"}}`
 	resp := &http.Response{
 		StatusCode: http.StatusInternalServerError,
@@ -311,6 +330,7 @@ func TestIsQuotaExhausted_Non429Status(t *testing.T) {
 }
 
 func TestIsQuotaExhausted_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	body := `not valid json`
 	resp := &http.Response{
 		StatusCode: http.StatusTooManyRequests,
@@ -323,6 +343,7 @@ func TestIsQuotaExhausted_InvalidJSON(t *testing.T) {
 }
 
 func TestIsQuotaExhausted_EmptyBody(t *testing.T) {
+	t.Parallel()
 	resp := &http.Response{
 		StatusCode: http.StatusTooManyRequests,
 		Body:       io.NopCloser(bytes.NewBufferString("")),
@@ -334,6 +355,7 @@ func TestIsQuotaExhausted_EmptyBody(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_QuotaExhausted(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	ctx := context.Background()
 
@@ -359,6 +381,7 @@ func TestWithExponentialBackoff_QuotaExhausted(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_ContextCanceledAfterRetries(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -381,6 +404,7 @@ func TestWithExponentialBackoff_ContextCanceledAfterRetries(t *testing.T) {
 // TestWithExponentialBackoff_ContextCancelledAfterRetriesWithLastErr covers line 42-44
 // Tests context cancellation at start of loop iteration after fn() has failed once (lastErr is set)
 func TestWithExponentialBackoff_ContextCancelledAfterRetriesWithLastErr(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -419,6 +443,7 @@ func TestWithExponentialBackoff_ContextCancelledAfterRetriesWithLastErr(t *testi
 // TestWithExponentialBackoff_LastAttemptRetryable covers line 78
 // Tests that when last attempt returns retryable status, we return resp without error
 func TestWithExponentialBackoff_LastAttemptRetryable(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	ctx := context.Background()
 
@@ -431,7 +456,7 @@ func TestWithExponentialBackoff_LastAttemptRetryable(t *testing.T) {
 		}, nil
 	})
 
-	// Should not error - returns the 503 response
+	// Should not error - returns 503 response
 	if err != nil {
 		t.Errorf("Expected no error on last retryable attempt, got: %v", err)
 	}
@@ -461,6 +486,7 @@ func (e *errorReader) Close() error {
 // TestIsQuotaExhausted_ReadError covers line 128-130
 // Tests that isQuotaExhausted returns false when io.ReadAll fails
 func TestIsQuotaExhausted_ReadError(t *testing.T) {
+	t.Parallel()
 	resp := &http.Response{
 		StatusCode: http.StatusTooManyRequests,
 		Body:       &errorReader{},
@@ -472,6 +498,7 @@ func TestIsQuotaExhausted_ReadError(t *testing.T) {
 }
 
 func TestWithExponentialBackoff_ContextCanceledDuringBackoff(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()

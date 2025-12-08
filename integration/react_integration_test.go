@@ -22,6 +22,7 @@ import (
 // - Final answer incorporates tool result
 // - Reasoning trace is captured
 func TestReAct_SingleToolExecution(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -113,6 +114,7 @@ func TestReAct_SingleToolExecution(t *testing.T) {
 // - Iteration count tracking
 // - Max iteration limit enforcement
 func TestReAct_MultipleToolCalls(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(20 * time.Second)
 	defer cancel()
 
@@ -171,6 +173,7 @@ func TestReAct_MultipleToolCalls(t *testing.T) {
 // - Loop terminates at max iterations
 // - Extraction fallback produces valid output
 func TestReAct_MaxIterationEnforcement(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(20 * time.Second)
 	defer cancel()
 
@@ -232,6 +235,7 @@ func TestReAct_MaxIterationEnforcement(t *testing.T) {
 // - ReAct continues or handles gracefully
 // - Error propagation when appropriate
 func TestReAct_ToolErrorRecovery(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -279,6 +283,7 @@ func TestReAct_ToolErrorRecovery(t *testing.T) {
 // - Unknown tool is reported as error observation
 // - ReAct continues processing
 func TestReAct_ToolNotFound(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -328,6 +333,7 @@ func TestReAct_ToolNotFound(t *testing.T) {
 // - Cost accumulation with tools
 // - Module metadata recorded
 func TestReAct_ObservabilityIntegration(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -388,6 +394,7 @@ func TestReAct_ObservabilityIntegration(t *testing.T) {
 // - Graceful error handling
 // - No goroutine leaks
 func TestReAct_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
@@ -442,6 +449,7 @@ func TestReAct_ContextCancellation(t *testing.T) {
 // - Finish tool extracts final answer from arguments
 // - Proper validation of finish tool arguments
 func TestReAct_FinishToolDirectCall(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -999,6 +1007,7 @@ func (m *FinishToolMockLM) IsOpenAI() bool      { return false }
 // TestReAct_ExtractTextOutputsFallback tests the extractTextOutputs fallback path
 // This is triggered when structured parsing fails
 func TestReAct_ExtractTextOutputsFallback(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -1038,6 +1047,7 @@ func TestReAct_ExtractTextOutputsFallback(t *testing.T) {
 // TestReAct_SynthesizeAnswerFromHistory tests fallback when content is empty
 // This triggers synthesizeAnswerFromHistory
 func TestReAct_SynthesizeAnswerFromHistory(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -1101,6 +1111,7 @@ func TestReAct_SynthesizeAnswerFromHistory(t *testing.T) {
 
 // TestReAct_MaxIterationsExceeded tests runExtract when max iterations exceeded
 func TestReAct_MaxIterationsExceeded(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(20 * time.Second)
 	defer cancel()
 
@@ -1328,6 +1339,7 @@ func (m *InfiniteLoopMockLM) IsOpenAI() bool      { return false }
 // - Tool execution function is never called
 // - Result contains expected answer
 func TestReAct_Integration_ImplicitFinish(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -1440,6 +1452,7 @@ func (m *ImplicitFinishMockLM) IsOpenAI() bool      { return false }
 // TestReAct_CoerceBasicTypes_StringToInt tests string-to-int coercion
 // Validates that model outputs "42" get converted to int(42)
 func TestReAct_CoerceBasicTypes_StringToInt(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -1471,6 +1484,7 @@ func TestReAct_CoerceBasicTypes_StringToInt(t *testing.T) {
 
 // TestReAct_CoerceBasicTypes_StringToFloat tests string-to-float coercion
 func TestReAct_CoerceBasicTypes_StringToFloat(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -1502,6 +1516,7 @@ func TestReAct_CoerceBasicTypes_StringToFloat(t *testing.T) {
 
 // TestReAct_CoerceBasicTypes_StringBoolTrue tests string "true" to bool conversion
 func TestReAct_CoerceBasicTypes_StringBoolTrue(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -1532,6 +1547,7 @@ func TestReAct_CoerceBasicTypes_StringBoolTrue(t *testing.T) {
 
 // TestReAct_CoerceBasicTypes_StringToPercentage tests percentage string coercion
 func TestReAct_CoerceBasicTypes_StringToPercentage(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -1564,6 +1580,7 @@ func TestReAct_CoerceBasicTypes_StringToPercentage(t *testing.T) {
 
 // TestReAct_CoerceBasicTypes_IntToFloat tests int-to-float preservation
 func TestReAct_CoerceBasicTypes_IntToFloat(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -1595,6 +1612,7 @@ func TestReAct_CoerceBasicTypes_IntToFloat(t *testing.T) {
 
 // TestReAct_CoerceBasicTypes_QualitativeToNumeric tests qualitative to numeric conversion
 func TestReAct_CoerceBasicTypes_QualitativeToNumeric(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 

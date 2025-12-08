@@ -16,6 +16,7 @@ import (
 )
 
 func TestParallelBasic(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("value", core.FieldTypeString, "Value")
 
@@ -70,6 +71,7 @@ func TestParallelBasic(t *testing.T) {
 }
 
 func TestParallelMapOfSlices(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("id", core.FieldTypeString, "ID").
 		AddOutput("result", core.FieldTypeString, "Result")
@@ -102,6 +104,7 @@ func TestParallelMapOfSlices(t *testing.T) {
 }
 
 func TestParallelMismatchedSliceLengths(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	predictor := NewPredict(sig, lm)
@@ -122,6 +125,7 @@ func TestParallelMismatchedSliceLengths(t *testing.T) {
 }
 
 func TestParallelWithRepeat(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("value", core.FieldTypeString, "Value").
 		AddOutput("echo", core.FieldTypeString, "Echoed value")
@@ -155,6 +159,7 @@ func TestParallelWithRepeat(t *testing.T) {
 }
 
 func TestParallelWithFactory(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("id", core.FieldTypeInt, "Task ID").
 		AddOutput("result", core.FieldTypeInt, "Result")
@@ -194,6 +199,7 @@ func TestParallelWithFactory(t *testing.T) {
 }
 
 func TestParallelWithInstances(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("value", core.FieldTypeInt, "Value")
 
@@ -233,6 +239,7 @@ func TestParallelWithInstances(t *testing.T) {
 }
 
 func TestParallelErrorHandling(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("fail", core.FieldTypeBool, "Whether to fail").
 		AddOutput("result", core.FieldTypeString, "Result")
@@ -320,6 +327,7 @@ func TestParallelErrorHandling(t *testing.T) {
 }
 
 func TestParallelFailFast(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("shouldFail", core.FieldTypeBool, "Should fail").
 		AddOutput("result", core.FieldTypeString, "Result")
@@ -379,6 +387,7 @@ func TestParallelFailFast(t *testing.T) {
 }
 
 func TestParallelContextCancellation(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("result", core.FieldTypeString, "Result")
 
@@ -432,6 +441,7 @@ func TestParallelContextCancellation(t *testing.T) {
 }
 
 func TestParallelMetrics(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("result", core.FieldTypeInt, "Result")
 
@@ -500,6 +510,7 @@ func TestParallelMetrics(t *testing.T) {
 }
 
 func TestParallelGetSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test signature").
 		AddInput("x", core.FieldTypeInt, "Input").
 		AddOutput("y", core.FieldTypeInt, "Output")
@@ -537,6 +548,7 @@ func TestParallelGetSignature(t *testing.T) {
 }
 
 func TestParallelSingleInput(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("value", core.FieldTypeString, "Value").
 		AddOutput("echo", core.FieldTypeString, "Echo")
@@ -570,6 +582,7 @@ func TestParallelSingleInput(t *testing.T) {
 }
 
 func TestParallelConfigOptions(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("result", core.FieldTypeString, "Result")
 
@@ -635,6 +648,7 @@ func TestParallelConfigOptions(t *testing.T) {
 // TestParallelThreadSafetyNoRaceConditions verifies that NewParallel now
 // prevents race conditions by cloning modules per task
 func TestParallelThreadSafetyNoRaceConditions(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping no-race test in short mode")
 	}
@@ -738,6 +752,7 @@ func TestParallelThreadSafetyNoRaceConditions(t *testing.T) {
 
 // TestParallelThreadSafetyWithFactory demonstrates safe usage with factory pattern
 func TestParallelThreadSafetyWithFactory(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping factory test in short mode")
 	}
@@ -808,6 +823,7 @@ func TestParallelThreadSafetyWithFactory(t *testing.T) {
 
 // TestParallelThreadSafetyWithInstances demonstrates safe usage with pre-created instances
 func TestParallelThreadSafetyWithInstances(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping instances test in short mode")
 	}
@@ -891,6 +907,7 @@ func TestParallelThreadSafetyWithInstances(t *testing.T) {
 
 // TestParallelThreadSafetyStatelessModule demonstrates that stateless modules are safe
 func TestParallelThreadSafetyStatelessModule(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping stateless test in short mode")
 	}
@@ -942,6 +959,7 @@ func TestParallelThreadSafetyStatelessModule(t *testing.T) {
 
 // TestParallelThreadSafetyStressTest is a comprehensive stress test
 func TestParallelThreadSafetyStressTest(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
@@ -1042,6 +1060,7 @@ func TestParallelThreadSafetyStressTest(t *testing.T) {
 // TestParallelDefaultCloning tests that NewParallel now clones modules by default
 // to ensure state isolation between parallel tasks
 func TestParallelDefaultCloning(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("CloningTest").
 		AddInput("task_id", core.FieldTypeInt, "Task ID").
 		AddOutput("history_length", core.FieldTypeInt, "History length after processing").
@@ -1156,6 +1175,7 @@ func TestParallelDefaultCloning(t *testing.T) {
 
 // TestParallelThreadSafetyHistoryCorruption specifically tests for History corruption
 func TestParallelThreadSafetyHistoryCorruption(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping corruption test in short mode")
 	}

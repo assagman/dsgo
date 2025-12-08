@@ -37,11 +37,13 @@ func (m *settingsMockLM) IsOpenAI() bool {
 }
 
 func TestSettings_SetAndGet(t *testing.T) {
+	t.Parallel()
 	s := &Settings{
 		APIKey: make(map[string]string),
 	}
 
 	t.Run("SetDefaultProvider", func(t *testing.T) {
+		t.Parallel()
 		s.SetDefaultProvider("openai")
 		if s.DefaultProvider != "openai" {
 			t.Errorf("expected provider 'openai', got '%s'", s.DefaultProvider)
@@ -49,6 +51,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 	})
 
 	t.Run("SetDefaultModel", func(t *testing.T) {
+		t.Parallel()
 		s.SetDefaultModel("gpt-4")
 		if s.DefaultModel != "gpt-4" {
 			t.Errorf("expected model 'gpt-4', got '%s'", s.DefaultModel)
@@ -56,6 +59,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 	})
 
 	t.Run("SetDefaultTimeout", func(t *testing.T) {
+		t.Parallel()
 		timeout := 45 * time.Second
 		s.SetDefaultTimeout(timeout)
 		if s.DefaultTimeout != timeout {
@@ -64,6 +68,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 	})
 
 	t.Run("SetDefaultLM", func(t *testing.T) {
+		t.Parallel()
 		var lm LM = &settingsMockLM{}
 		s.SetDefaultLM(lm)
 		if s.DefaultLM == nil {
@@ -72,6 +77,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 	})
 
 	t.Run("SetAPIKey", func(t *testing.T) {
+		t.Parallel()
 		s.SetAPIKey("openai", "test-key")
 		key, ok := s.GetAPIKey("openai")
 		if !ok {
@@ -83,6 +89,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 	})
 
 	t.Run("GetAPIKey_NotFound", func(t *testing.T) {
+		t.Parallel()
 		_, ok := s.GetAPIKey("nonexistent")
 		if ok {
 			t.Error("expected API key to not be found")
@@ -90,6 +97,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 	})
 
 	t.Run("SetMaxRetries", func(t *testing.T) {
+		t.Parallel()
 		s.SetMaxRetries(5)
 		if s.MaxRetries != 5 {
 			t.Errorf("expected max retries 5, got %d", s.MaxRetries)
@@ -97,6 +105,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 	})
 
 	t.Run("SetEnableTracing", func(t *testing.T) {
+		t.Parallel()
 		s.SetEnableTracing(true)
 		if !s.EnableTracing {
 			t.Error("expected tracing to be enabled")
@@ -105,6 +114,7 @@ func TestSettings_SetAndGet(t *testing.T) {
 }
 
 func TestSettings_Reset(t *testing.T) {
+	t.Parallel()
 	s := &Settings{
 		DefaultProvider: "openai",
 		DefaultModel:    "gpt-4",
@@ -172,6 +182,7 @@ func TestGetSettings(t *testing.T) {
 }
 
 func TestSettings_SetAPIKey_NilMap(t *testing.T) {
+	t.Parallel()
 	s := &Settings{
 		// Intentionally nil to test initialization
 		APIKey: nil,
@@ -190,6 +201,7 @@ func TestSettings_SetAPIKey_NilMap(t *testing.T) {
 }
 
 func TestSettings_SetAPIKey_Overwrite(t *testing.T) {
+	t.Parallel()
 	s := &Settings{
 		APIKey: make(map[string]string),
 	}
@@ -207,6 +219,7 @@ func TestSettings_SetAPIKey_Overwrite(t *testing.T) {
 }
 
 func TestSettings_SetAPIKey_MultipleProviders(t *testing.T) {
+	t.Parallel()
 	s := &Settings{
 		APIKey: nil,
 	}
@@ -238,6 +251,7 @@ func TestSettings_SetAPIKey_MultipleProviders(t *testing.T) {
 }
 
 func TestSettings_Concurrency(t *testing.T) {
+	t.Parallel()
 	s := &Settings{
 		APIKey: make(map[string]string),
 	}

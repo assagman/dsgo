@@ -105,6 +105,7 @@ Let me calculate... the result is
 
 // TestExtractJSON_ThinkingTokenVariations tests various thinking token formats
 func TestExtractJSON_ThinkingTokenVariations(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name  string
 		input string
@@ -132,7 +133,9 @@ func TestExtractJSON_ThinkingTokenVariations(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ExtractJSON(tc.input)
 			if err != nil {
 				t.Errorf("Failed to extract JSON from thinking tokens: %v", err)
@@ -150,6 +153,7 @@ func TestExtractJSON_ThinkingTokenVariations(t *testing.T) {
 
 // TestExtractJSON_MarkdownVariations tests markdown code block extraction
 func TestExtractJSON_MarkdownVariations(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name       string
 		input      string
@@ -178,7 +182,9 @@ func TestExtractJSON_MarkdownVariations(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			parsed, err := ParseJSON(tc.input)
 			if err != nil {
 				t.Errorf("Failed to parse JSON: %v", err)
@@ -196,6 +202,7 @@ func TestExtractJSON_MarkdownVariations(t *testing.T) {
 
 // TestRepairJSON_ProductionCases tests repair on real malformed JSON
 func TestRepairJSON_ProductionCases(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name       string
 		input      string
@@ -219,7 +226,9 @@ func TestRepairJSON_ProductionCases(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			repaired := RepairJSON(tc.input)
 
 			parsed, err := ParseJSON(repaired)

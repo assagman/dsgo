@@ -573,7 +573,7 @@ func saveRawExchange(model string, request map[string]any, statusCode int, heade
 	// Determine output directory - prefer DSGO_ARTIFACT_DIR, fallback to test_matrix_logs
 	baseDir := os.Getenv("DSGO_ARTIFACT_DIR")
 	if baseDir == "" {
-		baseDir = "test_matrix_logs"
+		baseDir = filepath.Join(os.TempDir(), ".dsgo")
 	}
 	rawDir := filepath.Join(baseDir, "raw")
 	if err := os.MkdirAll(rawDir, 0755); err != nil {

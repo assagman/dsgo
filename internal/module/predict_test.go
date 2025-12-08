@@ -13,6 +13,7 @@ import (
 )
 
 func TestPredict_Forward_Success(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -41,6 +42,7 @@ func TestPredict_Forward_Success(t *testing.T) {
 }
 
 func TestPredict_Forward_InvalidInput(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("required", core.FieldTypeString, "Required")
 
@@ -54,6 +56,7 @@ func TestPredict_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestPredict_Forward_LMError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question")
 
@@ -74,6 +77,7 @@ func TestPredict_Forward_LMError(t *testing.T) {
 }
 
 func TestPredict_Forward_ParseError(t *testing.T) {
+	t.Parallel()
 	// Use multiple fields so JSONAdapter can't fall back to plain text
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
@@ -99,6 +103,7 @@ func TestPredict_Forward_ParseError(t *testing.T) {
 }
 
 func TestPredict_Forward_ValidationError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -122,6 +127,7 @@ func TestPredict_Forward_ValidationError(t *testing.T) {
 }
 
 func TestPredict_WithOptions(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	p := NewPredict(sig, lm)
@@ -135,6 +141,7 @@ func TestPredict_WithOptions(t *testing.T) {
 }
 
 func TestPredict_GetSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	p := NewPredict(sig, lm)
@@ -145,6 +152,7 @@ func TestPredict_GetSignature(t *testing.T) {
 }
 
 func TestPredict_JSONSupport(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -171,6 +179,7 @@ func TestPredict_JSONSupport(t *testing.T) {
 }
 
 func TestPredict_JSONSchemaAutoGeneration(t *testing.T) {
+	t.Parallel()
 	// Create a signature with multiple output fields of different types
 	sig := core.NewSignature("Classification and analysis").
 		AddInput("text", core.FieldTypeString, "Text to analyze").
@@ -276,6 +285,7 @@ func TestPredict_JSONSchemaAutoGeneration(t *testing.T) {
 }
 
 func TestPredict_JSONSchemaWithOptionalFields(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Optional fields test").
 		AddInput("query", core.FieldTypeString, "Query").
 		AddOutput("required_field", core.FieldTypeString, "Required").
@@ -320,6 +330,7 @@ func TestPredict_JSONSchemaWithOptionalFields(t *testing.T) {
 }
 
 func TestPredict_JSONSchemaNotGeneratedWithChatAdapter(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -351,6 +362,7 @@ func TestPredict_JSONSchemaNotGeneratedWithChatAdapter(t *testing.T) {
 }
 
 func TestPredict_CustomSchemaOverridesAutoGeneration(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("text", core.FieldTypeString, "Text").
 		AddOutput("result", core.FieldTypeString, "Result")
@@ -404,6 +416,7 @@ func TestPredict_CustomSchemaOverridesAutoGeneration(t *testing.T) {
 // TestPredict_ConcurrentForward tests concurrent Forward() calls
 // to ensure thread safety when multiple goroutines use the same Predict module
 func TestPredict_ConcurrentForward(t *testing.T) {
+	t.Parallel()
 	var callCount int
 	var mu sync.Mutex
 
@@ -459,6 +472,7 @@ func TestPredict_ConcurrentForward(t *testing.T) {
 // TestPredict_ContextTimeout tests that context timeout is properly handled
 // during Forward() execution and LM Generate() calls
 func TestPredict_ContextTimeout(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -498,6 +512,7 @@ func TestPredict_ContextTimeout(t *testing.T) {
 
 // TestPredict_Stream_Success tests successful streaming
 func TestPredict_Stream_Success(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("answer", core.FieldTypeString, "")
@@ -559,6 +574,7 @@ func TestPredict_Stream_Success(t *testing.T) {
 
 // TestPredict_Stream_WithCallback tests streaming with callback
 func TestPredict_Stream_WithCallback(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("answer", core.FieldTypeString, "")
@@ -611,6 +627,7 @@ func TestPredict_Stream_WithCallback(t *testing.T) {
 
 // TestPredict_Stream_ValidationError tests streaming with validation errors
 func TestPredict_Stream_ValidationError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("count", core.FieldTypeInt, "")
@@ -651,6 +668,7 @@ func TestPredict_Stream_ValidationError(t *testing.T) {
 
 // TestPredict_Stream_PartialValidation tests streaming with partial validation
 func TestPredict_Stream_PartialValidation(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("answer", core.FieldTypeString, "").
@@ -698,6 +716,7 @@ func TestPredict_Stream_PartialValidation(t *testing.T) {
 
 // TestPredict_Stream_InvalidInput tests streaming with invalid input
 func TestPredict_Stream_InvalidInput(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("answer", core.FieldTypeString, "")
@@ -715,6 +734,7 @@ func TestPredict_Stream_InvalidInput(t *testing.T) {
 
 // TestPredict_Stream_LMError tests streaming with LM error
 func TestPredict_Stream_LMError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("answer", core.FieldTypeString, "")
@@ -785,6 +805,7 @@ func (m *mockStreamingLM) IsOpenAI() bool      { return false }
 
 // TestPredict_Stream_WithJSONSchemaAutoGen tests streaming with auto-generated JSON schema
 func TestPredict_Stream_WithJSONSchemaAutoGen(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Classification").
 		AddInput("text", core.FieldTypeString, "Text to classify").
 		AddOutput("category", core.FieldTypeString, "Category").
@@ -837,6 +858,7 @@ func TestPredict_Stream_WithJSONSchemaAutoGen(t *testing.T) {
 
 // TestPredict_Stream_ParseError tests streaming with parse error
 func TestPredict_Stream_ParseError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("field1", core.FieldTypeString, "").
@@ -877,6 +899,7 @@ func TestPredict_Stream_ParseError(t *testing.T) {
 
 // TestPredict_Stream_WithHistory tests streaming with conversation history
 func TestPredict_Stream_WithHistory(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("answer", core.FieldTypeString, "")
@@ -995,6 +1018,7 @@ func (m *MockLMForFallback) Stream(ctx context.Context, messages []core.Message,
 
 // TestFallbackAdapter_Integration tests the fallback mechanism with a mock LM
 func TestFallbackAdapter_Integration(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Analyze sentiment").
 		AddInput("text", core.FieldTypeString, "Text to analyze").
 		AddOutput("sentiment", core.FieldTypeString, "Sentiment classification").
@@ -1027,7 +1051,9 @@ func TestFallbackAdapter_Integration(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // Capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create mock LM with specific response format
 			mockLM := &MockLMForFallback{ResponseFormat: tt.responseFormat}
 
@@ -1504,7 +1530,9 @@ func TestPredict_FinishReasonHandling(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // Capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockLM := &MockLM{
 				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 					return &core.GenerateResult{

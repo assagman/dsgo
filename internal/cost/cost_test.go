@@ -6,6 +6,7 @@ import (
 )
 
 func TestCalculate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		model            string
@@ -44,7 +45,9 @@ func TestCalculate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			calc := NewCalculator()
 			got := calc.Calculate(tt.model, tt.promptTokens, tt.completionTokens)
 
@@ -56,6 +59,7 @@ func TestCalculate(t *testing.T) {
 }
 
 func TestDefaultCalculate(t *testing.T) {
+	t.Parallel()
 	cost := Calculate("openai/gpt-4o", 1000, 500)
 	expected := 0.0075
 
@@ -65,6 +69,7 @@ func TestDefaultCalculate(t *testing.T) {
 }
 
 func TestSetModelPricing(t *testing.T) {
+	t.Parallel()
 	calc := NewCalculator()
 
 	customPricing := ModelPricing{
@@ -83,6 +88,7 @@ func TestSetModelPricing(t *testing.T) {
 }
 
 func TestHasPricing(t *testing.T) {
+	t.Parallel()
 	calc := NewCalculator()
 
 	tests := []struct {
@@ -96,7 +102,9 @@ func TestHasPricing(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := calc.HasPricing(tt.model)
 			if got != tt.want {
 				t.Errorf("HasPricing(%q) = %v, want %v", tt.model, got, tt.want)
@@ -106,9 +114,11 @@ func TestHasPricing(t *testing.T) {
 }
 
 func TestGetPricing(t *testing.T) {
+	t.Parallel()
 	calc := NewCalculator()
 
 	t.Run("known model", func(t *testing.T) {
+		t.Parallel()
 		pricing, ok := calc.GetPricing("openai/gpt-4o")
 		if !ok {
 			t.Error("GetPricing(openai/gpt-4o) returned ok=false")
@@ -122,6 +132,7 @@ func TestGetPricing(t *testing.T) {
 	})
 
 	t.Run("unknown model", func(t *testing.T) {
+		t.Parallel()
 		_, ok := calc.GetPricing("unknown-model")
 		if ok {
 			t.Error("GetPricing(unknown-model) returned ok=true")
@@ -130,6 +141,7 @@ func TestGetPricing(t *testing.T) {
 }
 
 func TestFindPricingByPattern(t *testing.T) {
+	t.Parallel()
 	calc := NewCalculator()
 
 	tests := []struct {
@@ -144,7 +156,9 @@ func TestFindPricingByPattern(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			pricing := calc.findPricingByPattern(tt.model)
 			hasNonZero := pricing.PromptPrice > 0 || pricing.CompletionPrice > 0
 
@@ -173,6 +187,7 @@ func TestCalculatorConcurrency(t *testing.T) {
 }
 
 func TestCalculate_PatternMatch(t *testing.T) {
+	t.Parallel()
 	calc := NewCalculator()
 
 	// Test Calculate with model that doesn't have exact key but matches pattern
@@ -192,6 +207,7 @@ func TestCalculate_PatternMatch(t *testing.T) {
 }
 
 func TestGetPricing_PatternMatch(t *testing.T) {
+	t.Parallel()
 	calc := NewCalculator()
 
 	// Test GetPricing with model that matches via pattern

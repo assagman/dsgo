@@ -10,6 +10,7 @@ import (
 )
 
 func TestJSONAdapter_Format(t *testing.T) {
+	t.Parallel()
 	adapter := NewJSONAdapter()
 	sig := NewSignature("Test task").
 		AddInput("question", FieldTypeString, "The question").
@@ -47,7 +48,9 @@ func TestJSONAdapter_Format(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			messages, err := adapter.Format(sig, tt.inputs, tt.demos)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Format() error = %v, wantErr %v", err, tt.wantErr)
@@ -62,6 +65,7 @@ func TestJSONAdapter_Format(t *testing.T) {
 
 // TestJSONAdapter_Format_MultipleFields tests formatting multiple output fields
 func TestJSONAdapter_Format_MultipleFields(t *testing.T) {
+	t.Parallel()
 	sig := NewSignature("Analyze").
 		AddInput("text", FieldTypeString, "").
 		AddOutput("sentiment", FieldTypeString, "").
@@ -83,6 +87,7 @@ func TestJSONAdapter_Format_MultipleFields(t *testing.T) {
 
 // TestJSONAdapter_Format_WithDemos tests JSON adapter with demonstrations
 func TestJSONAdapter_Format_WithDemos(t *testing.T) {
+	t.Parallel()
 	sig := NewSignature("Test").
 		AddInput("question", FieldTypeString, "").
 		AddOutput("answer", FieldTypeString, "")

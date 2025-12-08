@@ -35,6 +35,7 @@ func (m *MockFailingModule) Clone() core.Module {
 
 // TestBestOfN_AllAttemptsFail tests behavior when all N attempts fail
 func TestBestOfN_AllAttemptsFail(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 
 	mockModule := &MockFailingModule{
@@ -68,6 +69,7 @@ func TestBestOfN_AllAttemptsFail(t *testing.T) {
 
 // TestBestOfN_AllAttemptsFail_HTTP tests HTTP errors
 func TestBestOfN_AllAttemptsFail_HTTP(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 
 	mockModule := &MockFailingModule{
@@ -100,6 +102,7 @@ func TestBestOfN_AllAttemptsFail_HTTP(t *testing.T) {
 
 // TestBestOfN_PartialFailures tests when some attempts fail but not all
 func TestBestOfN_PartialFailures(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 
 	attemptCount := 0
@@ -140,6 +143,7 @@ func TestBestOfN_PartialFailures(t *testing.T) {
 
 // TestBestOfN_ExceedMaxFailures tests exceeding max failures threshold
 func TestBestOfN_ExceedMaxFailures(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 
 	mockModule := &MockFailingModule{
@@ -173,6 +177,7 @@ func TestBestOfN_ExceedMaxFailures(t *testing.T) {
 
 // TestBestOfN_ScorerFails tests when scorer function fails
 func TestBestOfN_ScorerFails(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 
 	mockModule := &MockModule{
@@ -208,6 +213,7 @@ func TestBestOfN_ScorerFails(t *testing.T) {
 
 // TestBestOfN_Parallel_AllAttemptsFail tests parallel execution with all failures
 func TestBestOfN_Parallel_AllAttemptsFail(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 
 	mockModule := &MockFailingModule{

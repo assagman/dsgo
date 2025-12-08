@@ -14,6 +14,7 @@ import (
 
 // TestJSONAdapter_FormatDemos tests formatDemos for JSON adapter
 func TestJSONAdapter_FormatDemos(t *testing.T) {
+	t.Parallel()
 	sig := fixtures.SimplePredictSig()
 	adapter := dsgo.NewJSONAdapter()
 
@@ -55,6 +56,7 @@ func TestJSONAdapter_FormatDemos(t *testing.T) {
 
 // TestJSONAdapter_FormatHistory tests FormatHistory for JSON adapter
 func TestJSONAdapter_FormatHistory(t *testing.T) {
+	t.Parallel()
 	adapter := dsgo.NewJSONAdapter()
 
 	history := &dsgo.History{}
@@ -79,6 +81,7 @@ func TestJSONAdapter_FormatHistory(t *testing.T) {
 
 // TestChatAdapter_FormatDemos tests formatDemos for Chat adapter
 func TestChatAdapter_FormatDemos(t *testing.T) {
+	t.Parallel()
 	sig := fixtures.SimplePredictSig()
 	adapter := dsgo.NewChatAdapter()
 
@@ -113,6 +116,7 @@ func TestChatAdapter_FormatDemos(t *testing.T) {
 
 // TestChatAdapter_FormatHistory tests FormatHistory for Chat adapter
 func TestChatAdapter_FormatHistory(t *testing.T) {
+	t.Parallel()
 	adapter := dsgo.NewChatAdapter()
 
 	history := &dsgo.History{}
@@ -128,6 +132,7 @@ func TestChatAdapter_FormatHistory(t *testing.T) {
 
 // TestFallbackAdapter_FormatHistory tests FormatHistory for Fallback adapter
 func TestFallbackAdapter_FormatHistory(t *testing.T) {
+	t.Parallel()
 	adapter := dsgo.NewFallbackAdapter()
 
 	history := &dsgo.History{}
@@ -143,6 +148,7 @@ func TestFallbackAdapter_FormatHistory(t *testing.T) {
 
 // TestTwoStepAdapter_Format tests TwoStep adapter Format method
 func TestTwoStepAdapter_Format(t *testing.T) {
+	t.Parallel()
 	sig := fixtures.ChainOfThoughtSig()
 	lm := NewMockLMWithResponse(`{"reasoning": "test", "answer": "42"}`)
 	adapter := dsgo.NewTwoStepAdapter(lm)
@@ -163,6 +169,7 @@ func TestTwoStepAdapter_Format(t *testing.T) {
 
 // TestTwoStepAdapter_FormatHistory tests FormatHistory for TwoStep adapter
 func TestTwoStepAdapter_FormatHistory(t *testing.T) {
+	t.Parallel()
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
 	adapter := dsgo.NewTwoStepAdapter(lm)
 
@@ -178,6 +185,7 @@ func TestTwoStepAdapter_FormatHistory(t *testing.T) {
 
 // TestFallbackAdapterWithChain tests NewFallbackAdapterWithChain
 func TestFallbackAdapterWithChain(t *testing.T) {
+	t.Parallel()
 	// Create custom adapter chain with Chat first (matches default FallbackAdapter order)
 	// This ensures: Chat format → ChatAdapter, JSON format → JSONAdapter (via fallback)
 	adapter := dsgo.NewFallbackAdapterWithChain(
@@ -214,6 +222,7 @@ Chat parsed`
 
 // TestAdapter_StripMarkers tests StripMarkers function
 func TestAdapter_StripMarkers(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -242,7 +251,9 @@ func TestAdapter_StripMarkers(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := dsgo.StripMarkers(tt.input)
 			// Normalize whitespace for comparison
 			if len(result) == 0 && len(tt.expected) == 0 {
@@ -262,6 +273,7 @@ func TestAdapter_StripMarkers(t *testing.T) {
 
 // TestAdapter_TypeCoercion tests type coercion for various field types
 func TestAdapter_TypeCoercion(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		sig       *dsgo.Signature
@@ -315,10 +327,11 @@ func TestAdapter_TypeCoercion(t *testing.T) {
 		},
 	}
 
-	adapter := dsgo.NewJSONAdapter()
-
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			adapter := dsgo.NewJSONAdapter()
 			outputs, err := adapter.Parse(tt.sig, tt.input)
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
@@ -342,22 +355,26 @@ func TestAdapter_TypeCoercion(t *testing.T) {
 
 // TestAdapter_EmptyHistory tests handling of empty history
 func TestAdapter_EmptyHistory(t *testing.T) {
+	t.Parallel()
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
 	adapters := []struct {
-		name    string
-		adapter dsgo.Adapter
+		name       string
+		newAdapter func() dsgo.Adapter
 	}{
-		{"JSON", dsgo.NewJSONAdapter()},
-		{"Chat", dsgo.NewChatAdapter()},
-		{"Fallback", dsgo.NewFallbackAdapter()},
-		{"TwoStep", dsgo.NewTwoStepAdapter(lm)},
+		{"JSON", func() dsgo.Adapter { return dsgo.NewJSONAdapter() }},
+		{"Chat", func() dsgo.Adapter { return dsgo.NewChatAdapter() }},
+		{"Fallback", func() dsgo.Adapter { return dsgo.NewFallbackAdapter() }},
+		{"TwoStep", func() dsgo.Adapter { return dsgo.NewTwoStepAdapter(lm) }},
 	}
 
 	for _, tt := range adapters {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			history := &dsgo.History{} // Empty
 
-			messages := tt.adapter.FormatHistory(history)
+			adapter := tt.newAdapter()
+			messages := adapter.FormatHistory(history)
 			if messages == nil {
 				t.Error("FormatHistory returned nil for empty history")
 			}
@@ -371,20 +388,24 @@ func TestAdapter_EmptyHistory(t *testing.T) {
 
 // TestAdapter_NilHistory tests handling of nil history
 func TestAdapter_NilHistory(t *testing.T) {
+	t.Parallel()
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
 	adapters := []struct {
-		name    string
-		adapter dsgo.Adapter
+		name       string
+		newAdapter func() dsgo.Adapter
 	}{
-		{"JSON", dsgo.NewJSONAdapter()},
-		{"Chat", dsgo.NewChatAdapter()},
-		{"Fallback", dsgo.NewFallbackAdapter()},
-		{"TwoStep", dsgo.NewTwoStepAdapter(lm)},
+		{"JSON", func() dsgo.Adapter { return dsgo.NewJSONAdapter() }},
+		{"Chat", func() dsgo.Adapter { return dsgo.NewChatAdapter() }},
+		{"Fallback", func() dsgo.Adapter { return dsgo.NewFallbackAdapter() }},
+		{"TwoStep", func() dsgo.Adapter { return dsgo.NewTwoStepAdapter(lm) }},
 	}
 
 	for _, tt := range adapters {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			messages := tt.adapter.FormatHistory(nil)
+			t.Parallel()
+			adapter := tt.newAdapter()
+			messages := adapter.FormatHistory(nil)
 			if messages == nil {
 				t.Error("FormatHistory returned nil for nil history")
 			}
@@ -394,22 +415,26 @@ func TestAdapter_NilHistory(t *testing.T) {
 
 // TestAdapter_WithReasoning tests WithReasoning option
 func TestAdapter_WithReasoning(t *testing.T) {
+	t.Parallel()
 	sig := fixtures.ChainOfThoughtSig()
 	lm := NewMockLMWithResponse(`{"reasoning": "test", "answer": "42"}`)
 
 	adapters := []struct {
-		name    string
-		adapter dsgo.Adapter
+		name       string
+		newAdapter func() dsgo.Adapter
 	}{
-		{"JSON", dsgo.NewJSONAdapter().WithReasoning(true)},
-		{"Chat", dsgo.NewChatAdapter().WithReasoning(true)},
-		{"Fallback", dsgo.NewFallbackAdapter().WithReasoning(true)},
-		{"TwoStep", dsgo.NewTwoStepAdapter(lm).WithReasoning(true)},
+		{"JSON", func() dsgo.Adapter { return dsgo.NewJSONAdapter().WithReasoning(true) }},
+		{"Chat", func() dsgo.Adapter { return dsgo.NewChatAdapter().WithReasoning(true) }},
+		{"Fallback", func() dsgo.Adapter { return dsgo.NewFallbackAdapter().WithReasoning(true) }},
+		{"TwoStep", func() dsgo.Adapter { return dsgo.NewTwoStepAdapter(lm).WithReasoning(true) }},
 	}
 
 	for _, tt := range adapters {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			prompt, err := tt.adapter.Format(sig, map[string]any{"problem": "test"}, nil)
+			t.Parallel()
+			adapter := tt.newAdapter()
+			prompt, err := adapter.Format(sig, map[string]any{"problem": "test"}, nil)
 			if err != nil {
 				t.Fatalf("Format failed: %v", err)
 			}
@@ -422,6 +447,7 @@ func TestAdapter_WithReasoning(t *testing.T) {
 
 // TestFallbackAdapter_GetLastUsedAdapter tests tracking which adapter succeeded
 func TestFallbackAdapter_GetLastUsedAdapter(t *testing.T) {
+	t.Parallel()
 	sig := fixtures.SimplePredictSig()
 	adapter := dsgo.NewFallbackAdapter()
 
@@ -444,6 +470,7 @@ func TestFallbackAdapter_GetLastUsedAdapter(t *testing.T) {
 
 // TestAdapter_TruncateString tests truncateString through large response handling
 func TestAdapter_TruncateString(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		contentSizeKB  int
@@ -507,6 +534,7 @@ func TestAdapter_TruncateString(t *testing.T) {
 
 // TestAdapter_CoerceOutputs_StringToNumeric tests coercion of string values to numeric types
 func TestAdapter_CoerceOutputs_StringToNumeric(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		fieldType    dsgo.FieldType
@@ -547,7 +575,9 @@ func TestAdapter_CoerceOutputs_StringToNumeric(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sig := dsgo.NewSignature("test").
 				AddOutput(tt.fieldName, tt.fieldType, "")
 
@@ -580,6 +610,7 @@ func TestAdapter_CoerceOutputs_StringToNumeric(t *testing.T) {
 
 // TestAdapter_CoerceOutputs_BooleanTypes tests boolean type coercion
 func TestAdapter_CoerceOutputs_BooleanTypes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		coercionType string
@@ -616,8 +647,12 @@ func TestAdapter_CoerceOutputs_BooleanTypes(t *testing.T) {
 		AddOutput("enabled", dsgo.FieldTypeBool, "")
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// Simulate LM outputs that need coercion
 			lm := &TypeCoercionMockLM{CoercionType: tt.coercionType}
+
 			result, err := lm.Generate(context.TODO(), nil, nil)
 			if err != nil {
 				t.Fatalf("LM generation failed: %v", err)
@@ -646,6 +681,7 @@ func TestAdapter_CoerceOutputs_BooleanTypes(t *testing.T) {
 
 // TestAdapter_MalformedJSON_SingleQuotes tests JSON repair with single quotes
 func TestAdapter_MalformedJSON_SingleQuotes(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
 
@@ -671,6 +707,7 @@ func TestAdapter_MalformedJSON_SingleQuotes(t *testing.T) {
 
 // TestAdapter_MalformedJSON_UnquotedKeys tests JSON repair with unquoted keys
 func TestAdapter_MalformedJSON_UnquotedKeys(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
 
@@ -693,6 +730,7 @@ func TestAdapter_MalformedJSON_UnquotedKeys(t *testing.T) {
 
 // TestAdapter_MalformedJSON_TrailingComma tests JSON repair with trailing comma
 func TestAdapter_MalformedJSON_TrailingComma(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
 
@@ -717,6 +755,7 @@ func TestAdapter_MalformedJSON_TrailingComma(t *testing.T) {
 
 // TestAdapter_MalformedJSON_Newlines tests JSON repair with literal newlines in strings
 func TestAdapter_MalformedJSON_Newlines(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
 
@@ -741,10 +780,9 @@ func TestAdapter_MalformedJSON_Newlines(t *testing.T) {
 
 // TestAdapter_HeuristicExtract_ChatFormat tests heuristic extraction with chat markers
 func TestAdapter_HeuristicExtract_ChatFormat(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
-
-	adapter := dsgo.NewChatAdapter()
 
 	tests := []struct {
 		name          string
@@ -774,7 +812,10 @@ func TestAdapter_HeuristicExtract_ChatFormat(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			adapter := dsgo.NewChatAdapter()
 			outputs, err := adapter.Parse(sig, tt.content)
 
 			if tt.shouldExtract {
@@ -790,10 +831,9 @@ func TestAdapter_HeuristicExtract_ChatFormat(t *testing.T) {
 
 // TestAdapter_HeuristicExtract_Fallback tests fallback adapter using heuristic patterns
 func TestAdapter_HeuristicExtract_Fallback(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
-
-	adapter := dsgo.NewFallbackAdapter()
 
 	tests := []struct {
 		name    string
@@ -814,7 +854,10 @@ func TestAdapter_HeuristicExtract_Fallback(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			adapter := dsgo.NewFallbackAdapter()
 			outputs, err := adapter.Parse(sig, tt.content)
 
 			// These are heuristic patterns and may not always extract perfectly

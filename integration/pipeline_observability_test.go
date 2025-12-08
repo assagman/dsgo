@@ -23,6 +23,7 @@ const pipelineRequestIDKey pipelineContextKey = "request_id"
 // - Same request ID in all history entries
 // - Context threading works correctly
 func TestPipeline_RequestIDPropagation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(30 * time.Second)
 	defer cancel()
 
@@ -84,6 +85,7 @@ func TestPipeline_RequestIDPropagation(t *testing.T) {
 // - Total cost = sum of individual costs
 // - Per-module breakdown available
 func TestPipeline_CostAggregation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(30 * time.Second)
 	defer cancel()
 
@@ -120,6 +122,7 @@ func TestPipeline_CostAggregation(t *testing.T) {
 
 // TestPipeline_CostAggregation_TableDriven tests various cost scenarios.
 func TestPipeline_CostAggregation_TableDriven(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		costs       []float64
@@ -149,6 +152,7 @@ func TestPipeline_CostAggregation_TableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := ContextWithTimeout(10 * time.Second)
 			defer cancel()
 
@@ -186,6 +190,7 @@ func TestPipeline_CostAggregation_TableDriven(t *testing.T) {
 // - Per-module latency is tracked
 // - Total latency is accurate
 func TestPipeline_LatencyTracking(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(30 * time.Second)
 	defer cancel()
 
@@ -239,6 +244,7 @@ func TestPipeline_LatencyTracking(t *testing.T) {
 // - Error source identified
 // - Partial results captured before error
 func TestPipeline_ErrorOriginTracking(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(30 * time.Second)
 	defer cancel()
 
@@ -280,6 +286,7 @@ func TestPipeline_ErrorOriginTracking(t *testing.T) {
 
 // TestPipeline_ErrorOriginTracking_TableDriven tests various error scenarios.
 func TestPipeline_ErrorOriginTracking_TableDriven(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name               string
 		errorAtStage       int
@@ -308,6 +315,7 @@ func TestPipeline_ErrorOriginTracking_TableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := ContextWithTimeout(10 * time.Second)
 			defer cancel()
 

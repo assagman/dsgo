@@ -25,6 +25,7 @@ import (
 // - 5xx errors are retryable
 // - 4xx (except 429) are not retryable
 func TestRetry_IsRetryable(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		statusCode int
 		expected   bool
@@ -61,6 +62,7 @@ func TestRetry_IsRetryable(t *testing.T) {
 // - Final result is correct after retries
 // - Usage tracking works with retries
 func TestRetry_WithModuleComposition(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -117,6 +119,7 @@ func TestRetry_WithModuleComposition(t *testing.T) {
 // - Eventually succeeds
 // - Call tracking works
 func TestRetry_TransientFailureRecovery(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -155,6 +158,7 @@ func TestRetry_TransientFailureRecovery(t *testing.T) {
 // - Non-retryable errors fail fast
 // - Appropriate error is returned
 func TestRetry_PermanentFailure(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -193,6 +197,7 @@ func TestRetry_PermanentFailure(t *testing.T) {
 // - Context cancellation stops retries
 // - Appropriate error is returned
 func TestRetry_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sig := fixtures.SimplePredictSig()
@@ -226,6 +231,7 @@ func TestRetry_ContextCancellation(t *testing.T) {
 // - Timeout stops retries
 // - Appropriate error is returned
 func TestRetryWrapper_ContextTimeout(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -258,6 +264,7 @@ func TestRetryWrapper_ContextTimeout(t *testing.T) {
 // - Multiple concurrent retries work correctly
 // - No race conditions
 func TestRetry_ConcurrentRetries(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(20 * time.Second)
 	defer cancel()
 
@@ -426,6 +433,7 @@ func (m *DelayedMockLM) IsOpenAI() bool      { return false }
 // - Eventually succeeds on 200
 // - Proper backoff between attempts
 func TestRetry_ExponentialBackoff_429Then200(t *testing.T) {
+	t.Parallel()
 	attemptCount := 0
 
 	// Mock transport that returns 429, then 429, then 200
@@ -483,6 +491,7 @@ func TestRetry_ExponentialBackoff_429Then200(t *testing.T) {
 // - Returns immediately without retry
 // - Distinguishes from rate limit errors
 func TestRetry_QuotaExhausted_NoRetry(t *testing.T) {
+	t.Parallel()
 	attemptCount := 0
 
 	// Mock transport with quota exhaustion error
@@ -540,6 +549,7 @@ func TestRetry_QuotaExhausted_NoRetry(t *testing.T) {
 // - Quota error (insufficient_quota) doesn't retry
 // - Different error bodies parsed correctly
 func TestRetry_RateLimitVsQuota(t *testing.T) {
+	t.Parallel()
 	// Test rate limit (should retry)
 	rateLimitAttempts := 0
 	rateLimitTransport := NewHTTPMockTransport([]http.Response{
@@ -610,6 +620,7 @@ func TestRetry_RateLimitVsQuota(t *testing.T) {
 // - Backoff respects max backoff cap
 // - Jitter is applied
 func TestRetry_BackoffProgression(t *testing.T) {
+	t.Parallel()
 	attempts := 0
 	attemptTimes := []time.Time{}
 
@@ -673,6 +684,7 @@ func TestRetry_BackoffProgression(t *testing.T) {
 // - Stops after MaxRetries attempts
 // - Returns error when all retries exhausted
 func TestRetry_MaxRetriesExceeded(t *testing.T) {
+	t.Parallel()
 	attemptCount := 0
 
 	// Mock that always returns 429

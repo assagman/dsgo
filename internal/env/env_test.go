@@ -7,6 +7,7 @@ import (
 )
 
 func TestLoad(t *testing.T) {
+	t.Parallel()
 	// Create a temporary .env file for testing
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
@@ -57,7 +58,9 @@ INVALID_LINE
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.key, func(t *testing.T) {
+			t.Parallel()
 			got := os.Getenv(tt.key)
 			if tt.found {
 				if got != tt.want {
@@ -73,6 +76,7 @@ INVALID_LINE
 }
 
 func TestLoadNonExistentFile(t *testing.T) {
+	t.Parallel()
 	err := Load("/non/existent/file.env")
 	if err == nil {
 		t.Error("expected error for non-existent file, got nil")
@@ -80,6 +84,7 @@ func TestLoadNonExistentFile(t *testing.T) {
 }
 
 func TestFindEnvFile(t *testing.T) {
+	t.Parallel()
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
 
@@ -117,6 +122,7 @@ func TestFindEnvFile(t *testing.T) {
 }
 
 func TestAutoLoadWithCustomPath(t *testing.T) {
+	t.Parallel()
 	// Create a temporary .env file
 	tmpDir := t.TempDir()
 	customEnvFile := filepath.Join(tmpDir, "custom.env")
@@ -148,6 +154,7 @@ func TestAutoLoadWithCustomPath(t *testing.T) {
 }
 
 func TestAutoLoadWithNonExistentCustomPath(t *testing.T) {
+	t.Parallel()
 	// Set DSGO_ENV_FILE_PATH to non-existent file
 	_ = os.Setenv("DSGO_ENV_FILE_PATH", "/non/existent/path.env")
 	defer func() { _ = os.Unsetenv("DSGO_ENV_FILE_PATH") }()

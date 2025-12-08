@@ -10,6 +10,7 @@ import (
 )
 
 func TestRefine_Forward_NoFeedback(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Generate answer").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -38,6 +39,7 @@ func TestRefine_Forward_NoFeedback(t *testing.T) {
 }
 
 func TestRefine_Forward_WithFeedback(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Generate answer").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddInput("feedback", core.FieldTypeString, "Feedback").
@@ -75,6 +77,7 @@ func TestRefine_Forward_WithFeedback(t *testing.T) {
 }
 
 func TestRefine_Forward_InvalidInput(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("required", core.FieldTypeString, "Required")
 
@@ -88,6 +91,7 @@ func TestRefine_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestRefine_Forward_LMError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question")
 
@@ -108,6 +112,7 @@ func TestRefine_Forward_LMError(t *testing.T) {
 }
 
 func TestRefine_WithOptions(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	refine := NewRefine(sig, lm)
@@ -121,6 +126,7 @@ func TestRefine_WithOptions(t *testing.T) {
 }
 
 func TestRefine_WithMaxIterations(t *testing.T) {
+	t.Parallel()
 	refine := NewRefine(core.NewSignature("Test"), &MockLM{})
 	refine.WithMaxIterations(5)
 
@@ -130,6 +136,7 @@ func TestRefine_WithMaxIterations(t *testing.T) {
 }
 
 func TestRefine_WithRefinementField(t *testing.T) {
+	t.Parallel()
 	refine := NewRefine(core.NewSignature("Test"), &MockLM{})
 	refine.WithRefinementField("custom_feedback")
 
@@ -139,6 +146,7 @@ func TestRefine_WithRefinementField(t *testing.T) {
 }
 
 func TestRefine_GetSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	refine := NewRefine(sig, &MockLM{})
 
@@ -148,6 +156,7 @@ func TestRefine_GetSignature(t *testing.T) {
 }
 
 func TestRefine_RefinementError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddInput("feedback", core.FieldTypeString, "Feedback").
@@ -180,6 +189,7 @@ func TestRefine_RefinementError(t *testing.T) {
 }
 
 func TestRefine_Forward_MaxIterations1(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddInput("feedback", core.FieldTypeString, "Feedback").
@@ -214,6 +224,7 @@ func TestRefine_Forward_MaxIterations1(t *testing.T) {
 
 // TestRefine_GeneratePrediction_WithPreviousOutput tests the refinement prompt building
 func TestRefine_GeneratePrediction_WithPreviousOutput(t *testing.T) {
+	t.Parallel()
 	lm := &MockLM{
 		SupportsJSONVal: true,
 		GenerateFunc: func(ctx context.Context, msgs []core.Message, opts *core.GenerateOptions) (*core.GenerateResult, error) {
@@ -563,7 +574,9 @@ func TestRefine_FinishReasonHandling(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // Capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockLM := &MockLM{
 				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 					return &core.GenerateResult{

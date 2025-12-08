@@ -8,6 +8,7 @@ import (
 
 // TestAssertPredictionValid_Success tests the assertion helper
 func TestAssertPredictionValid_Success(t *testing.T) {
+	t.Parallel()
 	pred := dsgo.NewPrediction(map[string]any{
 		"answer": "42",
 		"count":  123,
@@ -19,6 +20,7 @@ func TestAssertPredictionValid_Success(t *testing.T) {
 
 // TestAssertPredictionValid_MissingField tests the assertion fails on missing field
 func TestAssertPredictionValid_MissingField(t *testing.T) {
+	t.Parallel()
 	pred := dsgo.NewPrediction(map[string]any{
 		"answer": "42",
 	})
@@ -26,12 +28,14 @@ func TestAssertPredictionValid_MissingField(t *testing.T) {
 	// Sub-tests are used to verify assertions catch errors properly
 	// This test verifies the assertion catches missing fields
 	t.Run("missing field detection", func(t *testing.T) {
+		t.Parallel()
 		AssertOutputFieldExists(t, pred, "answer")
 	})
 }
 
 // TestUsageTracking verifies usage tracking
 func TestUsageTracking(t *testing.T) {
+	t.Parallel()
 	pred := dsgo.NewPrediction(map[string]any{
 		"answer": "test",
 	}).WithUsage(dsgo.Usage{
@@ -48,6 +52,7 @@ func TestUsageTracking(t *testing.T) {
 
 // TestCostCalculation verifies cost tracking
 func TestCostCalculation(t *testing.T) {
+	t.Parallel()
 	pred := dsgo.NewPrediction(map[string]any{
 		"answer": "test",
 	}).WithUsage(dsgo.Usage{
@@ -60,6 +65,7 @@ func TestCostCalculation(t *testing.T) {
 
 // TestHistoryCollection verifies history collection
 func TestHistoryCollection(t *testing.T) {
+	t.Parallel()
 	collector := &HistoryCollector{}
 
 	entry := &dsgo.HistoryEntry{

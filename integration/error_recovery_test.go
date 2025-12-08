@@ -14,6 +14,7 @@ import (
 // Scenario: LM fails with network error, may succeed on retry.
 // Expected: Eventual success or appropriate error.
 func TestRetry_TransientError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		failAttempts    int
@@ -28,6 +29,7 @@ func TestRetry_TransientError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			// Create a mock LM that succeeds
@@ -65,6 +67,7 @@ func TestRetry_TransientError(t *testing.T) {
 // Scenario: LM returns permanent error.
 // Expected: Fast failure.
 func TestRetry_PermanentError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		errorType string
@@ -81,6 +84,7 @@ func TestRetry_PermanentError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			// Create LM that always fails
@@ -117,6 +121,7 @@ func TestRetry_PermanentError(t *testing.T) {
 // Scenario: Context expires during operation or completes successfully.
 // Expected: Operation respects context or completes.
 func TestRetry_ContextTimeout(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		contextTimeout   time.Duration
@@ -136,6 +141,7 @@ func TestRetry_ContextTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := context.WithTimeout(context.Background(), tt.contextTimeout)
 			defer cancel()
 
@@ -167,6 +173,7 @@ func TestRetry_ContextTimeout(t *testing.T) {
 // Scenario: Signature requires output but LM returns partial results.
 // Expected: Partial validation succeeds with diagnostics.
 func TestPartialValidation_MissingFields(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		returnedFields map[string]any
@@ -185,6 +192,7 @@ func TestPartialValidation_MissingFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sig := fixtures.SimplePredictSig()
 
 			// Use partial validation to get diagnostics
@@ -202,6 +210,7 @@ func TestPartialValidation_MissingFields(t *testing.T) {
 // Scenario: Module 1 succeeds, Module 2 processes output.
 // Expected: Outputs flow or error propagates.
 func TestErrorPropagation_SerialComposition(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		module1Succeeds bool
@@ -230,6 +239,7 @@ func TestErrorPropagation_SerialComposition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			sig := fixtures.SimplePredictSig()
@@ -303,6 +313,7 @@ func TestErrorPropagation_SerialComposition(t *testing.T) {
 // Scenario: Multiple modules execute in parallel.
 // Expected: Errors appropriately tracked.
 func TestErrorPropagation_ParallelComposition(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		moduleASucceeds bool
@@ -337,6 +348,7 @@ func TestErrorPropagation_ParallelComposition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			sig := fixtures.SimplePredictSig()
@@ -406,6 +418,7 @@ func TestErrorPropagation_ParallelComposition(t *testing.T) {
 // Scenario: Primary module fails, fallback module executes.
 // Expected: Final result from fallback dsgo.
 func TestGracefulDegradation_FallbackModule(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		primarySucceeds  bool
@@ -434,6 +447,7 @@ func TestGracefulDegradation_FallbackModule(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			sig := fixtures.SimplePredictSig()
@@ -490,6 +504,7 @@ func TestGracefulDegradation_FallbackModule(t *testing.T) {
 // Scenario: Adapter fallback chain attempts recovery.
 // Expected: Adapter metadata tracking.
 func TestErrorRecovery_AdapterFallback(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		lmOutput        string
@@ -509,6 +524,7 @@ func TestErrorRecovery_AdapterFallback(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			lm := NewMockLMWithResponse(tt.lmOutput)
@@ -541,6 +557,7 @@ func TestErrorRecovery_AdapterFallback(t *testing.T) {
 // Scenario: Output validation returns diagnostics.
 // Expected: Diagnostics inform caller about partial results.
 func TestErrorRecovery_ValidationWithDiagnostics(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		returnedFields map[string]any
@@ -557,6 +574,7 @@ func TestErrorRecovery_ValidationWithDiagnostics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sig := fixtures.SimplePredictSig()
 
 			// Use partial validation
@@ -576,6 +594,7 @@ func TestErrorRecovery_ValidationWithDiagnostics(t *testing.T) {
 // Scenario: Chain of modules, one fails.
 // Expected: Error at failure point.
 func TestError_ChainedModuleRecovery(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		module1Fails     bool
@@ -608,6 +627,7 @@ func TestError_ChainedModuleRecovery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			sig := fixtures.SimplePredictSig()

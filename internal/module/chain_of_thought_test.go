@@ -10,6 +10,7 @@ import (
 )
 
 func TestChainOfThought_Forward_Success(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Solve problem").
 		AddInput("problem", core.FieldTypeString, "The problem").
 		AddOutput("answer", core.FieldTypeString, "The answer")
@@ -42,6 +43,7 @@ func TestChainOfThought_Forward_Success(t *testing.T) {
 }
 
 func TestChainOfThought_Forward_InvalidInput(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("required", core.FieldTypeString, "Required")
 
@@ -55,6 +57,7 @@ func TestChainOfThought_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestChainOfThought_Forward_LMError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("problem", core.FieldTypeString, "Problem")
 
@@ -75,6 +78,7 @@ func TestChainOfThought_Forward_LMError(t *testing.T) {
 }
 
 func TestChainOfThought_WithOptions(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	cot := NewChainOfThought(sig, lm)
@@ -88,6 +92,7 @@ func TestChainOfThought_WithOptions(t *testing.T) {
 }
 
 func TestChainOfThought_GetSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	cot := NewChainOfThought(sig, lm)
@@ -98,7 +103,8 @@ func TestChainOfThought_GetSignature(t *testing.T) {
 }
 
 func TestChainOfThought_BuildPrompt(t *testing.T) {
-	sig := core.NewSignature("Solve the problem").
+	t.Parallel()
+	sig := core.NewSignature("Solve problem").
 		AddInput("problem", core.FieldTypeString, "Problem to solve").
 		AddOutput("answer", core.FieldTypeString, "The answer")
 
@@ -126,6 +132,7 @@ func TestChainOfThought_BuildPrompt(t *testing.T) {
 }
 
 func TestChainOfThought_BuildPrompt_NoDescription(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("").
 		AddInput("problem", core.FieldTypeString, "Problem").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -149,6 +156,7 @@ func TestChainOfThought_BuildPrompt_NoDescription(t *testing.T) {
 // TestChainOfThought_ReasoningInRationale verifies that reasoning is stored in Rationale field,
 // not in Outputs["reasoning"]. This prevents the bug found in examples/sentiment and examples/interview.
 func TestChainOfThought_ReasoningInRationale(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test signature").
 		AddInput("question", core.FieldTypeString, "The question").
 		AddOutput("answer", core.FieldTypeString, "The answer")
@@ -194,6 +202,7 @@ func TestChainOfThought_ReasoningInRationale(t *testing.T) {
 
 // TestChainOfThought_WithAdapter tests adapter configuration
 func TestChainOfThought_WithAdapter(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("answer", core.FieldTypeString, "")
@@ -209,6 +218,7 @@ func TestChainOfThought_WithAdapter(t *testing.T) {
 
 // TestChainOfThought_FinishReasonHandling tests all finish_reason scenarios
 func TestChainOfThought_FinishReasonHandling(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test signature").
 		AddOutput("answer", core.FieldTypeString, "Answer")
 
@@ -242,7 +252,9 @@ func TestChainOfThought_FinishReasonHandling(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // Capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockLM := &MockLM{
 				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 					return &core.GenerateResult{

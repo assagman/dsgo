@@ -15,6 +15,7 @@ import (
 // 3. Generate response (ChainOfThought)
 // Validates: Multi-stage pipeline, cost tracking, all stages execute.
 func TestE2E_TicketRouting(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Stage 1: Sentiment classification
@@ -96,6 +97,7 @@ func TestE2E_TicketRouting(t *testing.T) {
 // 3. Identify risks (Multiple options, select best)
 // Validates: Multi-module composition, quality metrics.
 func TestE2E_DocumentAnalysisPipeline(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Stage 1: Extract key information
@@ -172,6 +174,7 @@ func TestE2E_DocumentAnalysisPipeline(t *testing.T) {
 // 4. Final version (Predict using critiques)
 // Validates: Multi-stage improvement, composition quality.
 func TestE2E_CreativeGeneration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Stage 1: Generate draft
@@ -268,6 +271,7 @@ func TestE2E_CreativeGeneration(t *testing.T) {
 // Workflow: Process 10 items through same pipeline, track total cost.
 // Validates: Cost aggregation across batch processing.
 func TestE2E_BatchProcessing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	lm := NewMockLMWithResponse(`{"answer": "processed"}`)
@@ -312,6 +316,7 @@ func TestE2E_BatchProcessing(t *testing.T) {
 // 3. Generate specialized response (ChainOfThought or Predict based on type)
 // Validates: Dynamic routing, specialized handling.
 func TestE2E_ConditionalRouting(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Stage 1: Classify input type
@@ -383,6 +388,7 @@ func TestE2E_ConditionalRouting(t *testing.T) {
 // 3. Continue to downstream stages
 // Validates: Error recovery, continued pipeline execution.
 func TestE2E_ErrorRecoveryPipeline(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Stage 1: Try complex analysis (fails)

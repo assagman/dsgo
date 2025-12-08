@@ -8,7 +8,9 @@ import (
 )
 
 func TestNewUUID(t *testing.T) {
+	t.Parallel()
 	t.Run("generates valid UUID", func(t *testing.T) {
+		t.Parallel()
 		uuid := NewUUID()
 
 		// Check format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -28,6 +30,7 @@ func TestNewUUID(t *testing.T) {
 	})
 
 	t.Run("generates unique UUIDs", func(t *testing.T) {
+		t.Parallel()
 		seen := make(map[string]bool)
 		for i := 0; i < 100; i++ {
 			uuid := NewUUID()
@@ -39,6 +42,7 @@ func TestNewUUID(t *testing.T) {
 	})
 
 	t.Run("version 4 UUID", func(t *testing.T) {
+		t.Parallel()
 		uuid := NewUUID()
 		parts := strings.Split(uuid, "-")
 
@@ -49,6 +53,7 @@ func TestNewUUID(t *testing.T) {
 	})
 
 	t.Run("variant bits are correct", func(t *testing.T) {
+		t.Parallel()
 		uuid := NewUUID()
 		parts := strings.Split(uuid, "-")
 
@@ -61,7 +66,9 @@ func TestNewUUID(t *testing.T) {
 }
 
 func TestNewShortID(t *testing.T) {
+	t.Parallel()
 	t.Run("generates valid short ID", func(t *testing.T) {
+		t.Parallel()
 		id := NewShortID()
 
 		// Should be 8 hex characters
@@ -78,6 +85,7 @@ func TestNewShortID(t *testing.T) {
 	})
 
 	t.Run("generates unique short IDs", func(t *testing.T) {
+		t.Parallel()
 		seen := make(map[string]bool)
 		collisions := 0
 		for i := 0; i < 1000; i++ {

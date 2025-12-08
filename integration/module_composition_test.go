@@ -14,6 +14,7 @@ import (
 // ============================================================================
 
 func TestSequentialComposition_TwoModules(t *testing.T) {
+	t.Parallel()
 	// Test: Basic sequential composition with Predict → Predict
 	// Validates:
 	// - Output from module 1 feeds into module 2
@@ -77,6 +78,7 @@ func TestSequentialComposition_TwoModules(t *testing.T) {
 }
 
 func TestSequentialComposition_ChainOfThoughtToRefine(t *testing.T) {
+	t.Parallel()
 	// Test: ChainOfThought (reasoning) → Refine (improve)
 	// Validates:
 	// - Reasoning output feeds into refinement
@@ -144,6 +146,7 @@ func TestSequentialComposition_ChainOfThoughtToRefine(t *testing.T) {
 }
 
 func TestSequentialComposition_LongPipeline(t *testing.T) {
+	t.Parallel()
 	// Test: 5-module sequential pipeline
 	// Validates:
 	// - No data loss between stages
@@ -204,6 +207,7 @@ func TestSequentialComposition_LongPipeline(t *testing.T) {
 }
 
 func TestSequentialComposition_Program(t *testing.T) {
+	t.Parallel()
 	// Test: Using Program module for sequential composition
 	// Validates:
 	// - Program correctly sequences modules
@@ -250,6 +254,7 @@ func TestSequentialComposition_Program(t *testing.T) {
 // ============================================================================
 
 func TestParallelComposition_MultiplePredictsSync(t *testing.T) {
+	t.Parallel()
 	// Test: Multiple modules executing sequentially (simulating parallel results)
 	// Validates:
 	// - All modules execute
@@ -297,6 +302,7 @@ func TestParallelComposition_MultiplePredictsSync(t *testing.T) {
 }
 
 func TestParallelComposition_BestOfN(t *testing.T) {
+	t.Parallel()
 	// Test: BestOfN generates multiple outputs and selects best
 	// Validates:
 	// - All N executions complete
@@ -350,6 +356,7 @@ func TestParallelComposition_BestOfN(t *testing.T) {
 }
 
 func TestParallelComposition_BestOfNWithParallel(t *testing.T) {
+	t.Parallel()
 	// Test: BestOfN with parallel execution
 	// Validates:
 	// - Parallel execution completes
@@ -388,6 +395,7 @@ func TestParallelComposition_BestOfNWithParallel(t *testing.T) {
 // ============================================================================
 
 func TestNestedComposition_ProgramWithinProgram(t *testing.T) {
+	t.Parallel()
 	// Test: Program containing sub-Programs
 	// Validates:
 	// - Nested input mapping works
@@ -428,6 +436,7 @@ func TestNestedComposition_ProgramWithinProgram(t *testing.T) {
 }
 
 func TestNestedComposition_ChainOfThoughtWithinProgram(t *testing.T) {
+	t.Parallel()
 	// Test: Program containing ChainOfThought and other modules
 	// Validates:
 	// - ChainOfThought works within Program
@@ -470,6 +479,7 @@ func TestNestedComposition_ChainOfThoughtWithinProgram(t *testing.T) {
 // ============================================================================
 
 func TestScenario_ChainOfThoughtToRefineToClassify(t *testing.T) {
+	t.Parallel()
 	// Test: Complete workflow: Reason → Refine → Classify
 	// Example: Analyze text → Improve analysis → Classify sentiment
 	// Validates: Complex multi-stage pipeline with different module types
@@ -553,6 +563,7 @@ func TestScenario_ChainOfThoughtToRefineToClassify(t *testing.T) {
 }
 
 func TestScenario_BestOfNRefinement(t *testing.T) {
+	t.Parallel()
 	// Test: Generate multiple versions → Select best → Refine best
 	// Validates: Selection pipeline with quality improvement
 
@@ -618,6 +629,7 @@ func TestScenario_BestOfNRefinement(t *testing.T) {
 }
 
 func TestScenario_ConditionalBranching(t *testing.T) {
+	t.Parallel()
 	// Test: Module 1 → Decision point → Different path based on output
 	// Validates: Manual conditional routing (Program doesn't support conditional logic)
 
@@ -674,6 +686,7 @@ func TestScenario_ConditionalBranching(t *testing.T) {
 }
 
 func TestScenario_DocumentAnalysisPipeline(t *testing.T) {
+	t.Parallel()
 	// Test: Real-world scenario - Document analysis pipeline
 	// 1. Extract key info (Predict)
 	// 2. Generate summary (ChainOfThought)
@@ -787,6 +800,7 @@ func TestScenario_DocumentAnalysisPipeline(t *testing.T) {
 }
 
 func TestScenario_ErrorPropagationSequential(t *testing.T) {
+	t.Parallel()
 	// Test: Error in module 1 stops pipeline
 	// Validates: Errors propagate and stop execution
 

@@ -12,6 +12,7 @@ import (
 
 // TestGenerate_EmptyChoices tests "no choices in response" error
 func TestGenerate_EmptyChoices(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request structure
 		if r.Method != "POST" {
@@ -51,6 +52,7 @@ func TestGenerate_EmptyChoices(t *testing.T) {
 
 // TestGenerate_NullContent tests response with null content
 func TestGenerate_NullContent(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return response with null content
 		w.WriteHeader(http.StatusOK)
@@ -83,6 +85,7 @@ func TestGenerate_NullContent(t *testing.T) {
 
 // TestGenerate_HTTP405 tests method not allowed error
 func TestGenerate_HTTP405(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -111,6 +114,7 @@ func TestGenerate_HTTP405(t *testing.T) {
 
 // TestGenerate_HTTP400_BadRequest tests malformed request error
 func TestGenerate_HTTP400_BadRequest(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error": {"message": "Invalid tool schema: missing 'name' field"}}`))
@@ -138,6 +142,7 @@ func TestGenerate_HTTP400_BadRequest(t *testing.T) {
 
 // TestGenerate_MalformedJSON tests unparseable response
 func TestGenerate_MalformedJSON(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{not valid json}`))
@@ -164,6 +169,7 @@ func TestGenerate_MalformedJSON(t *testing.T) {
 
 // TestGenerate_WithTools_RequestStructure validates request format with tools
 func TestGenerate_WithTools_RequestStructure(t *testing.T) {
+	t.Parallel()
 	var capturedRequest map[string]interface{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -246,6 +252,7 @@ func TestGenerate_WithTools_RequestStructure(t *testing.T) {
 
 // TestParseToolArguments_EmptyArguments tests zero-parameter tool calls
 func TestParseToolArguments_EmptyArguments(t *testing.T) {
+	t.Parallel()
 	tc := openRouterToolCall{
 		ID:   "call-123",
 		Type: "function",
@@ -267,6 +274,7 @@ func TestParseToolArguments_EmptyArguments(t *testing.T) {
 
 // TestParseToolArguments_MalformedJSON tests various malformed JSON scenarios
 func TestParseToolArguments_MalformedJSON(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name      string
 		arguments string
@@ -310,7 +318,9 @@ func TestParseToolArguments_MalformedJSON(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			toolCall := openRouterToolCall{
 				ID:   "call-123",
 				Type: "function",
@@ -337,6 +347,7 @@ func TestParseToolArguments_MalformedJSON(t *testing.T) {
 
 // TestBalanceDelimiters tests delimiter balancing
 func TestBalanceDelimiters(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name  string
 		input string
@@ -370,7 +381,9 @@ func TestBalanceDelimiters(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := balanceDelimiters(tc.input)
 			if got != tc.want {
 				t.Errorf("balanceDelimiters(%q) = %q, want %q", tc.input, got, tc.want)
@@ -383,6 +396,7 @@ func TestBalanceDelimiters(t *testing.T) {
 
 // TestPreview tests string preview function
 func TestPreview(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name  string
 		input string
@@ -410,7 +424,9 @@ func TestPreview(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := preview(tc.input, tc.n)
 			if got != tc.want {
 				t.Errorf("preview(%q, %d) = %q, want %q", tc.input, tc.n, got, tc.want)
@@ -421,6 +437,7 @@ func TestPreview(t *testing.T) {
 
 // TestGenerate_HTTP405_JSONSchemaFallback tests automatic fallback from json_schema to json_object
 func TestGenerate_HTTP405_JSONSchemaFallback(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
@@ -488,6 +505,7 @@ func TestGenerate_HTTP405_JSONSchemaFallback(t *testing.T) {
 
 // TestGenerate_HTTP400_ResponseFormatFallback tests automatic fallback when response_format is unavailable (400 Bad Request)
 func TestGenerate_HTTP400_ResponseFormatFallback(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++

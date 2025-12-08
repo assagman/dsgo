@@ -12,6 +12,7 @@ import (
 )
 
 func TestNewOpenRouter(t *testing.T) {
+	t.Parallel()
 	originalKey := os.Getenv("OPENROUTER_API_KEY")
 	originalSiteName := os.Getenv("OPENROUTER_SITE_NAME")
 	originalSiteURL := os.Getenv("OPENROUTER_SITE_URL")
@@ -47,6 +48,7 @@ func TestNewOpenRouter(t *testing.T) {
 }
 
 func TestOpenRouter_Name(t *testing.T) {
+	t.Parallel()
 	lm := &openRouter{Model: "gpt-4-turbo"}
 	if lm.Name() != "gpt-4-turbo" {
 		t.Errorf("expected Name gpt-4-turbo, got %s", lm.Name())
@@ -54,6 +56,7 @@ func TestOpenRouter_Name(t *testing.T) {
 }
 
 func TestOpenRouter_SupportsJSON(t *testing.T) {
+	t.Parallel()
 	lm := &openRouter{}
 	if !lm.SupportsJSON() {
 		t.Error("expected SupportsJSON to return true")
@@ -61,6 +64,7 @@ func TestOpenRouter_SupportsJSON(t *testing.T) {
 }
 
 func TestOpenRouter_SupportsTools(t *testing.T) {
+	t.Parallel()
 	lm := &openRouter{}
 	if !lm.SupportsTools() {
 		t.Error("expected SupportsTools to return true")
@@ -68,9 +72,11 @@ func TestOpenRouter_SupportsTools(t *testing.T) {
 }
 
 func TestOpenRouter_ExtractMetadata(t *testing.T) {
+	t.Parallel()
 	lm := &openRouter{}
 
 	t.Run("extracts all headers", func(t *testing.T) {
+		t.Parallel()
 		headers := http.Header{}
 		headers.Set("CF-Cache-Status", "HIT")
 		headers.Set("X-Cache", "HIT from cloudflare")
@@ -105,6 +111,7 @@ func TestOpenRouter_ExtractMetadata(t *testing.T) {
 	})
 
 	t.Run("cache miss", func(t *testing.T) {
+		t.Parallel()
 		headers := http.Header{}
 		headers.Set("CF-Cache-Status", "MISS")
 
@@ -119,6 +126,7 @@ func TestOpenRouter_ExtractMetadata(t *testing.T) {
 	})
 
 	t.Run("empty headers", func(t *testing.T) {
+		t.Parallel()
 		headers := http.Header{}
 		metadata := lm.extractMetadata(headers)
 
@@ -128,6 +136,7 @@ func TestOpenRouter_ExtractMetadata(t *testing.T) {
 	})
 
 	t.Run("partial headers", func(t *testing.T) {
+		t.Parallel()
 		headers := http.Header{}
 		headers.Set("X-RateLimit-Limit", "500")
 
@@ -143,6 +152,7 @@ func TestOpenRouter_ExtractMetadata(t *testing.T) {
 }
 
 func TestInit_RegistersLM(t *testing.T) {
+	t.Parallel()
 	// The init function should register "openrouter" as an LM factory
 	// We can test this indirectly by configuring and creating an LM
 	ctx := context.Background()
@@ -178,6 +188,7 @@ func TestInit_RegistersLM(t *testing.T) {
 }
 
 func TestOpenRouter_Generate_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("expected POST, got %s", r.Method)
@@ -250,6 +261,7 @@ func TestOpenRouter_Generate_Success(t *testing.T) {
 }
 
 func TestOpenRouter_Generate_WithHeaders(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Title") != "test-site" {
 			t.Errorf("expected X-Title test-site, got %s", r.Header.Get("X-Title"))
@@ -289,6 +301,7 @@ func TestOpenRouter_Generate_WithHeaders(t *testing.T) {
 }
 
 func TestOpenRouter_Generate_WithTools(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -362,6 +375,7 @@ func TestOpenRouter_Generate_WithTools(t *testing.T) {
 }
 
 func TestOpenRouter_Generate_ToolCallsWithMalformedJSON(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// Return tool call with malformed JSON arguments (single quotes, trailing comma)
@@ -435,6 +449,7 @@ func TestOpenRouter_Generate_ToolCallsWithMalformedJSON(t *testing.T) {
 }
 
 func TestOpenRouter_Generate_ErrorResponse(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error": "invalid request"}`))
@@ -455,6 +470,7 @@ func TestOpenRouter_Generate_ErrorResponse(t *testing.T) {
 }
 
 func TestOpenRouter_Generate_NoChoices(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := openRouterResponse{
 			Choices: []struct {
@@ -480,6 +496,7 @@ func TestOpenRouter_Generate_NoChoices(t *testing.T) {
 }
 
 func TestOpenRouter_BuildRequest(t *testing.T) {
+	t.Parallel()
 	lm := &openRouter{Model: "gpt-4"}
 
 	tests := []struct {
@@ -614,7 +631,9 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			req := lm.buildRequest(tt.messages, tt.options)
 			tt.check(t, req)
 		})
@@ -622,6 +641,7 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 }
 
 func TestOpenRouter_ConvertMessages(t *testing.T) {
+	t.Parallel()
 	lm := &openRouter{}
 
 	tests := []struct {
@@ -685,7 +705,9 @@ func TestOpenRouter_ConvertMessages(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			converted := lm.convertMessages(tt.messages)
 			tt.check(t, converted)
 		})
@@ -693,6 +715,7 @@ func TestOpenRouter_ConvertMessages(t *testing.T) {
 }
 
 func TestOpenRouter_ConvertTool(t *testing.T) {
+	t.Parallel()
 	lm := &openRouter{}
 	tool := core.NewTool("test_tool", "A test tool", nil)
 	tool.AddParameter("param1", "string", "First param", true)
@@ -737,6 +760,7 @@ func TestOpenRouter_ConvertTool(t *testing.T) {
 }
 
 func TestOpenRouter_ParseResponse_InvalidToolArgs(t *testing.T) {
+	t.Parallel()
 	lm := &openRouter{}
 	resp := &openRouterResponse{
 		Choices: []struct {
@@ -776,6 +800,7 @@ func TestOpenRouter_ParseResponse_InvalidToolArgs(t *testing.T) {
 }
 
 func TestOpenRouter_Generate_WithToolChoice(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -822,6 +847,7 @@ func TestOpenRouter_Generate_WithToolChoice(t *testing.T) {
 }
 
 func TestOpenRouter_Generate_ToolChoiceNone(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -863,6 +889,7 @@ func TestOpenRouter_Generate_ToolChoiceNone(t *testing.T) {
 }
 
 func TestOpenRouter_Stream_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("expected POST, got %s", r.Method)
@@ -928,6 +955,7 @@ func TestOpenRouter_Stream_Success(t *testing.T) {
 }
 
 func TestOpenRouter_Stream_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error": "bad request"}`))

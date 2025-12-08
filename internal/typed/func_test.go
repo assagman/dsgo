@@ -49,6 +49,7 @@ func (m *mockLM) IsOpenAI() bool {
 }
 
 func TestNewFunc(t *testing.T) {
+	t.Parallel()
 	type Input struct {
 		Text string `dsgo:"input,desc=Input text"`
 	}

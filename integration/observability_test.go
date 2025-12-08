@@ -18,6 +18,7 @@ const requestIDKey contextKey = "request_id"
 
 // TestMemoryCollector_BasicCollection tests basic collection functionality
 func TestMemoryCollector_BasicCollection(t *testing.T) {
+	t.Parallel()
 	collector := dsgo.NewMemoryCollector(10)
 
 	entry := &dsgo.HistoryEntry{
@@ -65,6 +66,7 @@ func TestMemoryCollector_BasicCollection(t *testing.T) {
 
 // TestMemoryCollector_RingBuffer tests ring buffer behavior with overflow
 func TestMemoryCollector_RingBuffer(t *testing.T) {
+	t.Parallel()
 	const capacity = 3
 	collector := dsgo.NewMemoryCollector(capacity)
 
@@ -111,6 +113,7 @@ func TestMemoryCollector_RingBuffer(t *testing.T) {
 
 // TestMemoryCollector_GetLast tests retrieving last N entries
 func TestMemoryCollector_GetLast(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		bufferSize  int
@@ -128,6 +131,7 @@ func TestMemoryCollector_GetLast(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			collector := dsgo.NewMemoryCollector(tt.bufferSize)
 
 			for i := 0; i < tt.numEntries; i++ {
@@ -163,6 +167,7 @@ func TestMemoryCollector_GetLast(t *testing.T) {
 
 // TestMemoryCollector_Concurrency tests thread-safe collection
 func TestMemoryCollector_Concurrency(t *testing.T) {
+	t.Parallel()
 	collector := dsgo.NewMemoryCollector(1000)
 	const numGoroutines = 10
 	const entriesPerGoroutine = 100
@@ -202,6 +207,7 @@ func TestMemoryCollector_Concurrency(t *testing.T) {
 
 // TestMemoryCollector_Close tests closing the collector
 func TestMemoryCollector_Close(t *testing.T) {
+	t.Parallel()
 	collector := dsgo.NewMemoryCollector(10)
 
 	entry := &dsgo.HistoryEntry{
@@ -223,6 +229,7 @@ func TestMemoryCollector_Close(t *testing.T) {
 
 // TestHistoryEntry_UsageTracking tests usage tracking in history entries
 func TestHistoryEntry_UsageTracking(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		promptTokens     int
@@ -237,6 +244,7 @@ func TestHistoryEntry_UsageTracking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			entry := &dsgo.HistoryEntry{
 				ID:    "test-usage",
 				Model: "gpt-4o",
@@ -264,6 +272,7 @@ func TestHistoryEntry_UsageTracking(t *testing.T) {
 
 // TestHistoryEntry_ProviderMetadata tests provider-specific metadata
 func TestHistoryEntry_ProviderMetadata(t *testing.T) {
+	t.Parallel()
 	entry := &dsgo.HistoryEntry{
 		ID:       "test-metadata",
 		Model:    "gpt-4o",
@@ -291,6 +300,7 @@ func TestHistoryEntry_ProviderMetadata(t *testing.T) {
 
 // TestHistoryEntry_ErrorTracking tests error tracking in history entries
 func TestHistoryEntry_ErrorTracking(t *testing.T) {
+	t.Parallel()
 	errorMeta := &dsgo.ErrorMeta{
 		Message:    "Rate limit exceeded",
 		Code:       "rate_limit_exceeded",
@@ -318,6 +328,7 @@ func TestHistoryEntry_ErrorTracking(t *testing.T) {
 
 // TestHistoryEntry_CacheMetadata tests cache metadata tracking
 func TestHistoryEntry_CacheMetadata(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		hit      bool
@@ -332,6 +343,7 @@ func TestHistoryEntry_CacheMetadata(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			entry := &dsgo.HistoryEntry{
 				ID:    "test-cache",
 				Model: "gpt-4o",
@@ -354,6 +366,7 @@ func TestHistoryEntry_CacheMetadata(t *testing.T) {
 
 // TestHistoryEntry_JSONSerialization tests JSON marshaling
 func TestHistoryEntry_JSONSerialization(t *testing.T) {
+	t.Parallel()
 	entry := &dsgo.HistoryEntry{
 		ID:        "test-json",
 		Timestamp: time.Date(2025, 11, 27, 10, 0, 0, 0, time.UTC),
@@ -400,6 +413,7 @@ func TestHistoryEntry_JSONSerialization(t *testing.T) {
 
 // TestCollector_MultipleProviders tests tracking multiple providers
 func TestCollector_MultipleProviders(t *testing.T) {
+	t.Parallel()
 	collector := dsgo.NewMemoryCollector(20)
 
 	providers := []string{"openai", "openrouter"}
@@ -449,6 +463,7 @@ func TestCollector_MultipleProviders(t *testing.T) {
 
 // TestCollector_EntryWithToolCalls tests entries with tool calls
 func TestCollector_EntryWithToolCalls(t *testing.T) {
+	t.Parallel()
 	toolCalls := []dsgo.ToolCall{
 		{
 			ID:   "tool-call-1",
@@ -487,6 +502,7 @@ func TestCollector_EntryWithToolCalls(t *testing.T) {
 
 // TestMemoryCollector_Clear tests clearing the collector
 func TestMemoryCollector_Clear(t *testing.T) {
+	t.Parallel()
 	collector := dsgo.NewMemoryCollector(10)
 
 	// Add entries
@@ -514,6 +530,7 @@ func TestMemoryCollector_Clear(t *testing.T) {
 
 // TestMemoryCollector_JSONLOutput tests JSONL-compatible format
 func TestMemoryCollector_JSONLOutput(t *testing.T) {
+	t.Parallel()
 	collector := dsgo.NewMemoryCollector(10)
 
 	// Add multiple entries
@@ -552,6 +569,7 @@ func TestMemoryCollector_JSONLOutput(t *testing.T) {
 
 // TestRequestID_Context tests request ID in context
 func TestRequestID_Context(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Initially no request ID
@@ -570,6 +588,7 @@ func TestRequestID_Context(t *testing.T) {
 
 // TestObservability_IntegrationFlow tests end-to-end observability flow
 func TestObservability_IntegrationFlow(t *testing.T) {
+	t.Parallel()
 	collector := dsgo.NewMemoryCollector(100)
 
 	// Simulate a series of LM calls
@@ -652,6 +671,7 @@ func getTestRequestID(ctx context.Context) string {
 
 // TestMemoryCollector_TempFileCleanup tests temporary file handling
 func TestMemoryCollector_TempFileCleanup(t *testing.T) {
+	t.Parallel()
 	// Create temporary directory
 	tmpDir := t.TempDir()
 

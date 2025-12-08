@@ -18,6 +18,7 @@ import (
 
 // TestParallel_BatchInput tests parallel execution with batch input mode
 func TestParallel_BatchInput(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -75,6 +76,7 @@ func TestParallel_BatchInput(t *testing.T) {
 
 // TestParallel_WithFactory tests using factory function for stateful modules
 func TestParallel_WithFactory(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -117,6 +119,7 @@ func TestParallel_WithFactory(t *testing.T) {
 
 // TestParallel_WithInstances tests using pre-created instances
 func TestParallel_WithInstances(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -156,6 +159,7 @@ func TestParallel_WithInstances(t *testing.T) {
 
 // TestParallel_MapOfSlices tests parallel with map-of-slices input mode
 func TestParallel_MapOfSlices(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -184,6 +188,7 @@ func TestParallel_MapOfSlices(t *testing.T) {
 
 // TestParallel_WithRepeat tests repeat mode
 func TestParallel_WithRepeat(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -228,6 +233,7 @@ func TestParallel_WithRepeat(t *testing.T) {
 
 // TestParallel_MaxFailures tests failure limit enforcement
 func TestParallel_MaxFailures(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -273,6 +279,7 @@ func TestParallel_MaxFailures(t *testing.T) {
 
 // TestParallel_FailFast tests early termination on failure
 func TestParallel_FailFast(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -315,6 +322,7 @@ func TestParallel_FailFast(t *testing.T) {
 
 // TestParallel_GetSignature tests signature retrieval from different modes
 func TestParallel_GetSignature(t *testing.T) {
+	t.Parallel()
 	sig := fixtures.SimplePredictSig()
 	lm := NewMockLMWithResponse(`{"answer": "test"}`)
 	pred := dsgo.NewPredict(sig, lm)
@@ -341,6 +349,7 @@ func TestParallel_GetSignature(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := tt.parallel.GetSignature()
 			if got == nil {
 				t.Error("Expected signature, got nil")
@@ -355,6 +364,7 @@ func TestParallel_GetSignature(t *testing.T) {
 
 // TestParallel_EmptyBatch tests handling of empty batch
 func TestParallel_EmptyBatch(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(5 * time.Second)
 	defer cancel()
 
@@ -376,6 +386,7 @@ func TestParallel_EmptyBatch(t *testing.T) {
 
 // TestParallel_ContextCancellation tests context cancellation during execution
 func TestParallel_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
@@ -403,6 +414,7 @@ func TestParallel_ContextCancellation(t *testing.T) {
 
 // TestParallel_UsageAggregation tests that usage is aggregated across all tasks
 func TestParallel_UsageAggregation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -443,6 +455,7 @@ func TestParallel_UsageAggregation(t *testing.T) {
 
 // TestParallel_CustomBatchKey tests custom batch key
 func TestParallel_CustomBatchKey(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 

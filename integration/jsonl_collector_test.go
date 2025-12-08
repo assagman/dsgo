@@ -25,6 +25,7 @@ import (
 // - Each line can be parsed back to HistoryEntry
 // - Entry count matches expected
 func TestJSONLCollector_FileOutput(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(30 * time.Second)
 	defer cancel()
 
@@ -91,6 +92,7 @@ func TestJSONLCollector_FileOutput(t *testing.T) {
 
 // TestJSONLCollector_FileOutputTableDriven uses table-driven tests for various entry configurations.
 func TestJSONLCollector_FileOutputTableDriven(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		entryCount int
@@ -145,6 +147,7 @@ func TestJSONLCollector_FileOutputTableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tmpDir := t.TempDir()
 			filePath := filepath.Join(tmpDir, "test.jsonl")
 
@@ -183,6 +186,7 @@ func TestJSONLCollector_FileOutputTableDriven(t *testing.T) {
 // - Each line is valid JSON
 // - Line count matches expected
 func TestJSONLCollector_ConcurrentWrites(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(60 * time.Second)
 	defer cancel()
 
@@ -305,6 +309,7 @@ func TestJSONLCollector_ConcurrentWrites(t *testing.T) {
 
 // TestJSONLCollector_ConcurrentWritesRapidFire tests rapid concurrent writes with no delay.
 func TestJSONLCollector_ConcurrentWritesRapidFire(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "rapid_fire.jsonl")
 
@@ -355,6 +360,7 @@ func TestJSONLCollector_ConcurrentWritesRapidFire(t *testing.T) {
 // - No truncation occurs
 // - Data integrity maintained
 func TestJSONLCollector_LargeEntries(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(30 * time.Second)
 	defer cancel()
 
@@ -460,6 +466,7 @@ func TestJSONLCollector_LargeEntries(t *testing.T) {
 
 // TestJSONLCollector_LargeEntriesTableDriven uses table-driven tests for various large content scenarios.
 func TestJSONLCollector_LargeEntriesTableDriven(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		contentSize int
@@ -473,6 +480,7 @@ func TestJSONLCollector_LargeEntriesTableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tmpDir := t.TempDir()
 			filePath := filepath.Join(tmpDir, "large.jsonl")
 
@@ -521,6 +529,7 @@ func TestJSONLCollector_LargeEntriesTableDriven(t *testing.T) {
 
 // TestJSONLCollector_LargeEntriesWithSpecialCharacters tests large content with special JSON characters.
 func TestJSONLCollector_LargeEntriesWithSpecialCharacters(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "special_chars.jsonl")
 
@@ -579,6 +588,7 @@ func TestJSONLCollector_LargeEntriesWithSpecialCharacters(t *testing.T) {
 // - Data is flushed before close
 // - No data loss on close
 func TestJSONLCollector_Cleanup(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(15 * time.Second)
 	defer cancel()
 
@@ -627,6 +637,7 @@ func TestJSONLCollector_Cleanup(t *testing.T) {
 
 // TestJSONLCollector_CleanupTableDriven uses table-driven tests for cleanup scenarios.
 func TestJSONLCollector_CleanupTableDriven(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		entryCount  int
@@ -666,6 +677,7 @@ func TestJSONLCollector_CleanupTableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tmpDir := t.TempDir()
 			filePath := filepath.Join(tmpDir, "cleanup.jsonl")
 
@@ -700,6 +712,7 @@ func TestJSONLCollector_CleanupTableDriven(t *testing.T) {
 
 // TestJSONLCollector_FlushOnClose verifies data is flushed before close.
 func TestJSONLCollector_FlushOnClose(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "flush_test.jsonl")
 
@@ -736,6 +749,7 @@ func TestJSONLCollector_FlushOnClose(t *testing.T) {
 
 // TestJSONLCollector_PathAccessor verifies the Path() method returns correct path.
 func TestJSONLCollector_PathAccessor(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "path_test.jsonl")
 
@@ -752,6 +766,7 @@ func TestJSONLCollector_PathAccessor(t *testing.T) {
 
 // TestJSONLCollector_CountAccuracy verifies Count() is accurate during and after writes.
 func TestJSONLCollector_CountAccuracy(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "count_test.jsonl")
 
@@ -963,6 +978,7 @@ func readJSONLFileWithLargeBuffer(t *testing.T, filePath string) []string {
 
 // TestJSONLCollector_InvalidPath tests collector creation with invalid path
 func TestJSONLCollector_InvalidPath(t *testing.T) {
+	t.Parallel()
 	// Try to create collector in a non-existent directory
 	invalidPath := "/nonexistent/directory/structure/that/should/not/exist/test.jsonl"
 
@@ -974,6 +990,7 @@ func TestJSONLCollector_InvalidPath(t *testing.T) {
 
 // TestJSONLCollector_WriteAfterClose tests that writing after close returns error
 func TestJSONLCollector_WriteAfterClose(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "write_after_close_test.jsonl")
 
@@ -1003,6 +1020,7 @@ func TestJSONLCollector_WriteAfterClose(t *testing.T) {
 
 // TestJSONLCollector_ConcurrentCollectAndClose tests concurrent collect and close operations
 func TestJSONLCollector_ConcurrentCollectAndClose(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "concurrent_close_test.jsonl")
 
@@ -1057,6 +1075,7 @@ func TestJSONLCollector_ConcurrentCollectAndClose(t *testing.T) {
 // TestJSONLCollector_PermissionDenied tests collector behavior with permission issues
 // Note: This test is platform-specific and may behave differently on Windows
 func TestJSONLCollector_PermissionDenied(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("SKIP_PERMISSION_TEST") != "" {
 		t.Skip("Permission test skipped")
 	}
@@ -1096,6 +1115,7 @@ func TestJSONLCollector_PermissionDenied(t *testing.T) {
 
 // TestJSONLCollector_EmptyEntry tests collecting entries with minimal data
 func TestJSONLCollector_EmptyEntry(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "empty_entry_test.jsonl")
 
@@ -1135,6 +1155,7 @@ func TestJSONLCollector_EmptyEntry(t *testing.T) {
 
 // TestJSONLCollector_LargeContentCount tests collecting with extremely large count/usage values
 func TestJSONLCollector_LargeContentCount(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "large_counts_test.jsonl")
 
@@ -1191,6 +1212,7 @@ func TestJSONLCollector_LargeContentCount(t *testing.T) {
 
 // TestJSONLCollector_NilFieldsHandling tests handling of nil/empty fields
 func TestJSONLCollector_NilFieldsHandling(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "nil_fields_test.jsonl")
 
@@ -1235,6 +1257,7 @@ func TestJSONLCollector_NilFieldsHandling(t *testing.T) {
 
 // TestJSONLCollector_CounterAccuracyAfterError tests that count is accurate even after errors
 func TestJSONLCollector_CounterAccuracyAfterError(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "count_accuracy_test.jsonl")
 
@@ -1267,6 +1290,7 @@ func TestJSONLCollector_CounterAccuracyAfterError(t *testing.T) {
 
 // TestJSONLCollector_RecreateAfterDelete tests creating collector for same path after deleting file
 func TestJSONLCollector_RecreateAfterDelete(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "recreate_test.jsonl")
 

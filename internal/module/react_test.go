@@ -11,6 +11,7 @@ import (
 )
 
 func TestReAct_Forward_NoTools(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -39,6 +40,7 @@ func TestReAct_Forward_NoTools(t *testing.T) {
 }
 
 func TestReAct_Forward_WithToolCalls(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -81,6 +83,7 @@ func TestReAct_Forward_WithToolCalls(t *testing.T) {
 }
 
 func TestCoerceBasicTypes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		signature *core.Signature
@@ -187,7 +190,9 @@ func TestCoerceBasicTypes(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // Capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := coerceBasicTypes(tt.signature, tt.inputs)
 
 			for key, expectedVal := range tt.expected {
@@ -206,6 +211,7 @@ func TestCoerceBasicTypes(t *testing.T) {
 }
 
 func TestReAct_RunExtract_Success(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -241,6 +247,7 @@ func TestReAct_RunExtract_Success(t *testing.T) {
 }
 
 func TestReAct_RunExtract_FallbackToDirectJSON(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -271,6 +278,7 @@ func TestReAct_RunExtract_FallbackToDirectJSON(t *testing.T) {
 }
 
 func TestReAct_RunExtract_FallbackToTextExtraction(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -303,6 +311,7 @@ func TestReAct_RunExtract_FallbackToTextExtraction(t *testing.T) {
 }
 
 func TestReAct_RunExtract_GenerationError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -329,6 +338,7 @@ func TestReAct_RunExtract_GenerationError(t *testing.T) {
 }
 
 func TestReAct_RunExtract_CompleteFailure(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -361,6 +371,7 @@ func TestReAct_RunExtract_CompleteFailure(t *testing.T) {
 }
 
 func TestReAct_RunExtract_WithReasoningField(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -395,6 +406,7 @@ func TestReAct_RunExtract_WithReasoningField(t *testing.T) {
 }
 
 func TestReAct_Forward_InvalidInput(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("required", core.FieldTypeString, "Required")
 
@@ -408,6 +420,7 @@ func TestReAct_Forward_InvalidInput(t *testing.T) {
 }
 
 func TestReAct_Forward_LMError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question")
 
@@ -428,6 +441,7 @@ func TestReAct_Forward_LMError(t *testing.T) {
 }
 
 func TestReAct_Forward_MaxIterations(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -465,6 +479,7 @@ func TestReAct_Forward_MaxIterations(t *testing.T) {
 }
 
 func TestReAct_Forward_ToolNotFound(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -502,6 +517,7 @@ func TestReAct_Forward_ToolNotFound(t *testing.T) {
 }
 
 func TestReAct_Forward_ToolError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -543,6 +559,7 @@ func TestReAct_Forward_ToolError(t *testing.T) {
 }
 
 func TestReAct_WithOptions(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	lm := &MockLM{}
 	react := NewReAct(sig, lm, []core.Tool{})
@@ -556,6 +573,7 @@ func TestReAct_WithOptions(t *testing.T) {
 }
 
 func TestReAct_WithMaxIterations(t *testing.T) {
+	t.Parallel()
 	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
 	react.WithMaxIterations(5)
 
@@ -565,6 +583,7 @@ func TestReAct_WithMaxIterations(t *testing.T) {
 }
 
 func TestReAct_WithVerbose(t *testing.T) {
+	t.Parallel()
 	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
 	react.WithVerbose(true)
 
@@ -574,6 +593,7 @@ func TestReAct_WithVerbose(t *testing.T) {
 }
 
 func TestReAct_GetSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	react := NewReAct(sig, &MockLM{}, []core.Tool{})
 
@@ -586,6 +606,7 @@ func TestReAct_GetSignature(t *testing.T) {
 // See internal/jsonutil/extract_test.go for comprehensive JSON extraction and newline fixing tests
 
 func TestReAct_BuildSystemPrompt_NoTools(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	react := NewReAct(sig, &MockLM{}, []core.Tool{})
 
@@ -596,6 +617,7 @@ func TestReAct_BuildSystemPrompt_NoTools(t *testing.T) {
 }
 
 func TestReAct_BuildSystemPrompt_WithTools(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	tool := core.NewTool("test", "Test tool", nil)
 	react := NewReAct(sig, &MockLM{}, []core.Tool{*tool})
@@ -614,6 +636,7 @@ func TestReAct_BuildSystemPrompt_WithTools(t *testing.T) {
 }
 
 func TestReAct_FindTool(t *testing.T) {
+	t.Parallel()
 	tool1 := core.NewTool("search", "Search", nil)
 	tool2 := core.NewTool("calculate", "Calculate", nil)
 
@@ -632,6 +655,7 @@ func TestReAct_FindTool(t *testing.T) {
 }
 
 func TestReAct_StagnationDetection(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -709,6 +733,7 @@ func TestReAct_StagnationDetection(t *testing.T) {
 
 // TestReAct_Forward_WithHistory tests history management
 func TestReAct_Forward_WithHistory(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -747,6 +772,7 @@ func TestReAct_Forward_WithHistory(t *testing.T) {
 
 // TestReAct_Forward_WithFinishTool tests the "finish" tool detection
 func TestReAct_Forward_WithFinishTool(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer").
@@ -791,6 +817,7 @@ func TestReAct_Forward_WithFinishTool(t *testing.T) {
 
 // TestReAct_Forward_WithFinishTool_InvalidOutputs tests finish tool with validation errors
 func TestReAct_Forward_WithFinishTool_InvalidOutputs(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer").
@@ -843,6 +870,7 @@ func TestReAct_Forward_WithFinishTool_InvalidOutputs(t *testing.T) {
 
 // TestReAct_Forward_WithReasoning tests reasoning field extraction and cleanup
 func TestReAct_Forward_WithReasoning(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -878,6 +906,7 @@ func TestReAct_Forward_WithReasoning(t *testing.T) {
 
 // TestReAct_Forward_WithReasoningInSignature tests when reasoning is part of the signature
 func TestReAct_Forward_WithReasoningInSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("reasoning", core.FieldTypeString, "Reasoning").
@@ -914,6 +943,7 @@ func TestReAct_Forward_WithReasoningInSignature(t *testing.T) {
 
 // TestReAct_Forward_JSONModeWithJSONAdapter tests JSON mode enablement with JSONAdapter
 func TestReAct_Forward_JSONModeWithJSONAdapter(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -951,6 +981,7 @@ func TestReAct_Forward_JSONModeWithJSONAdapter(t *testing.T) {
 
 // TestReAct_Forward_MultipleToolCalls tests multiple tool calls in one iteration
 func TestReAct_Forward_MultipleToolCalls(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -998,6 +1029,7 @@ func TestReAct_Forward_MultipleToolCalls(t *testing.T) {
 
 // TestReAct_Forward_WithDemos tests few-shot examples
 func TestReAct_Forward_WithDemos(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -1034,6 +1066,7 @@ func TestReAct_Forward_WithDemos(t *testing.T) {
 
 // TestReAct_Forward_AdapterMetrics tests adapter metadata extraction
 func TestReAct_Forward_AdapterMetrics(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -1071,6 +1104,7 @@ func TestReAct_Forward_AdapterMetrics(t *testing.T) {
 
 // TestReAct_Forward_OutputValidationError tests validation errors after parsing
 func TestReAct_Forward_OutputValidationError(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer").
@@ -1114,6 +1148,7 @@ func TestReAct_Forward_OutputValidationError(t *testing.T) {
 }
 
 func TestReAct_ExtractTextOutputs_ShortContent(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("answer", core.FieldTypeString, "Answer")
 
@@ -1130,6 +1165,7 @@ func TestReAct_ExtractTextOutputs_ShortContent(t *testing.T) {
 }
 
 func TestReAct_ExtractTextOutputs_NoStringFields(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("count", core.FieldTypeInt, "Count")
 
@@ -1144,6 +1180,7 @@ func TestReAct_ExtractTextOutputs_NoStringFields(t *testing.T) {
 }
 
 func TestReAct_ExtractTextOutputs_SingleField(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("answer", core.FieldTypeString, "Answer")
 
@@ -1163,6 +1200,7 @@ func TestReAct_ExtractTextOutputs_SingleField(t *testing.T) {
 }
 
 func TestReAct_ExtractTextOutputs_MultipleFields(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test").
 		AddOutput("answer", core.FieldTypeString, "Answer").
 		AddOutput("reasoning", core.FieldTypeString, "Reasoning")
@@ -1189,6 +1227,7 @@ func TestReAct_ExtractTextOutputs_MultipleFields(t *testing.T) {
 }
 
 func TestReAct_SynthesizeAnswerFromHistory_NoObservations(t *testing.T) {
+	t.Parallel()
 	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
 
 	messages := []core.Message{
@@ -1203,6 +1242,7 @@ func TestReAct_SynthesizeAnswerFromHistory_NoObservations(t *testing.T) {
 }
 
 func TestReAct_SynthesizeAnswerFromHistory_WithObservations(t *testing.T) {
+	t.Parallel()
 	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
 
 	messages := []core.Message{
@@ -1226,6 +1266,7 @@ func TestReAct_SynthesizeAnswerFromHistory_WithObservations(t *testing.T) {
 }
 
 func TestReAct_SynthesizeAnswerFromHistory_SkipsErrors(t *testing.T) {
+	t.Parallel()
 	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
 
 	messages := []core.Message{
@@ -1246,6 +1287,7 @@ func TestReAct_SynthesizeAnswerFromHistory_SkipsErrors(t *testing.T) {
 }
 
 func TestReAct_SynthesizeAnswerFromHistory_DeduplicatesObservations(t *testing.T) {
+	t.Parallel()
 	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
 
 	duplicateObs := "This is a long observation that will be duplicated to test deduplication"
@@ -1276,6 +1318,7 @@ func TestReAct_SynthesizeAnswerFromHistory_DeduplicatesObservations(t *testing.T
 }
 
 func TestReAct_SynthesizeAnswerFromHistory_LimitsToThreeObservations(t *testing.T) {
+	t.Parallel()
 	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
 
 	messages := []core.Message{
@@ -1295,6 +1338,7 @@ func TestReAct_SynthesizeAnswerFromHistory_LimitsToThreeObservations(t *testing.
 }
 
 func TestReAct_SynthesizeAnswerFromHistory_SkipsShortObservations(t *testing.T) {
+	t.Parallel()
 	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
 
 	messages := []core.Message{
@@ -1312,6 +1356,7 @@ func TestReAct_SynthesizeAnswerFromHistory_SkipsShortObservations(t *testing.T) 
 // TestReAct_ExtractionWithReasoning verifies that runExtract uses reasoning adapter
 // and attaches rationale to the prediction when hitting MaxIterations
 func TestReAct_ExtractionWithReasoning(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer").
@@ -1425,6 +1470,7 @@ func TestReAct_ExtractionWithReasoning(t *testing.T) {
 // This validates the "Implicit Finish" pattern where the model provides a valid answer
 // directly instead of using tools, which is correct behavior for native tool calling APIs.
 func TestReAct_ImplicitFinish(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Answer question").
 		AddInput("question", core.FieldTypeString, "Question").
 		AddOutput("answer", core.FieldTypeString, "Answer")
@@ -1474,6 +1520,7 @@ func TestReAct_ImplicitFinish(t *testing.T) {
 // triggering the retry mechanism. String-only signatures would use text extraction
 // as a fallback and accept malformed content.
 func TestReAct_ImplicitFinish_MalformedRetry(t *testing.T) {
+	t.Parallel()
 	// Use an int output field so malformed text fails validation
 	sig := core.NewSignature("Calculate something").
 		AddInput("question", core.FieldTypeString, "Question").
@@ -1543,6 +1590,7 @@ func TestReAct_ImplicitFinish_MalformedRetry(t *testing.T) {
 
 // TestReAct_WithMethods tests all ReAct configuration methods
 func TestReAct_WithMethods(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("test").
 		AddInput("question", core.FieldTypeString, "").
 		AddOutput("answer", core.FieldTypeString, "")

@@ -15,6 +15,7 @@ import (
 // Scenario: Stream 100 chunks, verify all received and ordered.
 // Expected: All chunks received, content preserved, no corruption.
 func TestStreaming_BasicChunksReceived(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Create LM that returns chunked response
@@ -74,6 +75,7 @@ func TestStreaming_BasicChunksReceived(t *testing.T) {
 // Scenario: Stream contains [[## field_name ##]] markers.
 // Expected: Markers removed from chunks, content clean.
 func TestStreaming_MarkerFiltering(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Response with markers
@@ -122,6 +124,7 @@ func TestStreaming_MarkerFiltering(t *testing.T) {
 // Scenario: Basic Predict.Stream() execution.
 // Expected: Chunks received, final prediction valid.
 func TestStreaming_PredictModule(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	lm := &MockLM{
@@ -173,6 +176,7 @@ func TestStreaming_PredictModule(t *testing.T) {
 // Scenario: LM produces 10KB+ response.
 // Expected: All data streamed without truncation or loss.
 func TestStreaming_LargeResponses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Generate large response
@@ -228,6 +232,7 @@ func TestStreaming_LargeResponses(t *testing.T) {
 // Scenario: Stream errors mid-flight.
 // Expected: Error channel receives error, streaming stops gracefully.
 func TestStreaming_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// LM that fails
@@ -274,6 +279,7 @@ func TestStreaming_ErrorHandling(t *testing.T) {
 // Scenario: Cancel context during streaming.
 // Expected: Streaming stops gracefully, channels close.
 func TestStreaming_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// LM with short response
@@ -327,6 +333,7 @@ func TestStreaming_ContextCancellation(t *testing.T) {
 // Scenario: Stream response and verify history entry created.
 // Expected: HistoryEntry with complete metadata (tokens, cost, latency).
 func TestStreaming_ObservabilityWithStreaming(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	collector := &HistoryCollector{}
@@ -379,6 +386,7 @@ func TestStreaming_ObservabilityWithStreaming(t *testing.T) {
 // Scenario: LM produces many small chunks rapidly.
 // Expected: All chunks received, no data loss.
 func TestStreaming_MultipleChunkHandling(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Generate response with many small pieces
@@ -440,6 +448,7 @@ func TestStreaming_MultipleChunkHandling(t *testing.T) {
 // Scenario: Multiple streams running in parallel.
 // Expected: Each stream independent, no cross-contamination.
 func TestStreaming_ConcurrentStreams(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	numStreams := 5
 
@@ -505,6 +514,7 @@ func TestStreaming_ConcurrentStreams(t *testing.T) {
 // Scenario: LM returns empty response.
 // Expected: Graceful handling, prediction still created.
 func TestStreaming_EmptyResponse(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	lm := &MockLM{
@@ -641,6 +651,7 @@ func (m *DelayedChunkLM) IsOpenAI() bool      { return false }
 // Scenario: Stream 5 chunks, then simulate connection error.
 // Expected: Error received, partial content preserved before error.
 func TestStreaming_ReconnectionScenario(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		chunks         []string
@@ -680,6 +691,7 @@ func TestStreaming_ReconnectionScenario(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			lm := &DelayedChunkLM{
@@ -823,6 +835,7 @@ func (m *SlowConsumerLM) GetChunksSent() int {
 // Scenario: Consumer processes chunks slowly while producer emits rapidly.
 // Expected: No data loss, buffering works correctly.
 func TestStreaming_BackpressureHandling(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		numChunks       int
@@ -855,6 +868,7 @@ func TestStreaming_BackpressureHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
@@ -1000,6 +1014,7 @@ func splitWords(s string) []string {
 // Scenario: Compare usage from streaming vs non-streaming calls.
 // Expected: Token counts and cost calculations match.
 func TestStreaming_FinalUsageAccuracy(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		response         string
@@ -1036,6 +1051,7 @@ func TestStreaming_FinalUsageAccuracy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			expectedCost := float64(tt.totalTokens) * tt.costPerToken
@@ -1071,24 +1087,35 @@ func TestStreaming_FinalUsageAccuracy(t *testing.T) {
 				t.Fatalf("Stream() failed: %v", err)
 			}
 
-			var streamPrediction *dsgo.Prediction
-			done := false
-			for !done {
+			var (
+				streamPrediction *dsgo.Prediction
+				chunksClosed     bool
+				errorsClosed     bool
+				predictionClosed bool
+			)
+
+			for streamPrediction == nil && (!chunksClosed || !errorsClosed || !predictionClosed) {
 				select {
 				case chunk, ok := <-streamResult.Chunks:
 					if !ok {
-						done = true
-						break
+						chunksClosed = true
+						continue
 					}
 					_ = chunk
-				case err := <-streamResult.Errors:
+				case err, ok := <-streamResult.Errors:
+					if !ok {
+						errorsClosed = true
+						continue
+					}
 					if err != nil {
 						t.Fatalf("Stream error: %v", err)
 					}
-					done = true
-				case pred := <-streamResult.Prediction:
+				case pred, ok := <-streamResult.Prediction:
+					if !ok {
+						predictionClosed = true
+						continue
+					}
 					streamPrediction = pred
-					done = true
 				case <-time.After(5 * time.Second):
 					t.Fatal("timeout waiting for stream")
 				}

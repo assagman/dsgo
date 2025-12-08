@@ -42,6 +42,7 @@ func (m *MockModule) GetSignature() *core.Signature {
 }
 
 func TestBestOfN_Forward_Success(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
@@ -71,6 +72,7 @@ func TestBestOfN_Forward_Success(t *testing.T) {
 }
 
 func TestBestOfN_Forward_NoScorer(t *testing.T) {
+	t.Parallel()
 	module := &MockModule{}
 	bon := NewBestOfN(module, 3)
 
@@ -81,6 +83,7 @@ func TestBestOfN_Forward_NoScorer(t *testing.T) {
 }
 
 func TestBestOfN_Forward_InvalidN(t *testing.T) {
+	t.Parallel()
 	module := &MockModule{}
 	bon := NewBestOfN(module, 0).WithScorer(DefaultScorer())
 
@@ -91,6 +94,7 @@ func TestBestOfN_Forward_InvalidN(t *testing.T) {
 }
 
 func TestBestOfN_Forward_ModuleError(t *testing.T) {
+	t.Parallel()
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return nil, errors.New("module error")
@@ -106,6 +110,7 @@ func TestBestOfN_Forward_ModuleError(t *testing.T) {
 }
 
 func TestBestOfN_Forward_PartialFailures(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
@@ -130,6 +135,7 @@ func TestBestOfN_Forward_PartialFailures(t *testing.T) {
 }
 
 func TestBestOfN_Forward_ExceedMaxFailures(t *testing.T) {
+	t.Parallel()
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return nil, errors.New("always fail")
@@ -145,6 +151,7 @@ func TestBestOfN_Forward_ExceedMaxFailures(t *testing.T) {
 }
 
 func TestBestOfN_Forward_ScorerError(t *testing.T) {
+	t.Parallel()
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return core.NewPrediction(map[string]interface{}{"answer": "test"}), nil
@@ -164,6 +171,7 @@ func TestBestOfN_Forward_ScorerError(t *testing.T) {
 }
 
 func TestBestOfN_Forward_ReturnAll(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
@@ -193,6 +201,7 @@ func TestBestOfN_Forward_ReturnAll(t *testing.T) {
 }
 
 func TestBestOfN_Forward_Parallel(t *testing.T) {
+	t.Parallel()
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return core.NewPrediction(map[string]interface{}{"result": "test"}), nil
@@ -212,6 +221,7 @@ func TestBestOfN_Forward_Parallel(t *testing.T) {
 }
 
 func TestBestOfN_Forward_ParallelWithFailures(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	var mu sync.Mutex
 
@@ -246,6 +256,7 @@ func TestBestOfN_Forward_ParallelWithFailures(t *testing.T) {
 }
 
 func TestBestOfN_Forward_ParallelExceedMaxFailures(t *testing.T) {
+	t.Parallel()
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return nil, errors.New("always fail")
@@ -265,6 +276,7 @@ func TestBestOfN_Forward_ParallelExceedMaxFailures(t *testing.T) {
 }
 
 func TestBestOfN_Forward_ParallelScorerError(t *testing.T) {
+	t.Parallel()
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return core.NewPrediction(map[string]interface{}{"value": "test"}), nil
@@ -284,6 +296,7 @@ func TestBestOfN_Forward_ParallelScorerError(t *testing.T) {
 }
 
 func TestBestOfN_Forward_ParallelReturnAll(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	var mu sync.Mutex
 
@@ -318,6 +331,7 @@ func TestBestOfN_Forward_ParallelReturnAll(t *testing.T) {
 }
 
 func TestBestOfN_GetSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("Test")
 	module := &MockModule{SignatureValue: sig}
 	bon := NewBestOfN(module, 3)
@@ -328,6 +342,7 @@ func TestBestOfN_GetSignature(t *testing.T) {
 }
 
 func TestDefaultScorer(t *testing.T) {
+	t.Parallel()
 	scorer := DefaultScorer()
 
 	pred := core.NewPrediction(map[string]interface{}{
@@ -346,6 +361,7 @@ func TestDefaultScorer(t *testing.T) {
 }
 
 func TestBestOfN_WithThreshold_EarlyStop(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	module := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
@@ -376,6 +392,7 @@ func TestBestOfN_WithThreshold_EarlyStop(t *testing.T) {
 }
 
 func TestConfidenceScorer(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		outputs map[string]interface{}
@@ -418,7 +435,9 @@ func TestConfidenceScorer(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // Capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			scorer := ConfidenceScorer("confidence")
 			pred := core.NewPrediction(tt.outputs)
 			score, err := scorer(nil, pred)
@@ -437,6 +456,7 @@ func TestConfidenceScorer(t *testing.T) {
 // TestBestOfN_ConcurrentForward tests concurrent Forward() calls
 // to ensure thread safety when multiple goroutines use the same BestOfN module
 func TestBestOfN_ConcurrentForward(t *testing.T) {
+	t.Parallel()
 	var callCount int
 	var mu sync.Mutex
 
@@ -491,6 +511,7 @@ func TestBestOfN_ConcurrentForward(t *testing.T) {
 // TestBestOfN_Forward_ParallelContextCancellation tests that context cancellation
 // during parallel execution properly terminates all goroutines and returns an error
 func TestBestOfN_Forward_ParallelContextCancellation(t *testing.T) {
+	t.Parallel()
 	// Track how many goroutines started
 	var startedCount int
 	var mu sync.Mutex

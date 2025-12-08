@@ -17,6 +17,7 @@ func TestHighConcurrencyParallel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
+	t.Parallel()
 
 	sig := core.NewSignature("HighConcurrencyTest").
 		AddInput("task_id", core.FieldTypeInt, "Task ID").
@@ -66,6 +67,7 @@ func TestHistoryConcurrentStress(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
+	t.Parallel()
 
 	history := core.NewHistory()
 	var wg sync.WaitGroup
@@ -109,6 +111,7 @@ func TestStreamingBufferConcurrentStress(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
+	t.Parallel()
 
 	buffer := core.NewStreamingBuffer()
 	var wg sync.WaitGroup
@@ -149,6 +152,7 @@ func TestBestOfNParallelStress(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
+	t.Parallel()
 
 	sig := core.NewSignature("BestOfNStressTest").
 		AddInput("prompt", core.FieldTypeString, "Input prompt").
@@ -202,6 +206,7 @@ func TestMixedConcurrencyStress(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
+	t.Parallel()
 
 	var wg sync.WaitGroup
 	var completedOps int64
@@ -311,6 +316,7 @@ func TestMemoryUsageUnderConcurrency(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping memory test in short mode")
 	}
+	t.Parallel()
 
 	// Force GC to get baseline
 	runtime.GC()

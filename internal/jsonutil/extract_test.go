@@ -7,6 +7,7 @@ import (
 )
 
 func TestExtractJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   string
@@ -113,7 +114,9 @@ func TestExtractJSON(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ExtractJSON(tt.input, tt.opts...)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractJSON() error = %v, wantErr %v", err, tt.wantErr)
@@ -127,6 +130,7 @@ func TestExtractJSON(t *testing.T) {
 }
 
 func TestParseJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   string
@@ -168,7 +172,9 @@ func TestParseJSON(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ParseJSON(tt.input, tt.opts...)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseJSON() error = %v, wantErr %v", err, tt.wantErr)
@@ -186,6 +192,7 @@ func TestParseJSON(t *testing.T) {
 }
 
 func TestFixJSONNewlines(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -229,7 +236,9 @@ func TestFixJSONNewlines(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := fixJSONNewlines(tt.input)
 			if got != tt.want {
 				t.Errorf("fixJSONNewlines() = %v, want %v", got, tt.want)
@@ -239,6 +248,7 @@ func TestFixJSONNewlines(t *testing.T) {
 }
 
 func TestRepairJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -300,7 +310,9 @@ func TestRepairJSON(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			repaired := RepairJSON(tt.input)
 
 			// Parse the repaired JSON
@@ -345,6 +357,7 @@ func mapsEqual(a, b map[string]any) bool {
 }
 
 func TestIsJSONLiteral(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -365,7 +378,9 @@ func TestIsJSONLiteral(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := isJSONLiteral(tt.input)
 			if got != tt.want {
 				t.Errorf("isJSONLiteral(%q) = %v, want %v", tt.input, got, tt.want)
@@ -375,6 +390,7 @@ func TestIsJSONLiteral(t *testing.T) {
 }
 
 func TestFixSingleQuotes_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -398,7 +414,9 @@ func TestFixSingleQuotes_EdgeCases(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := fixSingleQuotes(tt.input)
 			if got != tt.want {
 				t.Errorf("fixSingleQuotes() = %q, want %q", got, tt.want)
@@ -408,6 +426,7 @@ func TestFixSingleQuotes_EdgeCases(t *testing.T) {
 }
 
 func TestRemoveTrailingCommas_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -446,7 +465,9 @@ func TestRemoveTrailingCommas_EdgeCases(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := removeTrailingCommas(tt.input)
 			if got != tt.want {
 				t.Errorf("removeTrailingCommas() = %q, want %q", got, tt.want)
@@ -464,6 +485,7 @@ func BenchmarkExtractJSON(b *testing.B) {
 	}
 
 	for i, input := range inputs {
+		input := input
 		b.Run(string(rune('A'+i)), func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				_, _ = ExtractJSON(input)
@@ -480,6 +502,7 @@ func BenchmarkRepairJSON(b *testing.B) {
 	}
 
 	for i, input := range inputs {
+		input := input
 		b.Run(string(rune('A'+i)), func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				_ = RepairJSON(input)

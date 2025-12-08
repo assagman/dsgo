@@ -13,6 +13,7 @@ import (
 // TestJSONAdapter_MalformedJSON_RecoveryChain tests JSON adapter with various malformed outputs
 // Tests that are likely to succeed with extraction from markdown or embedded JSON
 func TestJSONAdapter_MalformedJSON_RecoveryChain(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		malformedInput string
@@ -65,7 +66,9 @@ func TestJSONAdapter_MalformedJSON_RecoveryChain(t *testing.T) {
 	adapter := dsgo.NewJSONAdapter()
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := adapter.Parse(sig, tt.malformedInput)
 
 			if tt.shouldRecover && err != nil {
@@ -93,6 +96,7 @@ func TestJSONAdapter_MalformedJSON_RecoveryChain(t *testing.T) {
 
 // TestJSONAdapter_ComplexNesting tests JSON adapter with deeply nested structures
 func TestJSONAdapter_ComplexNesting(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		sig            *dsgo.Signature
@@ -147,7 +151,9 @@ func TestJSONAdapter_ComplexNesting(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			adapter := dsgo.NewJSONAdapter()
 			outputs, err := adapter.Parse(tt.sig, tt.input)
 
@@ -175,6 +181,7 @@ func TestJSONAdapter_ComplexNesting(t *testing.T) {
 
 // TestJSONAdapter_LargeOutputs tests JSON adapter with very large responses
 func TestJSONAdapter_LargeOutputs(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("content", dsgo.FieldTypeString, "")
 
@@ -203,6 +210,7 @@ func TestJSONAdapter_LargeOutputs(t *testing.T) {
 
 // TestChatAdapter_FieldMarkers tests Chat adapter with standard field marker format
 func TestChatAdapter_FieldMarkers(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "").
 		AddOutput("sources", dsgo.FieldTypeString, "")
@@ -244,7 +252,9 @@ Search results`,
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := adapter.Parse(sig, tt.content)
 
 			if (err != nil) != tt.wantErr {
@@ -261,6 +271,7 @@ Search results`,
 
 // TestChatAdapter_MalformedMarkers tests Chat adapter with malformed or missing markers
 func TestChatAdapter_MalformedMarkers(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
 
@@ -296,7 +307,9 @@ yes`,
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := adapter.Parse(sig, tt.content)
 
 			// Some of these might fail or succeed - we're just testing robustness
@@ -314,6 +327,7 @@ yes`,
 
 // TestChatAdapter_ExtraContent tests Chat adapter with extra content around field values
 func TestChatAdapter_ExtraContent(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "").
 		AddOutput("confidence", dsgo.FieldTypeFloat, "")
@@ -368,7 +382,9 @@ It discusses various points.
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := adapter.Parse(sig, tt.content)
 
 			if (err != nil) != tt.wantErr {
@@ -387,6 +403,7 @@ It discusses various points.
 
 // TestTwoStepAdapter_ReasoningExtraction tests TwoStep adapter with reasoning and structured extraction
 func TestTwoStepAdapter_ReasoningExtraction(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("sentiment", dsgo.FieldTypeString, "").
 		AddOutput("confidence", dsgo.FieldTypeFloat, "")
@@ -424,7 +441,9 @@ between neutral and positive. Confidence is moderate.`,
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockLM := &mockExtractionLM{
 				response: tt.extractionResponse,
 			}
@@ -451,6 +470,7 @@ between neutral and positive. Confidence is moderate.`,
 
 // TestFallbackAdapter_ComplexRecovery tests Fallback adapter in complex failure scenarios
 func TestFallbackAdapter_ComplexRecovery(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "").
 		AddOutput("score", dsgo.FieldTypeFloat, "")
@@ -497,7 +517,9 @@ func TestFallbackAdapter_ComplexRecovery(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := adapter.Parse(sig, tt.content)
 
 			if (err != nil) != tt.wantErr {
@@ -523,6 +545,7 @@ func TestFallbackAdapter_ComplexRecovery(t *testing.T) {
 
 // TestAdapter_TypeCoercion_EdgeCases tests type coercion in extreme scenarios
 func TestAdapter_TypeCoercion_EdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		sig           *dsgo.Signature
@@ -602,7 +625,9 @@ Some explanation here`,
 	tests = append(tests, classTests...)
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := tt.adapter.Parse(tt.sig, tt.input)
 			if err != nil {
 				t.Errorf("Parse failed: %v", err)
@@ -629,6 +654,7 @@ Some explanation here`,
 
 // TestAdapter_Metadata_Tracking tests adapter metadata tracking
 func TestAdapter_Metadata_Tracking(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
 
@@ -658,7 +684,9 @@ func TestAdapter_Metadata_Tracking(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := adapter.Parse(sig, tt.content)
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
@@ -690,6 +718,7 @@ func TestAdapter_Metadata_Tracking(t *testing.T) {
 
 // TestAdapter_CaseInsensitivity_ClassFields tests case-insensitive class field matching
 func TestAdapter_CaseInsensitivity_ClassFields(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("sentiment", dsgo.FieldTypeClass, "")
 	sig.OutputFields[0].Classes = []string{"positive", "negative", "neutral"}
@@ -724,7 +753,9 @@ func TestAdapter_CaseInsensitivity_ClassFields(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := adapter.Parse(sig, tt.content)
 			if err != nil {
 				t.Errorf("Parse failed: %v", err)
@@ -746,6 +777,7 @@ func TestAdapter_CaseInsensitivity_ClassFields(t *testing.T) {
 
 // TestAdapter_IntegrationWithModule tests adapter robustness in actual module usage
 func TestAdapter_IntegrationWithModule(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("Generate").
 		AddInput("topic", dsgo.FieldTypeString, "").
 		AddOutput("content", dsgo.FieldTypeString, "")
@@ -785,7 +817,9 @@ Generated content here.`,
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := tt.adapter.Parse(sig, tt.lmResponse)
 
 			if tt.shouldWork && err != nil {
@@ -809,6 +843,7 @@ Generated content here.`,
 
 // TestAdapter_JSONRepair tests JSON repair functionality
 func TestAdapter_JSONRepair(t *testing.T) {
+	t.Parallel()
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
 
@@ -838,7 +873,9 @@ func TestAdapter_JSONRepair(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := adapter.Parse(sig, tt.input)
 
 			if err != nil {
@@ -918,6 +955,7 @@ func (m *mockExtractionLM) Stream(_ context.Context, _ []dsgo.Message, _ *dsgo.G
 // ============================================================================
 
 func TestAdapter_UnicodeHandling(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		sig      *dsgo.Signature
@@ -1019,7 +1057,9 @@ Hello 你好 مرحبا שלום 🌍`,
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := tt.adapter.Parse(tt.sig, tt.input)
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
@@ -1044,6 +1084,7 @@ Hello 你好 مرحبا שלום 🌍`,
 // ============================================================================
 
 func TestAdapter_VeryLargeOutputs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		contentSizeKB  int
@@ -1085,7 +1126,9 @@ func TestAdapter_VeryLargeOutputs(t *testing.T) {
 		AddOutput("content", dsgo.FieldTypeString, "")
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			baseContent := strings.Repeat("This is test content with various words. ", 30)
 			targetBytes := tt.contentSizeKB * 1024
 			repetitions := (targetBytes / len(baseContent)) + 1
@@ -1134,6 +1177,7 @@ func TestAdapter_VeryLargeOutputs(t *testing.T) {
 // ============================================================================
 
 func TestAdapter_MixedFieldMarkers(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		sig             *dsgo.Signature
@@ -1211,7 +1255,9 @@ Here's also some JSON: {"score": 0.95}
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			adapter := dsgo.NewFallbackAdapter()
 			outputs, err := adapter.Parse(tt.sig, tt.input)
 
@@ -1236,6 +1282,7 @@ Here's also some JSON: {"score": 0.95}
 // ============================================================================
 
 func TestAdapter_NestedJSONEscape(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		sig             *dsgo.Signature
@@ -1391,7 +1438,9 @@ func example() {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			outputs, err := tt.adapter.Parse(tt.sig, tt.input)
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)

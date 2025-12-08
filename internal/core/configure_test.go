@@ -154,6 +154,9 @@ func TestConfigure(t *testing.T) {
 }
 
 func TestResetConfig(t *testing.T) {
+	// Note: Cannot use t.Parallel() because ResetConfig() modifies global state
+	ResetConfig()
+	defer ResetConfig()
 	Configure(
 		WithProvider("openai"),
 		WithModel("gpt-4"),
@@ -187,6 +190,7 @@ func TestResetConfig(t *testing.T) {
 }
 
 func TestConfigure_Concurrent(t *testing.T) {
+	// Note: Cannot use t.Parallel() because ResetConfig() modifies global state
 	ResetConfig()
 	defer ResetConfig()
 
@@ -210,6 +214,7 @@ func TestConfigure_Concurrent(t *testing.T) {
 
 // TestWithAPIKey_MultipleProviders tests adding multiple API keys
 func TestWithAPIKey_MultipleProviders(t *testing.T) {
+	// Note: Cannot use t.Parallel() because ResetConfig() modifies global state
 	ResetConfig()
 	defer ResetConfig()
 
@@ -256,6 +261,7 @@ func TestWithAPIKey_Overwrite(t *testing.T) {
 
 // TestWithCache enables caching with specific capacity
 func TestWithCache(t *testing.T) {
+	// Note: Cannot use t.Parallel() because ResetConfig() modifies global state
 	ResetConfig()
 	defer ResetConfig()
 
@@ -287,6 +293,7 @@ func TestWithCache(t *testing.T) {
 
 // TestWithCacheTTL sets cache TTL and affects cache recreation
 func TestWithCacheTTL(t *testing.T) {
+	// Note: Cannot use t.Parallel() because ResetConfig() modifies global state
 	ResetConfig()
 	defer ResetConfig()
 
@@ -309,6 +316,7 @@ func TestWithCacheTTL(t *testing.T) {
 
 // TestWithCacheTTL_UpdatesTTL tests updating TTL on existing cache
 func TestWithCacheTTL_UpdatesTTL(t *testing.T) {
+	// Note: Cannot use t.Parallel() because ResetConfig() modifies global state
 	ResetConfig()
 	defer ResetConfig()
 
@@ -351,6 +359,7 @@ func TestWithCacheTTL_WithoutExistingCache(t *testing.T) {
 
 // TestWithCollector sets custom collector
 func TestWithCollector(t *testing.T) {
+	// Note: Cannot use t.Parallel() because ResetConfig() modifies global state
 	ResetConfig()
 	defer ResetConfig()
 
@@ -365,6 +374,7 @@ func TestWithCollector(t *testing.T) {
 
 // TestStripProviderPrefix tests the stripProviderPrefix helper function
 func TestStripProviderPrefix(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -408,7 +418,9 @@ func TestStripProviderPrefix(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := stripProviderPrefix(tt.input)
 			if result != tt.expected {
 				t.Errorf("stripProviderPrefix(%q) = %q, want %q", tt.input, result, tt.expected)

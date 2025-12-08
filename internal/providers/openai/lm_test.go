@@ -12,6 +12,7 @@ import (
 )
 
 func TestNewOpenAI(t *testing.T) {
+	t.Parallel()
 	originalKey := os.Getenv("OPENAI_API_KEY")
 	defer func() { _ = os.Setenv("OPENAI_API_KEY", originalKey) }()
 
@@ -33,6 +34,7 @@ func TestNewOpenAI(t *testing.T) {
 }
 
 func TestOpenAI_Name(t *testing.T) {
+	t.Parallel()
 	lm := &openAI{Model: "gpt-4-turbo"}
 	if lm.Name() != "gpt-4-turbo" {
 		t.Errorf("expected Name gpt-4-turbo, got %s", lm.Name())
@@ -40,6 +42,7 @@ func TestOpenAI_Name(t *testing.T) {
 }
 
 func TestOpenAI_SupportsJSON(t *testing.T) {
+	t.Parallel()
 	lm := &openAI{}
 	if !lm.SupportsJSON() {
 		t.Error("expected SupportsJSON to return true")
@@ -47,6 +50,7 @@ func TestOpenAI_SupportsJSON(t *testing.T) {
 }
 
 func TestOpenAI_SupportsTools(t *testing.T) {
+	t.Parallel()
 	lm := &openAI{}
 	if !lm.SupportsTools() {
 		t.Error("expected SupportsTools to return true")
@@ -54,6 +58,7 @@ func TestOpenAI_SupportsTools(t *testing.T) {
 }
 
 func TestOpenAI_Generate_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("expected POST, got %s", r.Method)
@@ -126,6 +131,7 @@ func TestOpenAI_Generate_Success(t *testing.T) {
 }
 
 func TestOpenAI_Generate_WithTools(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -199,6 +205,7 @@ func TestOpenAI_Generate_WithTools(t *testing.T) {
 }
 
 func TestOpenAI_Generate_ErrorResponse(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error": "invalid request"}`))
@@ -219,6 +226,7 @@ func TestOpenAI_Generate_ErrorResponse(t *testing.T) {
 }
 
 func TestOpenAI_Generate_NoChoices(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := openAIResponse{
 			Choices: []struct {
@@ -244,6 +252,7 @@ func TestOpenAI_Generate_NoChoices(t *testing.T) {
 }
 
 func TestOpenAI_BuildRequest(t *testing.T) {
+	t.Parallel()
 	lm := &openAI{Model: "gpt-4"}
 
 	tests := []struct {
@@ -395,7 +404,9 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			req := lm.buildRequest(tt.messages, tt.options)
 			tt.check(t, req)
 		})
@@ -403,6 +414,7 @@ func TestOpenAI_BuildRequest(t *testing.T) {
 }
 
 func TestOpenAI_ConvertMessages(t *testing.T) {
+	t.Parallel()
 	lm := &openAI{}
 
 	tests := []struct {
@@ -466,7 +478,9 @@ func TestOpenAI_ConvertMessages(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			converted := lm.convertMessages(tt.messages)
 			tt.check(t, converted)
 		})
@@ -474,6 +488,7 @@ func TestOpenAI_ConvertMessages(t *testing.T) {
 }
 
 func TestOpenAI_ConvertTool(t *testing.T) {
+	t.Parallel()
 	lm := &openAI{}
 	tool := core.NewTool("test_tool", "A test tool", nil)
 	tool.AddParameter("param1", "string", "First param", true)
@@ -518,6 +533,7 @@ func TestOpenAI_ConvertTool(t *testing.T) {
 }
 
 func TestOpenAI_ParseResponse_InvalidToolArgs(t *testing.T) {
+	t.Parallel()
 	lm := &openAI{}
 	resp := &openAIResponse{
 		Choices: []struct {
@@ -557,6 +573,7 @@ func TestOpenAI_ParseResponse_InvalidToolArgs(t *testing.T) {
 }
 
 func TestOpenAI_Generate_WithToolChoice(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -603,6 +620,7 @@ func TestOpenAI_Generate_WithToolChoice(t *testing.T) {
 }
 
 func TestOpenAI_Generate_ToolChoiceNone(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -689,6 +707,7 @@ func (f *fakeCache) Stats() core.CacheStats {
 }
 
 func TestOpenAI_Generate_CacheHit(t *testing.T) {
+	t.Parallel()
 	cachedResult := &core.GenerateResult{
 		Content:      "cached response",
 		FinishReason: "stop",
@@ -729,6 +748,7 @@ func TestOpenAI_Generate_CacheHit(t *testing.T) {
 }
 
 func TestOpenAI_Generate_CacheSet(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := openAIResponse{
 			Choices: []struct {
@@ -776,6 +796,7 @@ func TestOpenAI_Generate_CacheSet(t *testing.T) {
 }
 
 func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
+	t.Parallel()
 	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
 	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
 
@@ -804,6 +825,7 @@ func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
 }
 
 func TestOpenAI_Generate_ParseResponseError(t *testing.T) {
+	t.Parallel()
 	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
 	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
 
@@ -878,6 +900,7 @@ func findSubstring(s, substr string) bool {
 }
 
 func TestOpenAI_Stream_HappyPath(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -954,6 +977,7 @@ func TestOpenAI_Stream_HappyPath(t *testing.T) {
 }
 
 func TestOpenAI_Stream_NonOKStatus(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte("bad request"))
@@ -995,6 +1019,7 @@ func TestOpenAI_Stream_NonOKStatus(t *testing.T) {
 }
 
 func TestOpenAI_Stream_InvalidJSONChunk(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -1038,6 +1063,7 @@ func TestOpenAI_Stream_InvalidJSONChunk(t *testing.T) {
 }
 
 func TestOpenAI_Stream_SkipsNonDataLines(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -1092,6 +1118,7 @@ func TestOpenAI_Stream_SkipsNonDataLines(t *testing.T) {
 }
 
 func TestOpenAI_Stream_EmptyChoices(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -1142,7 +1169,8 @@ func TestOpenAI_Stream_EmptyChoices(t *testing.T) {
 // TestOpenAI_InitRegistration tests that OpenAI provider is registered
 // This verifies the init() function properly registers the provider
 func TestOpenAI_InitRegistration(t *testing.T) {
-	// Test that the factory function registered in init() works
+	t.Parallel()
+	// Test that factory function registered in init() works
 	originalKey := os.Getenv("OPENAI_API_KEY")
 	defer func() { _ = os.Setenv("OPENAI_API_KEY", originalKey) }()
 
@@ -1183,6 +1211,7 @@ func TestOpenAI_InitRegistration(t *testing.T) {
 }
 
 func TestOpenAI_ExtractMetadata(t *testing.T) {
+	t.Parallel()
 	lm := &openAI{}
 
 	tests := []struct {
@@ -1244,7 +1273,9 @@ func TestOpenAI_ExtractMetadata(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			metadata := lm.extractMetadata(tt.headers)
 
 			if len(metadata) != len(tt.expected) {
@@ -1266,6 +1297,7 @@ func TestOpenAI_ExtractMetadata(t *testing.T) {
 }
 
 func TestOpenAI_Generate_SaveRawExchange(t *testing.T) {
+	t.Parallel()
 	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
 	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
 
@@ -1302,6 +1334,7 @@ func TestOpenAI_Generate_SaveRawExchange(t *testing.T) {
 }
 
 func TestOpenAI_Generate_WithMetadata(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-RateLimit-Limit-Requests", "5000")
 		w.Header().Set("X-RateLimit-Remaining-Requests", "4999")

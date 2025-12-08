@@ -9,6 +9,7 @@ import (
 )
 
 func TestProgram_Forward_Success(t *testing.T) {
+	t.Parallel()
 	module1 := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return core.NewPrediction(map[string]interface{}{"step1": "done"}), nil
@@ -46,6 +47,7 @@ func TestProgram_Forward_Success(t *testing.T) {
 }
 
 func TestProgram_Forward_NoModules(t *testing.T) {
+	t.Parallel()
 	program := NewProgram("empty")
 
 	_, err := program.Forward(context.Background(), map[string]interface{}{})
@@ -55,6 +57,7 @@ func TestProgram_Forward_NoModules(t *testing.T) {
 }
 
 func TestProgram_Forward_ModuleError(t *testing.T) {
+	t.Parallel()
 	module1 := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			return core.NewPrediction(map[string]interface{}{"result": "ok"}), nil
@@ -76,6 +79,7 @@ func TestProgram_Forward_ModuleError(t *testing.T) {
 }
 
 func TestProgram_GetSignature(t *testing.T) {
+	t.Parallel()
 	sig := core.NewSignature("LastModule")
 	module := &MockModule{SignatureValue: sig}
 
@@ -87,6 +91,7 @@ func TestProgram_GetSignature(t *testing.T) {
 }
 
 func TestProgram_GetSignature_NoModules(t *testing.T) {
+	t.Parallel()
 	program := NewProgram("empty")
 
 	if program.GetSignature() != nil {
@@ -95,6 +100,7 @@ func TestProgram_GetSignature_NoModules(t *testing.T) {
 }
 
 func TestProgram_Name(t *testing.T) {
+	t.Parallel()
 	program := NewProgram("my-program")
 
 	if program.Name() != "my-program" {
@@ -103,6 +109,7 @@ func TestProgram_Name(t *testing.T) {
 }
 
 func TestProgram_ModuleCount(t *testing.T) {
+	t.Parallel()
 	program := NewProgram("test")
 
 	if program.ModuleCount() != 0 {
@@ -118,6 +125,7 @@ func TestProgram_ModuleCount(t *testing.T) {
 }
 
 func TestProgram_InputMerging(t *testing.T) {
+	t.Parallel()
 	module1 := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {
 			if inputs["original"] != "value" {
@@ -151,6 +159,7 @@ func TestProgram_InputMerging(t *testing.T) {
 }
 
 func TestProgram_Forward_ValidationSuccess(t *testing.T) {
+	t.Parallel()
 	// Module 1 produces valid JSON output
 	module1 := &MockModule{
 		ForwardFunc: func(ctx context.Context, inputs map[string]interface{}) (*core.Prediction, error) {

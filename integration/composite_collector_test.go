@@ -23,6 +23,7 @@ import (
 // - Both collectors operate independently
 // - Data integrity in both sinks
 func TestCompositeCollector_DualSink(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -84,6 +85,7 @@ func TestCompositeCollector_DualSink(t *testing.T) {
 
 // TestCompositeCollector_IndependentOperation verifies collectors work independently.
 func TestCompositeCollector_IndependentOperation(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -152,6 +154,7 @@ func TestCompositeCollector_IndependentOperation(t *testing.T) {
 // - Error is returned from Collect
 // - Error aggregation on close
 func TestCompositeCollector_PartialFailure(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -191,6 +194,7 @@ func TestCompositeCollector_PartialFailure(t *testing.T) {
 
 // TestCompositeCollector_PartialFailureMultipleEntries tests partial failure across multiple entries.
 func TestCompositeCollector_PartialFailureMultipleEntries(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -228,6 +232,7 @@ func TestCompositeCollector_PartialFailureMultipleEntries(t *testing.T) {
 
 // TestCompositeCollector_ErrorAggregation tests error aggregation on Close().
 func TestCompositeCollector_ErrorAggregation(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -254,6 +259,7 @@ func TestCompositeCollector_ErrorAggregation(t *testing.T) {
 
 // TestCompositeCollector_MultipleEntries tests handling multiple entries across collectors.
 func TestCompositeCollector_MultipleEntries(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		entryCount    int
@@ -281,7 +287,9 @@ func TestCompositeCollector_MultipleEntries(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tempDir := t.TempDir()
 			jsonlPath := filepath.Join(tempDir, "events.jsonl")
 
@@ -342,6 +350,7 @@ func TestCompositeCollector_MultipleEntries(t *testing.T) {
 
 // TestCompositeCollector_DataIntegrity verifies data integrity across collectors.
 func TestCompositeCollector_DataIntegrity(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -428,6 +437,7 @@ func TestCompositeCollector_DataIntegrity(t *testing.T) {
 
 // TestCompositeCollector_CloseAll verifies Close() closes all collectors.
 func TestCompositeCollector_CloseAll(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -488,6 +498,7 @@ func TestCompositeCollector_CloseAll(t *testing.T) {
 
 // TestCompositeCollector_CloseIdempotent tests that Close() can be called multiple times.
 func TestCompositeCollector_CloseIdempotent(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -507,6 +518,7 @@ func TestCompositeCollector_CloseIdempotent(t *testing.T) {
 
 // TestCompositeCollector_AddCollector tests dynamic addition of collectors.
 func TestCompositeCollector_AddCollector(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -541,6 +553,7 @@ func TestCompositeCollector_AddCollector(t *testing.T) {
 
 // TestCompositeCollector_EmptyComposite tests behavior with no collectors.
 func TestCompositeCollector_EmptyComposite(t *testing.T) {
+	t.Parallel()
 	_, cancel := ContextWithTimeout(10 * time.Second)
 	defer cancel()
 

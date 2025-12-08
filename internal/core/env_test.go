@@ -32,6 +32,7 @@ func TestLoadEnv(t *testing.T) {
 		setupEnv()
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -57,11 +58,11 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("FallbackAPIKeys", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("OPENAI_API_KEY", "fallback-openai-key")
 		_ = os.Setenv("OPENROUTER_API_KEY", "fallback-openrouter-key")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -77,11 +78,11 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("PrefixedAPIKeysOverrideFallback", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("DSGO_OPENAI_API_KEY", "prefixed-key")
 		_ = os.Setenv("OPENAI_API_KEY", "fallback-key")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -96,6 +97,7 @@ func TestLoadEnv(t *testing.T) {
 		defer cleanupEnv()
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure(
 			WithProvider("openrouter"),
 			WithModel("meta-llama/llama-3.3-70b-instruct"),
@@ -114,10 +116,10 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("InvalidTimeout", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("DSGO_TIMEOUT", "invalid")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -130,10 +132,10 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("InvalidMaxRetries", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("DSGO_MAX_RETRIES", "invalid")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -146,10 +148,10 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("InvalidTracing", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("DSGO_TRACING", "invalid")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -162,10 +164,10 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("ZeroTimeout", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("DSGO_TIMEOUT", "0")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -178,10 +180,10 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("NegativeMaxRetries", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("DSGO_MAX_RETRIES", "-1")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -194,10 +196,10 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("CacheTTL", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("DSGO_CACHE_TTL", "5m")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -211,10 +213,10 @@ func TestLoadEnv(t *testing.T) {
 	t.Run("CacheTTL_InvalidDuration", func(t *testing.T) {
 		cleanupEnv()
 		defer cleanupEnv()
-
 		_ = os.Setenv("DSGO_CACHE_TTL", "invalid")
 
 		ResetConfig()
+		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
@@ -237,6 +239,7 @@ func TestLoadEnv(t *testing.T) {
 		}
 
 		for _, tt := range tests {
+			tt := tt
 			t.Run(tt.name, func(t *testing.T) {
 				cleanupEnv()
 				defer cleanupEnv()
@@ -244,6 +247,7 @@ func TestLoadEnv(t *testing.T) {
 				_ = os.Setenv("DSGO_CACHE_TTL", tt.value)
 
 				ResetConfig()
+				t.Cleanup(ResetConfig)
 				Configure()
 
 				settings := GetSettings()
