@@ -82,7 +82,6 @@ import (
     "log"
     
     "github.com/assagman/dsgo"
-    "github.com/assagman/dsgo/module"
 )
 
 func main() {
@@ -98,7 +97,7 @@ func main() {
         AddOutput("answer", dsgo.FieldTypeString, "A helpful answer")
     
     // Create predictor module
-    predictor := module.NewPredict(sig, lm)
+    predictor := dsgo.NewPredict(sig, lm)
     
     // Execute
     result, err := predictor.Forward(context.Background(), map[string]any{
@@ -161,7 +160,7 @@ sig := dsgo.NewSignature("Summarize text").
     AddOptionalOutput("keywords", dsgo.FieldTypeJSON, "Extracted keywords")
 
 // Optional fields can be missing
-result, _ := module.NewPredict(sig, lm).Forward(ctx, inputs)
+result, _ := dsgo.NewPredict(sig, lm).Forward(ctx, inputs)
 summary := result.GetString("answer")           // Always present
 keywords, hasKeywords := result.GetJSON("keywords") // May be nil
 ```
@@ -194,13 +193,101 @@ sig := dsgo.NewSignature("Translate text").
     AddInput("target_language", dsgo.FieldTypeString, "Target language").
     AddOutput("translation", dsgo.FieldTypeString, "Translated text")
 
-translator := module.NewPredict(sig, lm)
+translator := dsgo.NewPredict(sig, lm)
 
 result, _ := translator.Forward(ctx, map[string]any{
     "text": "Hello world",
     "target_language": "Spanish",
 })
 fmt.Println(result.GetString("translation")) // "Hola mundo"
+```
+
+### ChainOfThought - Step-by-Step Reasoning
+
+For complex tasks requiring reasoning:
+
+```go
+sig := dsgo.NewSignature("Solve math problem").
+    AddInput("problem", dsgo.FieldTypeString, "Math problem to solve").
+    AddOutput("reasoning", dsgo.FieldTypeString, "Step-by-step reasoning").
+    AddOutput("answer", dsgo.FieldTypeString, "Final numerical answer")
+
+solver := dsgo.NewChainOfThought(sig, lm)
+
+result, _ := solver.Forward(ctx, map[string]any{
+    "problem": "If Alice has 5 apples and Bob has 3, how many do they have together?",
+})
+
+fmt.Println("Reasoning:", result.GetString("reasoning"))
+fmt.Println("Answer:", result.GetString("answer"))
+```
+
+### ReAct - Tool-Using Agents
+
+For tasks requiring external tools:
+
+```go
+// Define a tool
+func searchWeb(ctx context.Context, args map[string]interface{}) (string, error) {
+    query := args["query"].(string)
+    return fmt.Sprintf("Search results for '%s': Wikipedia, Google, etc.", query), nil
+}
+
+searchTool := dsgo.NewTool(
+    "search",
+    "Search the web for information",
+    searchWeb,
+).AddParameter("query", dsgo.FieldTypeString, "Search query", true)
+
+sig := dsgo.NewSignature("Answer questions using tools").
+    AddInput("question", dsgo.FieldTypeString, "Question to answer").
+    AddOutput("answer", dsgo.FieldTypeString, "Final answer based on tool results")
+
+agent := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool})
+
+result, _ := agent.Forward(ctx, map[string]any{
+    "question": "Who is the current president of France?",
+})
+fmt.Println(result.GetString("answer"))
+```
+
+### Refine - Iterative Improvement
+
+For improving outputs through iteration:
+
+```go
+sig := dsgo.NewSignature("Write professional email").
+    AddInput("topic", dsgo.FieldTypeString, "Email topic").
+    AddInput("tone", dsgo.FieldTypeString, "Desired tone (formal/casual)").
+    AddOutput("email", dsgo.FieldTypeString, "Final email")
+
+refiner := dsgo.NewRefine(sig, lm, 
+    "Make the email more professional and clear", // Refinement instruction
+    2) // Maximum refinement iterations
+
+result, _ := refiner.Forward(ctx, map[string]any{
+    "topic": "Project status update",
+    "tone": "formal",
+})
+fmt.Println(result.GetString("email"))
+```
+
+### BestOfN - Generate Multiple Candidates
+
+For creative tasks where you want the best output:
+
+```go
+sig := dsgo.NewSignature("Generate marketing slogan").
+    AddInput("product", dsgo.FieldTypeString, "Product name").
+    AddOutput("slogan", dsgo.FieldTypeString, "Marketing slogan")
+
+// Generate 3 candidates and pick the best
+bestof := dsgo.NewBestOfN(sig, lm, 3)
+
+result, _ := bestof.Forward(ctx, map[string]any{
+    "product": "Eco-friendly water bottle",
+})
+fmt.Println(result.GetString("slogan"))
 ```
 
 ### ChainOfThought - Step-by-Step Reasoning
@@ -342,7 +429,7 @@ sig := dsgo.NewSignature("Helpful assistant").
     AddInput("request", dsgo.FieldTypeString, "User request").
     AddOutput("response", dsgo.FieldTypeString, "Helpful response")
 
-agent := module.NewReAct(sig, lm, tools)
+agent := dsgo.NewReAct(sig, lm, tools)
 ```
 
 ---
@@ -359,14 +446,14 @@ outlineSig := dsgo.NewSignature("Generate article outline").
     AddInput("topic", dsgo.FieldTypeString, "Article topic").
     AddOutput("outline", dsgo.FieldTypeString, "Numbered outline")
 
-outliner := module.NewPredict(outlineSig, lm)
+outliner := dsgo.NewPredict(outlineSig, lm)
 
 // Stage 2: Expand outline
 expandSig := dsgo.NewSignature("Expand outline to full article").
     AddInput("outline", dsgo.FieldTypeString, "Article outline").
     AddOutput("article", dsgo.FieldTypeString, "Full article text")
 
-expander := module.NewPredict(expandSig, lm)
+expander := dsgo.NewPredict(expandSig, lm)
 
 // Execute pipeline
 outlineResult, _ := outliner.Forward(ctx, map[string]any{
@@ -385,20 +472,15 @@ fmt.Println(articleResult.GetString("article"))
 For more complex composition with data flow:
 
 ```go
-program := module.NewProgram().
-    AddModule("outline", outliner).
-    AddModule("expand", expander).
-    SetInputMapping("outline", map[string]string{"topic": "topic"}).
-    SetInputMapping("expand", map[string]string{
-        "outline": "outline:outline",  // Use output from outline module
-    }).
-    SetOutput("final_article", "expand:article")
+program := dsgo.NewProgram("ArticleGenerator").
+    AddModule(outliner).
+    AddModule(expander)
 
 result, _ := program.Forward(ctx, map[string]any{
     "topic": "Machine Learning Basics",
 })
 
-fmt.Println(result.GetString("final_article"))
+fmt.Println(result.GetString("article"))
 ```
 
 ---
@@ -410,7 +492,7 @@ fmt.Println(result.GetString("final_article"))
 Monitor usage and costs:
 
 ```go
-predictor := module.NewPredict(sig, lm)
+predictor := dsgo.NewPredict(sig, lm)
 result, _ := predictor.Forward(ctx, inputs)
 
 fmt.Printf("Usage Summary:\n")
@@ -436,7 +518,7 @@ dsgo.Configure(
     dsgo.WithCacheTTL(5 * time.Minute), // 5 minute TTL
 )
 
-predictor := module.NewPredict(sig, lm)
+predictor := dsgo.NewPredict(sig, lm)
 
 // First call - cache miss
 result1, _ := predictor.Forward(ctx, map[string]any{"text": "Hello"})
@@ -481,7 +563,7 @@ confidence := result.GetFloat("confidence") // 0.0 if missing
 For long responses and better UX:
 
 ```go
-predictor := module.NewPredict(sig, lm)
+predictor := dsgo.NewPredict(sig, lm)
 streamResult, _ := predictor.Stream(ctx, inputs)
 
 // Process chunks as they arrive
@@ -509,7 +591,7 @@ fmt.Printf("\nFinal: %s\n", result.GetString("output"))
 Provide examples to guide the model:
 
 ```go
-predictor := module.NewPredict(sig, lm).
+predictor := dsgo.NewPredict(sig, lm).
     WithExamples([]dsgo.Example{
         {
             Inputs: map[string]interface{}{"text": "How much does the premium plan cost?"},
@@ -537,10 +619,10 @@ Control how prompts are formatted and responses are parsed:
 
 ```go
 // Use JSON adapter for structured data
-jsonPredictor := module.NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter())
+jsonPredictor := dsgo.NewPredict(sig, lm).WithAdapter(dsgo.NewJSONAdapter())
 
 // Use fallback adapter for robustness (default behavior)
-fallbackPredictor := module.NewPredict(sig, lm).WithAdapter(
+fallbackPredictor := dsgo.NewPredict(sig, lm).WithAdapter(
     dsgo.NewFallbackAdapterWithChain([]dsgo.Adapter{
         dsgo.NewChatAdapter(),    // Try first
         dsgo.NewJSONAdapter(),    // Fallback
@@ -577,12 +659,12 @@ Run multiple modules concurrently:
 
 ```go
 // Create multiple modules
-translator := module.NewPredict(translateSig, lm)
+translator := dsgo.NewPredict(translateSig, lm)
 // Create a module to run in parallel
-classifier := module.NewPredict(classifySig, lm)
+classifier := dsgo.NewPredict(classifySig, lm)
 
 // Execute in parallel with automatic state isolation
-parallel := module.NewParallel(classifier).WithMaxWorkers(3)
+parallel := dsgo.NewParallel(classifier).WithMaxWorkers(3)
 
 // Process multiple inputs in parallel
 result, _ := parallel.Forward(ctx, map[string]any{
@@ -616,19 +698,19 @@ if completions := result.Completions; completions != nil {
 
 | Task | Module | Example |
 |------|--------|---------|
-| Simple I/O | Predict | `module.NewPredict(sig, lm)` |
-| Reasoning | ChainOfThought | `module.NewChainOfThought(sig, lm)` |
-| Tools | ReAct | `module.NewReAct(sig, lm, tools)` |
-| Improvement | Refine | `module.NewRefine(sig, lm, instruction, maxIter)` |
-| Quality | BestOfN | `module.NewBestOfN(sig, lm, n)` |
-| Composition | Program | `module.NewProgram().AddModule(...)` |
-| Parallel | Parallel | `module.NewParallel(module).WithMaxWorkers(n)` |
+| Simple I/O | Predict | `dsgo.NewPredict(sig, lm)` |
+| Reasoning | ChainOfThought | `dsgo.NewChainOfThought(sig, lm)` |
+| Tools | ReAct | `dsgo.NewReAct(sig, lm, tools)` |
+| Improvement | Refine | `dsgo.NewRefine(sig, lm, instruction, maxIter)` |
+| Quality | BestOfN | `dsgo.NewBestOfN(sig, lm, n)` |
+| Composition | Program | `dsgo.NewProgram("name").AddModule(...)` |
+| Parallel | Parallel | `dsgo.NewParallel(module).WithMaxWorkers(n)` |
 
 ### Common Patterns
 
 ```go
 // Always handle errors
-result, err := module.Forward(ctx, inputs)
+result, err := predictor.Forward(ctx, inputs)
 if err != nil {
     return fmt.Errorf("module failed: %w", err)
 }
@@ -639,7 +721,7 @@ fmt.Printf("Cost: $%.6f, Tokens: %d\n", result.Usage.Cost, result.Usage.TotalTok
 // Use context for cancellation
 ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 defer cancel()
-result, err := module.Forward(ctx, inputs)
+result, err := predictor.Forward(ctx, inputs)
 ```
 
 Happy coding with DSGo! 🚀

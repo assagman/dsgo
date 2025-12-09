@@ -64,18 +64,19 @@ type (
 
 // Re-export module types
 type (
-	Predict          = module.Predict
-	ChainOfThought   = module.ChainOfThought
-	ReAct            = module.ReAct
-	Refine           = module.Refine
-	BestOfN          = module.BestOfN
-	BestOfNResult    = module.BestOfNResult
-	Program          = module.Program
-	ProgramOfThought = module.ProgramOfThought
-	Parallel         = module.Parallel
-	ParallelMetrics  = module.ParallelMetrics
-	ScoringFunction  = module.ScoringFunction
-	StreamResult     = module.StreamResult
+	Predict              = module.Predict
+	ChainOfThought       = module.ChainOfThought
+	ReAct                = module.ReAct
+	Refine               = module.Refine
+	BestOfN              = module.BestOfN
+	BestOfNResult        = module.BestOfNResult
+	Program              = module.Program
+	ProgramOfThought     = module.ProgramOfThought
+	Parallel             = module.Parallel
+	ParallelMetrics      = module.ParallelMetrics
+	ScoringFunction      = module.ScoringFunction
+	StreamResult         = module.StreamResult
+	MultiChainComparison = module.MultiChainComparison
 )
 
 // Re-export logging types
@@ -145,6 +146,7 @@ var (
 	NewParallelWithInstances = module.NewParallelWithInstances
 	DefaultScorer            = module.DefaultScorer
 	ConfidenceScorer         = module.ConfidenceScorer
+	NewMultiChainComparison  = module.NewMultiChainComparison
 )
 
 // Re-export logging functions

@@ -507,7 +507,7 @@ if result.ParseDiagnostics != nil {
 
 ```bash
 # From project root
-cd examples/01-hello-chat
+cd examples/codebase_analysis
 EXAMPLES_DEFAULT_MODEL="gpt-4o-mini" go run main.go
 
 # With verbose logging

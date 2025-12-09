@@ -615,7 +615,7 @@ sig := dsgo.NewSignature("Classify text").
     AddInput("text", dsgo.FieldTypeString, "Text to classify").
     AddClassOutput("category", []string{"work", "personal", "spam"}, "Category")
 
-classifier := module.NewPredict(sig, lm)
+classifier := dsgo.NewPredict(sig, lm)
 ```
 
 #### 🤔 Reasoning Tasks
@@ -625,7 +625,7 @@ sig := dsgo.NewSignature("Solve math problems").
     AddOutput("answer", dsgo.FieldTypeString, "Final answer").
     AddOutput("steps", dsgo.FieldTypeString, "Step-by-step solution")
 
-solver := module.NewChainOfThought(sig, lm)
+solver := dsgo.NewChainOfThought(sig, lm)
 ```
 
 #### 🛠️ Tool-Using Agents
@@ -635,13 +635,13 @@ sig := dsgo.NewSignature("Research assistant").
     AddOutput("answer", dsgo.FieldTypeString, "Research findings")
 
 tools := []dsgo.Tool{*searchTool, *calculatorTool}
-agent := module.NewReAct(sig, lm, tools)
+agent := dsgo.NewReAct(sig, lm, tools)
 ```
 
 ### Step 3: Run & Monitor
 
 ```go
-result, err := module.Forward(ctx, inputs)
+result, err := classifier.Forward(ctx, inputs)
 if err != nil {
     log.Fatal(err)
 }
@@ -692,16 +692,14 @@ make test-matrix-sample N=3
 
 | Example | Description | Key Concepts |
 |---------|-------------|--------------|
-| **[01-hello-chat](examples/01-hello-chat/)** | Basic chat interaction | Signatures, Predict module |
-| **[02-agent-tools-react](examples/02-agent-tools-react/)** | ReAct agent with tools | Tools, ReAct module |
-| **[03-quality-refine-bestof](examples/03-quality-refine-bestof/)** | Output quality improvement | Refine, BestOfN modules |
-| **[04-structured-programs](examples/04-structured-programs/)** | Module composition | Program module |
-| **[05-resilience-observability](examples/05-resilience-observability/)** | Production patterns | Caching, logging, error handling |
+| **[codebase_analysis](examples/codebase_analysis/)** | Comprehensive code analysis | ChainOfThought, Typed I/O |
+| **[parallel](examples/modules/parallel/)** | Concurrent execution | Parallel module, Thread safety |
+| **[project_review](examples/project_review/)** | Multi-stage review pipeline | Program, composition |
 
 ### Running Examples
 
 ```bash
-cd examples/01-hello-chat
+cd examples/codebase_analysis
 go run main.go
 
 # With custom model
@@ -829,6 +827,7 @@ make test
 | **[QUICKSTART.md](QUICKSTART.md)** | Step-by-step tutorials |
 | **[AGENTS.md](AGENTS.md)** | Development guide for contributors |
 | **[ROADMAP.md](ROADMAP.md)** | Implementation status and plans |
+| **[API.md](API.md)** | Detailed API reference |
 | **[llms.txt](llms.txt)** | LLM-friendly documentation |
 
 ---

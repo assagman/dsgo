@@ -1,6 +1,6 @@
 .PHONY: all test integration-test build fmt vet lint check check-lint check-eof verify clean install-hooks test-matrix test-matrix-quick test-matrix-sample fmt-fix help integration-coverage
 
-PACKAGES := $$(go list ./... | grep -v /scripts | grep -v /integration)
+PACKAGES := $$(go list ./... | grep -v /examples | grep -v /scripts | grep -v /integration)
 INTEGRATION_PACKAGES := $$(go list ./integration)
 
 all: clean

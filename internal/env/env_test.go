@@ -122,7 +122,6 @@ func TestFindEnvFile(t *testing.T) {
 }
 
 func TestAutoLoadWithCustomPath(t *testing.T) {
-	t.Parallel()
 	// Create a temporary .env file
 	tmpDir := t.TempDir()
 	customEnvFile := filepath.Join(tmpDir, "custom.env")
