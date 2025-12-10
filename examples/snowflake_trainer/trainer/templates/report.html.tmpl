@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{.ReportTitle}}</title>
+  <style>
+    :root {
+      --bg: #f7f9fc;
+      --panel: #ffffff;
+      --text: #1f2933;
+      --muted: #52606d;
+      --primary: #2563eb;
+      --primary-weak: #e5edff;
+      --border: #e2e8f0;
+      --code: #0b1021;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: var(--primary); }
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+    header.hero {
+      background: linear-gradient(135deg, rgba(37,99,235,0.08), rgba(37,99,235,0.02));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 10px 30px rgba(37, 99, 235, 0.08);
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--primary-weak);
+      color: var(--primary);
+      font-weight: 600;
+      font-size: 13px;
+    }
+    nav.toc {
+      position: sticky;
+      top: 0;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+      z-index: 2;
+    }
+    nav.toc strong { display: block; margin-bottom: 8px; }
+    nav.toc ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      font-size: 14px;
+    }
+    section {
+      margin: 18px 0 26px;
+      padding: 18px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 18px rgba(15,23,42,0.04);
+    }
+    section h2 { margin-top: 0; }
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+    .summary-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      background: #fbfdff;
+    }
+    .module-card { border-color: #d9e2ec; }
+    .pill { padding: 4px 10px; border-radius: 999px; background: #eef2ff; color: #4338ca; font-weight: 600; font-size: 12px; }
+    ul { padding-left: 18px; }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+    code { font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; }
+    th { background: #f1f5f9; }
+    details { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    details summary { cursor: pointer; font-weight: 600; }
+    .muted { color: var(--muted); }
+    .section-heading { display: flex; align-items: center; gap: 10px; }
+    .question { margin-bottom: 14px; }
+    .footer { text-align: center; color: var(--muted); margin-top: 24px; font-size: 14px; }
+    @media print {
+      nav.toc { position: static; box-shadow: none; }
+      section { box-shadow: none; }
+      .page { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <h1>{{.ReportTitle}}</h1>
+      <div class="meta">
+        <span class="badge">Topic: {{.Topic}}</span>
+        <span class="badge">Skill: {{.SkillLevel}}</span>
+        <span class="badge">Estimated: {{.EstimatedTime}}</span>
+        <span class="badge">Date: {{.ReportDate}}</span>
+        <span class="badge">Author: {{.Author}}</span>
+      </div>
+    </header>
+
+    <nav class="toc">
+      <strong>Table of Contents</strong>
+      <ul>
+        <li><a href="#summary">Executive Summary</a></li>
+        <li><a href="#modules">Learning Modules</a></li>
+        <li><a href="#quizzes">Quiz Assessment</a></li>
+        <li><a href="#exercises">Practical Exercises</a></li>
+        <li><a href="#challenges">Challenges</a></li>
+        <li><a href="#glossary">Glossary</a></li>
+        <li><a href="#resources">Additional Resources</a></li>
+        <li><a href="#sources">Research Sources</a></li>
+      </ul>
+    </nav>
+
+    <section id="summary">
+      <div class="section-heading">
+        <h2>Executive Summary</h2>
+        <span class="muted">Generated {{.GeneratedAt | formatDate}}</span>
+      </div>
+      <p>{{.ExecutiveSummary}}</p>
+      <div class="grid summary-grid">
+        {{range .KeyTakeaways}}
+        <div class="card">
+          <strong>Key Takeaway</strong>
+          <p>{{.}}</p>
+        </div>
+        {{end}}
+      </div>
+    </section>
+
+    <section id="modules">
+      <h2>Learning Modules</h2>
+      <div class="grid" style="grid-template-columns: 1fr; gap: 18px;">
+        {{range $i, $m := .Modules}}
+        <div class="card module-card">
+          <div class="section-heading">
+            <h3>Module {{add $i 1}} — {{$m.Title}}</h3>
+            <span class="pill">{{$m.Duration}}</span>
+            <span class="pill">{{$m.Difficulty}}</span>
+          </div>
+          <h4>Learning Objectives</h4>
+          <ul>
+            {{range $m.LearningObjectives}}
+            <li>{{.}}</li>
+            {{end}}
+          </ul>
+
+          {{range $m.Sections}}
+          <div class="card" style="margin-top:10px;">
+            <h4>{{.Title}}</h4>
+            <p>{{.Content}}</p>
+            {{if .Diagram}}
+            <p class="muted">Diagram</p>
+            <pre><code>{{.Diagram}}</code></pre>
+            {{end}}
+            {{if .KeyPoints}}
+            <p class="muted">Key Points</p>
+            <ul>
+              {{range .KeyPoints}}
+              <li>{{.}}</li>
+              {{end}}
+            </ul>
+            {{end}}
+          </div>
+          {{end}}
+
+          <details style="margin-top:12px;">
+            <summary>Module Quiz ({{len $m.Quiz.Questions}} questions)</summary>
+            <div style="margin-top:10px;">
+              {{if $m.Quiz.Questions}}
+                {{range $idx, $q := $m.Quiz.Questions}}
+                  <div class="question">
+                    <strong>Q{{add $idx 1}}. {{$q.Question}}</strong>
+                    {{if $q.Options}}
+                    <ul>
+                      {{range $q.Options}}
+                      <li>{{.}}</li>
+                      {{end}}
+                    </ul>
+                    {{end}}
+                    {{if $q.Correct}}
+                    <p class="muted">Answer: {{$q.Correct}}</p>
+                    {{end}}
+                    {{if $q.Explanation}}
+                    <p class="muted">Explanation: {{$q.Explanation}}</p>
+                    {{end}}
+                  </div>
+                {{end}}
+              {{else}}
+                <p class="muted">No quiz questions for this module.</p>
+              {{end}}
+            </div>
+          </details>
+
+          <details style="margin-top:10px;">
+            <summary>Practical Exercise</summary>
+            <div style="margin-top:10px;">
+              {{if $m.PracticalExercise.Title}}
+                <p><strong>{{$m.PracticalExercise.Title}}</strong> · {{$m.PracticalExercise.Type}}</p>
+                <p>{{$m.PracticalExercise.Instructions}}</p>
+                {{if $m.PracticalExercise.Scenario}}
+                  <p class="muted">Scenario: {{$m.PracticalExercise.Scenario}}</p>
+                {{end}}
+                {{if $m.PracticalExercise.StarterCode}}
+                  <p class="muted">Starter Code</p>
+                  <pre><code>{{$m.PracticalExercise.StarterCode}}</code></pre>
+                {{end}}
+                {{if $m.PracticalExercise.Requirements}}
+                  <p class="muted">Requirements</p>
+                  <ul>
+                    {{range $m.PracticalExercise.Requirements}}
+                    <li>{{.}}</li>
+                    {{end}}
+                  </ul>
+                {{end}}
+                {{if $m.PracticalExercise.Solution}}
+                  <p class="muted">Solution</p>
+                  <pre><code>{{$m.PracticalExercise.Solution}}</code></pre>
+                {{end}}
+                {{if $m.PracticalExercise.Explanation}}
+                  <p class="muted">Explanation</p>
+                  <p>{{$m.PracticalExercise.Explanation}}</p>
+                {{end}}
+              {{else}}
+                <p class="muted">No practical exercise for this module.</p>
+              {{end}}
+            </div>
+          </details>
+        </div>
+        {{end}}
+      </div>
+    </section>
+
+    <section id="quizzes">
+      <h2>Quiz Assessment</h2>
+      {{if .Quizzes}}
+        {{range $i, $quiz := .Quizzes}}
+          <div class="card">
+            <h3>Module {{add $i 1}} Quiz</h3>
+            {{range $j, $question := $quiz.Questions}}
+              <div class="question">
+                <strong>Q{{add $j 1}}. {{$question.Question}}</strong>
+                {{if $question.Options}}
+                  <ul>
+                    {{range $question.Options}}<li>{{.}}</li>{{end}}
+                  </ul>
+                {{end}}
+                {{if $question.Correct}}
+                  <p class="muted">Answer: {{$question.Correct}}</p>
+                {{end}}
+                {{if $question.Explanation}}
+                  <p class="muted">Explanation: {{$question.Explanation}}</p>
+                {{end}}
+                {{if $question.Template}}
+                  <pre><code>{{$question.Template}}</code></pre>
+                {{end}}
+              </div>
+            {{end}}
+          </div>
+        {{end}}
+      {{else}}
+        <p class="muted">No quiz questions available.</p>
+      {{end}}
+    </section>
+
+    <section id="exercises">
+      <h2>Practical Exercises</h2>
+      {{if .Exercises}}
+        <div class="grid summary-grid">
+          {{range .Exercises}}
+            <div class="card">
+              <h3>{{.Title}}</h3>
+              <p class="muted">Type: {{.Type}}</p>
+              <p>{{.Instructions}}</p>
+              {{if .Scenario}}<p class="muted">Scenario: {{.Scenario}}</p>{{end}}
+              {{if .StarterCode}}
+                <p class="muted">Starter Code</p>
+                <pre><code>{{.StarterCode}}</code></pre>
+              {{end}}
+              {{if .Solution}}
+                <p class="muted">Solution</p>
+                <pre><code>{{.Solution}}</code></pre>
+              {{end}}
+              {{if .Requirements}}
+                <p class="muted">Requirements</p>
+                <ul>{{range .Requirements}}<li>{{.}}</li>{{end}}</ul>
+              {{end}}
+              {{if .Hints}}
+                <p class="muted">Hints</p>
+                <ul>{{range .Hints}}<li>{{.}}</li>{{end}}</ul>
+              {{end}}
+            </div>
+          {{end}}
+        </div>
+      {{else}}
+        <p class="muted">No exercises available.</p>
+      {{end}}
+    </section>
+
+    <section id="challenges">
+      <h2>Challenges</h2>
+      {{if .Challenges}}
+        {{range .Challenges}}
+          <div class="card">
+            <h3>{{.Title}}</h3>
+            <p class="muted">{{.Type}} · {{.Difficulty}} · {{.Duration}}</p>
+            <p>{{.Description}}</p>
+            {{if .Requirements}}
+              <p class="muted">Requirements</p>
+              <ul>{{range .Requirements}}<li>{{.}}</li>{{end}}</ul>
+            {{end}}
+            {{if .Solution}}
+              <p class="muted">Solution</p>
+              <pre><code>{{.Solution}}</code></pre>
+            {{end}}
+            {{if .Scoring}}
+              <p class="muted">Scoring</p>
+              <ul>{{range .Scoring}}<li>{{.}}</li>{{end}}</ul>
+            {{end}}
+          </div>
+        {{end}}
+      {{else}}
+        <p class="muted">No challenges included.</p>
+      {{end}}
+    </section>
+
+    <section id="glossary">
+      <h2>Glossary</h2>
+      {{if .Glossary}}
+      <table>
+        <thead>
+          <tr><th>Term</th><th>Definition</th><th>Category</th></tr>
+        </thead>
+        <tbody>
+          {{range .Glossary}}
+          <tr>
+            <td><strong>{{.Term}}</strong></td>
+            <td>{{.Definition}}</td>
+            <td>{{.Category}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+        <p class="muted">No glossary entries.</p>
+      {{end}}
+    </section>
+
+    <section id="resources">
+      <h2>Additional Resources</h2>
+      {{if .Resources}}
+        <ul>
+          {{range .Resources}}
+          <li>
+            <strong>{{.Title}}</strong> — <span class="muted">{{.Type}}</span><br/>
+            {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.URL}}</a><br/>{{end}}
+            <span class="muted">{{.Description}}</span>
+          </li>
+          {{end}}
+        </ul>
+      {{else}}
+        <p class="muted">No additional resources.</p>
+      {{end}}
+    </section>
+
+    <section id="sources">
+      <h2>Research Sources</h2>
+      {{if .ResearchSources}}
+        <ul>
+          {{range .ResearchSources}}
+          <li>{{.}}</li>
+          {{end}}
+        </ul>
+      {{else}}
+        <p class="muted">No sources captured.</p>
+      {{end}}
+    </section>
+
+    <div class="footer">
+      Report generated by DSGo Snowflake Research Report Generator
+    </div>
+  </div>
+</body>
+</html>

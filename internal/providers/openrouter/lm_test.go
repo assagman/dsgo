@@ -954,6 +954,227 @@ func TestOpenRouter_Stream_Success(t *testing.T) {
 	}
 }
 
+func TestOpenRouter_ConvertTool_WithEmptyType(t *testing.T) {
+	t.Parallel()
+	lm := &openRouter{}
+	tool := core.NewTool("test_tool", "A test tool with empty type", nil)
+
+	// Create a parameter with empty type explicitly
+	tool.AddParameter("param1", "", "First param with empty type", true)
+
+	converted := lm.convertTool(tool)
+
+	if converted["type"] != "function" {
+		t.Errorf("expected type function, got %v", converted["type"])
+	}
+
+	fn, ok := converted["function"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected function object")
+	}
+	if fn["name"] != "test_tool" {
+		t.Errorf("expected name test_tool, got %v", fn["name"])
+	}
+
+	params, ok := fn["parameters"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected parameters object")
+	}
+
+	props, ok := params["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected properties object")
+	}
+
+	param1, ok := props["param1"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected param1 object")
+	}
+
+	// Check that empty type was converted to "string"
+	if param1["type"] != "string" {
+		t.Errorf("expected type 'string' for param1, got %v", param1["type"])
+	}
+
+	required, ok := params["required"].([]string)
+	if !ok || len(required) != 1 || required[0] != "param1" {
+		t.Error("expected param1 to be required")
+	}
+}
+
+func TestOpenRouter_ConvertTool_ArrayWithElementType(t *testing.T) {
+	t.Parallel()
+	lm := &openRouter{}
+	tool := core.NewTool("test_tool", "A test tool with array parameter", nil)
+
+	// Add an array parameter with element type
+	tool.AddArrayParameter("urls", "List of URLs", "string", true)
+
+	converted := lm.convertTool(tool)
+
+	if converted["type"] != "function" {
+		t.Errorf("expected type function, got %v", converted["type"])
+	}
+
+	fn, ok := converted["function"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected function object")
+	}
+	if fn["name"] != "test_tool" {
+		t.Errorf("expected name test_tool, got %v", fn["name"])
+	}
+
+	params, ok := fn["parameters"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected parameters object")
+	}
+
+	props, ok := params["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected properties object")
+	}
+
+	urls, ok := props["urls"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected urls object")
+	}
+
+	// Check that array type is preserved
+	if urls["type"] != "array" {
+		t.Errorf("expected type 'array' for urls, got %v", urls["type"])
+	}
+
+	// Check that items field with correct type is present
+	items, ok := urls["items"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected items object in urls")
+	}
+	if items["type"] != "string" {
+		t.Errorf("expected items type 'string', got %v", items["type"])
+	}
+
+	required, ok := params["required"].([]string)
+	if !ok || len(required) != 1 || required[0] != "urls" {
+		t.Error("expected urls to be required")
+	}
+}
+
+func TestOpenRouter_ConvertTool_EnumStringParameter(t *testing.T) {
+	t.Parallel()
+	lm := &openRouter{}
+	tool := core.NewTool("test_tool", "A test tool with enum parameter", nil)
+
+	// Add a string parameter with enum values
+	tool.AddEnumParameter("category", "Category of the item", []string{"work", "personal", "spam"}, true)
+
+	converted := lm.convertTool(tool)
+
+	if converted["type"] != "function" {
+		t.Errorf("expected type function, got %v", converted["type"])
+	}
+
+	fn, ok := converted["function"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected function object")
+	}
+	if fn["name"] != "test_tool" {
+		t.Errorf("expected name test_tool, got %v", fn["name"])
+	}
+
+	params, ok := fn["parameters"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected parameters object")
+	}
+
+	props, ok := params["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected properties object")
+	}
+
+	category, ok := props["category"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected category object")
+	}
+
+	// Check that type is string
+	if category["type"] != "string" {
+		t.Errorf("expected type 'string' for category, got %v", category["type"])
+	}
+
+	// Debug: Print all keys in category to see what's there
+	for key, value := range category {
+		t.Logf("category[%s] = %v (type: %T)", key, value, value)
+	}
+
+	// Check that enum field is present
+	enumRaw, ok := category["enum"]
+	if !ok {
+		t.Log("Keys in category object:", getMapKeys(category))
+		t.Fatal("expected enum array in category")
+	}
+
+	// The enum can be []string or []interface{}, handle both
+	var enum []string
+	switch v := enumRaw.(type) {
+	case []string:
+		enum = v
+	case []interface{}:
+		enum = make([]string, len(v))
+		for i, val := range v {
+			enum[i] = val.(string)
+		}
+	default:
+		t.Fatalf("unexpected enum type %T", enumRaw)
+	}
+
+	// Check enum values
+	expectedValues := []string{"work", "personal", "spam"}
+	if len(enum) != len(expectedValues) {
+		t.Errorf("expected %d enum values, got %d", len(expectedValues), len(enum))
+	} else {
+		for i, expected := range expectedValues {
+			if enum[i] != expected {
+				t.Errorf("expected enum[%d] to be %s, got %v", i, expected, enum[i])
+			}
+		}
+	}
+}
+
+// Helper function to extract keys from a map
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func TestOpenRouter_SanitizeToolsForOpenRouter(t *testing.T) {
+	t.Parallel()
+
+	// Create a tool with empty type parameter
+	originalTool := core.NewTool("test_tool", "A test tool", nil)
+	originalTool.AddParameter("param1", "", "Param with empty type", true)
+
+	tools := []core.Tool{*originalTool}
+
+	// Sanitize the tools
+	sanitizedTools := sanitizeToolsForOpenRouter(tools)
+
+	if len(sanitizedTools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(sanitizedTools))
+	}
+
+	if len(sanitizedTools[0].Parameters) != 1 {
+		t.Fatalf("expected 1 parameter, got %d", len(sanitizedTools[0].Parameters))
+	}
+
+	param := sanitizedTools[0].Parameters[0]
+	if param.Type != "string" { // Should be normalized to string
+		t.Errorf("expected parameter type 'string', got '%s'", param.Type)
+	}
+}
+
 func TestOpenRouter_Stream_Error(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

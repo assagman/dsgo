@@ -48,3 +48,5 @@ example_execution_results.txt
 .plans/
 .reviews/
 .tasks/
+
+examples/snowflake_trainer/output/

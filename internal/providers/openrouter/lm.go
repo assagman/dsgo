@@ -290,8 +290,11 @@ func (o *openRouter) buildRequest(messages []core.Message, options *core.Generat
 
 	// Add tools if supported
 	if len(options.Tools) > 0 {
-		tools := make([]map[string]any, 0, len(options.Tools))
-		for _, tool := range options.Tools {
+		// Sanitize tools for OpenRouter to ensure all parameter types are valid
+		sanitizedTools := sanitizeToolsForOpenRouter(options.Tools)
+
+		tools := make([]map[string]any, 0, len(sanitizedTools))
+		for _, tool := range sanitizedTools {
 			tools = append(tools, o.convertTool(&tool))
 		}
 		req["tools"] = tools
@@ -395,31 +398,80 @@ func (o *openRouter) convertMessages(messages []core.Message) []map[string]any {
 	return converted
 }
 
+// mapParamTypeToJSONType maps internal parameter types to JSON Schema types
+func mapParamTypeToJSONType(t string) string {
+	switch strings.ToLower(t) {
+	case "string":
+		return "string"
+	case "int", "integer":
+		return "integer"
+	case "float", "number", "double":
+		return "number"
+	case "bool", "boolean":
+		return "boolean"
+	case "json", "object":
+		return "object"
+	case "array", "list":
+		return "array"
+	default:
+		// safest possible default
+		return "string"
+	}
+}
+
+// sanitizeToolsForOpenRouter ensures all tool parameter types are valid before sending to OpenRouter
+func sanitizeToolsForOpenRouter(tools []core.Tool) []core.Tool {
+	sanitized := make([]core.Tool, len(tools))
+	for i, t := range tools {
+		sanitizedParams := make([]core.ToolParameter, len(t.Parameters))
+		for j, p := range t.Parameters {
+			// Ensure parameter type is not empty
+			paramType := strings.TrimSpace(p.Type)
+			if paramType == "" {
+				paramType = "string"
+			}
+			// Use the same mapping helper to normalize the type
+			normalizedType := mapParamTypeToJSONType(paramType)
+
+			// Create a copy of the parameter with the sanitized type
+			sanitizedParam := p
+			sanitizedParam.Type = normalizedType
+			sanitizedParams[j] = sanitizedParam
+		}
+
+		// Create a copy of the tool with sanitized parameters
+		sanitizedTool := t
+		sanitizedTool.Parameters = sanitizedParams
+		sanitized[i] = sanitizedTool
+	}
+	return sanitized
+}
+
 func (o *openRouter) convertTool(tool *core.Tool) map[string]any {
 	properties := make(map[string]any)
 	required := []string{}
 
 	for _, param := range tool.Parameters {
-		// Map internal types to JSON Schema types
-		jsonType := param.Type
-		switch param.Type {
-		case "int":
-			jsonType = "integer"
-		case "float":
-			jsonType = "number"
-		case "bool":
-			jsonType = "boolean"
-		case "json":
-			jsonType = "object"
-		}
+		// Compute jsonType using the mapping function
+		jsonType := mapParamTypeToJSONType(param.Type)
 
 		prop := map[string]any{
 			"type":        jsonType,
 			"description": param.Description,
 		}
-		if len(param.Enum) > 0 {
+
+		if jsonType == "array" && param.ElementType != "" {
+			// Map param.ElementType through the same helper to get itemType
+			itemType := mapParamTypeToJSONType(param.ElementType)
+			prop["items"] = map[string]any{"type": itemType}
+		}
+
+		// If jsonType == "object" and param.Enum is non-empty, ignore Enum (enum+object is invalid)
+		// Only set enum for string types
+		if len(param.Enum) > 0 && jsonType == "string" {
 			prop["enum"] = param.Enum
 		}
+
 		properties[param.Name] = prop
 
 		if param.Required {

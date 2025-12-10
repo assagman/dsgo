@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -56,6 +57,14 @@ func newOpenAI(model string) *openAI {
 		BaseURL: defaultBaseURL,
 		Client:  &http.Client{Timeout: timeout},
 	}
+}
+
+// Match exact model patterns: o1, o1-*, o3, o3-*, o4, o4-*, gpt-5, gpt-5-*
+var reasoningModelRegex = regexp.MustCompile(`^(o1|o3|o4|gpt-5)(-|$)`)
+
+// isReasoningModel checks if the model requires max_completion_tokens instead of max_tokens
+func (o *openAI) isReasoningModel() bool {
+	return reasoningModelRegex.MatchString(strings.ToLower(o.Model))
 }
 
 // Name returns the model name
@@ -193,7 +202,13 @@ func (o *openAI) buildRequest(messages []core.Message, options *core.GenerateOpt
 		req["temperature"] = options.Temperature
 	}
 	if options.MaxTokens > 0 {
-		req["max_tokens"] = options.MaxTokens
+		// Use max_completion_tokens for reasoning models (o-series, gpt-5 series)
+		// Use max_tokens for other models
+		if o.isReasoningModel() {
+			req["max_completion_tokens"] = options.MaxTokens
+		} else {
+			req["max_tokens"] = options.MaxTokens
+		}
 	}
 	if options.TopP > 0 && options.TopP != 1.0 {
 		req["top_p"] = options.TopP
@@ -312,6 +327,32 @@ func (o *openAI) convertTool(tool *core.Tool) map[string]any {
 			"type":        jsonType,
 			"description": param.Description,
 		}
+
+		// Handle array items
+		if jsonType == "array" || param.Type == "array" {
+			// Map ElementType to JSON schema type
+			elemType := "string" // default
+			if param.ElementType != "" {
+				elemType = param.ElementType
+			}
+
+			// Convert element type to JSON schema type
+			switch elemType {
+			case "int":
+				elemType = "integer"
+			case "float":
+				elemType = "number"
+			case "bool":
+				elemType = "boolean"
+			case "json":
+				elemType = "object"
+			}
+
+			prop["items"] = map[string]any{
+				"type": elemType,
+			}
+		}
+
 		if len(param.Enum) > 0 {
 			prop["enum"] = param.Enum
 		}

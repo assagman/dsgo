@@ -1400,3 +1400,63 @@ func TestOpenAI_Generate_WithMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenAI_IsReasoningModel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		model    string
+		expected bool
+	}{
+		// o-series models (should be reasoning)
+		{"o1 basic", "o1", true},
+		{"o1 with dash", "o1-preview", true},
+		{"o1 mini", "o1-mini", true},
+		{"o3 basic", "o3", true},
+		{"o3 with dash", "o3-preview", true},
+		{"o3 mini", "o3-mini", true},
+		{"o4 basic", "o4", true},
+		{"o4 mini", "o4-mini", true},
+
+		// gpt-5 series models (should be reasoning)
+		{"gpt-5 basic", "gpt-5", true},
+		{"gpt-5 with dash", "gpt-5-turbo", true},
+
+		// Traditional models (should NOT be reasoning)
+		{"gpt-3.5-turbo", "gpt-3.5-turbo", false},
+		{"gpt-4", "gpt-4", false},
+		{"gpt-4-turbo", "gpt-4-turbo", false},
+		{"gpt-4o", "gpt-4o", false},
+		{"gpt-4o-mini", "gpt-4o-mini", false},
+
+		// Edge cases that should NOT match (false positives)
+		{"custom o1 model", "my-o1-custom", false},
+		{"o1 in middle", "model-o1-test", false},
+		{"o3 in middle", "test-o3-model", false},
+		{"gpt-5 in middle", "my-gpt-5-model", false},
+		{"empty string", "", false},
+		{"just o", "o", false},
+		{"just gpt", "gpt", false},
+		{"number 5", "5", false},
+
+		// Case insensitivity tests
+		{"uppercase O1", "O1", true},
+		{"mixed case O3", "O3-pReViEw", true},
+		{"uppercase GPT-5", "GPT-5", true},
+		{"lowercase gpt-4", "gpt-4", false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			lm := &openAI{Model: tt.model}
+			result := lm.isReasoningModel()
+			if result != tt.expected {
+				t.Errorf("isReasoningModel() for model '%s' = %v, expected %v",
+					tt.model, result, tt.expected)
+			}
+		})
+	}
+}

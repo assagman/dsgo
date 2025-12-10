@@ -432,6 +432,30 @@ sig := dsgo.NewSignature("Helpful assistant").
 agent := dsgo.NewReAct(sig, lm, tools)
 ```
 
+### Using MCP Tools
+
+MCP (Model Context Protocol) allows your agents to access external tools:
+
+```go
+// Initialize Exa MCP for web search
+exaClient, err := dsgo.NewMCPExaClient(os.Getenv("EXA_API_KEY"))
+if err != nil {
+    log.Fatal(err)
+}
+if err := exaClient.Initialize(ctx); err != nil {
+    log.Fatal(err)
+}
+
+// Create ReAct agent with MCP tools
+tools := exaClient.GetTools()
+agent := dsgo.NewReAct(sig, lm, tools)
+
+// The agent can now search the web, read URLs, etc.
+result, err := agent.Forward(ctx, map[string]any{
+    "query": "Find recent news about AI breakthroughs",
+})
+```
+
 ---
 
 ## 6. Module Composition

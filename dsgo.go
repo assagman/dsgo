@@ -8,6 +8,7 @@ import (
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/env"
 	"github.com/assagman/dsgo/internal/logging"
+	"github.com/assagman/dsgo/internal/mcp"
 	"github.com/assagman/dsgo/internal/module"
 	"github.com/assagman/dsgo/internal/typed"
 
@@ -87,6 +88,44 @@ type (
 	Level         = logging.Level
 )
 
+// Re-export MCP types
+type (
+	// MCPClient represents an MCP (Model Context Protocol) client for accessing external tools.
+	MCPClient = mcp.Client
+	// MCPClientConfig contains configuration for creating a new MCP client.
+	MCPClientConfig = mcp.ClientConfig
+	// MCPTransport defines the interface for MCP communication (HTTP, SSE, Stdio).
+	MCPTransport = mcp.Transport
+	// MCPToolSchema represents the schema of a tool as defined in MCP.
+	MCPToolSchema = mcp.MCPToolSchema
+	// MCPInputSchema represents the JSON schema for tool inputs.
+	MCPInputSchema = mcp.MCPInputSchema
+	// MCPListToolsResult represents the result of the tools/list method.
+	MCPListToolsResult = mcp.MCPListToolsResult
+	// MCPCallToolResult represents the result of the tools/call method.
+	MCPCallToolResult = mcp.MCPCallToolResult
+	// MCPContent represents the content of a tool execution result.
+	MCPContent = mcp.MCPContent
+	// MCPInitializeParams represents the parameters for the initialize method.
+	MCPInitializeParams = mcp.MCPInitializeParams
+	// MCPCapabilities represents the capabilities of the client/server.
+	MCPCapabilities = mcp.MCPCapabilities
+	// MCPRootsCapability represents filesystem roots capability.
+	MCPRootsCapability = mcp.MCPRootsCapability
+	// MCPClientInfo represents information about the client.
+	MCPClientInfo = mcp.MCPClientInfo
+	// MCPInitializeResult represents the result of the initialize method.
+	MCPInitializeResult = mcp.MCPInitializeResult
+	// MCPError represents an MCP error with code and message.
+	MCPError = mcp.Error
+	// MCPHTTPTransport implements Transport over HTTP.
+	MCPHTTPTransport = mcp.HTTPTransport
+	// MCPSSETransport implements Transport over SSE.
+	MCPSSETransport = mcp.SSETransport
+	// MCPStdioTransport implements Transport over stdio of a subprocess.
+	MCPStdioTransport = mcp.StdioTransport
+)
+
 // Re-export typed generic type
 type Func[I, O any] = typed.Func[I, O]
 
@@ -158,6 +197,26 @@ var (
 	GetRequestID      = logging.GetRequestID
 	EnsureRequestID   = logging.EnsureRequestID
 	GenerateRequestID = logging.GenerateRequestID
+)
+
+// Re-export MCP functions
+var (
+	// NewMCPClient creates a new MCP client with the given configuration.
+	NewMCPClient = mcp.NewClient
+	// NewMCPExaClient creates a new MCP client for Exa search and web content extraction.
+	NewMCPExaClient = mcp.NewExaClient
+	// NewMCPJinaClient creates a new MCP client for Jina URL reading and content extraction.
+	NewMCPJinaClient = mcp.NewJinaClient
+	// NewMCPHTTPTransport creates a new HTTP transport for MCP communication.
+	NewMCPHTTPTransport = mcp.NewHTTPTransport
+	// NewMCPSSETransport creates a new SSE transport for MCP communication.
+	NewMCPSSETransport = mcp.NewSSETransport
+	// NewMCPStdioTransport creates a new stdio transport for MCP communication.
+	NewMCPStdioTransport = mcp.NewStdioTransport
+	// ConvertMCPToolsToDSGo converts MCP tool schemas to DSGo tools.
+	ConvertMCPToolsToDSGo = mcp.ConvertMCPToolsToDSGo
+	// NewMCPError creates a new MCP error with the given code and message.
+	NewMCPError = mcp.NewError
 )
 
 // Typed constructor functions for type-safe modules
@@ -255,4 +314,11 @@ const (
 	LevelInfo  = logging.LevelInfo
 	LevelWarn  = logging.LevelWarn
 	LevelError = logging.LevelError
+
+	// MCP error codes (JSON-RPC 2.0 specification)
+	MCPErrCodeParseError     = mcp.ErrCodeParseError
+	MCPErrCodeInvalidRequest = mcp.ErrCodeInvalidRequest
+	MCPErrCodeMethodNotFound = mcp.ErrCodeMethodNotFound
+	MCPErrCodeInvalidParams  = mcp.ErrCodeInvalidParams
+	MCPErrCodeInternalError  = mcp.ErrCodeInternalError
 )

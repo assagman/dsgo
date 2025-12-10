@@ -319,6 +319,44 @@ searchTool := dsgo.NewTool(
 agent := module.NewReAct(sig, lm, []dsgo.Tool{*searchTool})
 ```
 
+### MCP (Model Context Protocol) Integration
+
+DSGo includes built-in support for MCP, enabling LLMs to access external tools through standardized interfaces.
+
+#### Supported MCP Providers
+- **Exa**: Search and web content extraction
+- **Jina**: URL reading and content extraction
+
+#### Using MCP Tools
+
+```go
+// Initialize Exa MCP client
+exaClient, err := dsgo.NewMCPExaClient(os.Getenv("EXA_API_KEY"))
+if err != nil {
+    log.Fatal(err)
+}
+if err := exaClient.Initialize(ctx); err != nil {
+    log.Fatal(err)
+}
+
+// Get tools for use with ReAct agent
+tools := exaClient.GetTools()
+agent := dsgo.NewReAct(sig, lm, tools)
+```
+
+#### Custom MCP Servers
+
+```go
+// HTTP Transport
+transport := dsgo.NewMCPHTTPTransport("https://your-mcp-server.com/mcp", apiKey)
+
+// SSE Transport (for servers using Server-Sent Events)
+transport := dsgo.NewMCPSSETransport("https://your-mcp-server.com/sse", apiKey)
+
+// Create client with custom transport
+client, err := dsgo.NewMCPClient(dsgo.MCPClientConfig{Transport: transport})
+```
+
 ---
 
 ## 🌍 Environment Variables
