@@ -19,6 +19,19 @@
       "headers": {
         "Authorization": "Bearer $EXA_API_KEY"
       }
+    },
+    "jina": {
+      "type": "sse",
+      "url": "https://mcp.jina.ai/sse",
+      "command": "bunx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.jina.ai/sse",
+        "--header",
+        "Authorization Bearer $JINA_API_KEY"
+      ],
+      "timeout": 300,
+      "disabled": false
     }
   }
 }
