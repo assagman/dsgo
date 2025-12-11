@@ -118,13 +118,19 @@ func LoadConfigFromEnv() *Config {
 
 // parseInt parses string to int with fallback
 func parseInt(s string) int {
-	i, _ := strconv.Atoi(s)
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
 	return i
 }
 
 // parseInt64 parses string to int64 with fallback
 func parseInt64(s string) int64 {
-	i, _ := strconv.ParseInt(s, 10, 64)
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
 	return i
 }
 
