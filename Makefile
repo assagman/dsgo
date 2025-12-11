@@ -1,4 +1,4 @@
-.PHONY: all test integration-test build fmt vet lint check check-lint check-eof verify clean install-hooks test-matrix test-matrix-quick test-matrix-sample fmt-fix help integration-coverage
+.PHONY: all test integration-test build fmt vet lint check check-lint check-eof verify clean install-hooks test-matrix test-matrix-quick test-matrix-sample fmt-fix help
 
 PACKAGES := $$(go list ./... | grep -v /examples | grep -v /scripts | grep -v /integration)
 INTEGRATION_PACKAGES := $$(go list ./integration)
@@ -17,8 +17,6 @@ integration-test:
 	@go test -race -parallel $$(nproc) -covermode=atomic -coverpkg=./internal/... -coverprofile=integration_coverage.out ./integration/... || exit 1
 	@printf "\nIntegration Coverage (of main codebase): "
 	@go tool cover -func=integration_coverage.out | grep total | awk '{print $$3}'
-
-integration-coverage: integration-test
 
 build:
 	go build $(PACKAGES)
@@ -65,7 +63,6 @@ help:
 	@printf "Tests:\n"
 	@printf "  make test                - Run all unit tests (parallel, race, coverage; excludes integration)\n"
 	@printf "  make integration-test    - Run all integration tests (parallel, race, coverage)\n"
-	@printf "  make integration-coverage - Alias for make integration-test\n"
 	@printf "Code Quality:\n"
 	@printf "  make fmt                 - Check code formatting\n"
 	@printf "  make fmt-fix             - Auto-fix code formatting\n"

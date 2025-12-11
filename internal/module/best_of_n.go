@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // ScoringFunction evaluates the quality of a prediction
@@ -86,18 +88,36 @@ func (b *BestOfN) GetSignature() *core.Signature {
 
 // Forward executes the module N times and returns the best result
 func (b *BestOfN) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	// Ensure context has IDs
+	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, logging.ModuleBestOfN, b.Module.GetSignature().Description)
+
+	var predErr error
+	defer func() {
+		logging.LogPredictionEnd(ctx, logging.ModuleBestOfN, time.Since(startTime), predErr)
+	}()
+
 	if b.Scorer == nil {
-		return nil, fmt.Errorf("scorer function must be set")
+		predErr = fmt.Errorf("scorer function must be set")
+		return nil, predErr
 	}
 
 	if b.N <= 0 {
-		return nil, fmt.Errorf("n must be positive")
+		predErr = fmt.Errorf("n must be positive")
+		return nil, predErr
 	}
 
 	if b.Parallel {
-		return b.forwardParallel(ctx, inputs)
+		var res *core.Prediction
+		res, predErr = b.forwardParallel(ctx, inputs)
+		return res, predErr
 	}
-	return b.forwardSequential(ctx, inputs)
+	var res *core.Prediction
+	res, predErr = b.forwardSequential(ctx, inputs)
+	return res, predErr
 }
 
 func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
@@ -124,6 +144,11 @@ func (b *BestOfN) forwardSequential(ctx context.Context, inputs map[string]any) 
 			}
 			continue
 		}
+
+		logging.GetLogger().Debug(ctx, "BestOfN attempt", map[string]any{
+			"attempt": i + 1,
+			"score":   score,
+		})
 
 		allPredictions = append(allPredictions, prediction)
 
@@ -210,6 +235,10 @@ func (b *BestOfN) forwardParallel(ctx context.Context, inputs map[string]any) (*
 		}
 
 		allPredictions = append(allPredictions, res.prediction)
+
+		logging.GetLogger().Debug(ctx, "BestOfN attempt", map[string]any{
+			"score": res.score,
+		})
 
 		if bestPrediction == nil || res.score > bestScore {
 			bestPrediction = res.prediction

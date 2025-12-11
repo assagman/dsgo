@@ -7,8 +7,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 const (
@@ -92,14 +94,28 @@ func (r *ReAct) GetSignature() *core.Signature {
 
 // Forward executes the ReAct loop
 func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	// Ensure context has IDs
+	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, logging.ModuleReAct, r.Signature.Description)
+
+	var predErr error
+	defer func() {
+		logging.LogPredictionEnd(ctx, logging.ModuleReAct, time.Since(startTime), predErr)
+	}()
+
 	if err := r.Signature.ValidateInputs(inputs); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+		predErr = fmt.Errorf("input validation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Use adapter to format messages with demos
 	newMessages, err := r.Adapter.Format(r.Signature, inputs, r.Demos)
 	if err != nil {
-		return nil, fmt.Errorf("failed to format messages: %w", err)
+		predErr = fmt.Errorf("failed to format messages: %w", err)
+		return nil, predErr
 	}
 
 	// Build initial message list
@@ -129,6 +145,10 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 		if r.Verbose {
 			fmt.Printf("\n=== ReAct Iteration %d ===\n", i+1)
 		}
+		logging.GetLogger().Debug(ctx, "ReAct iteration started", map[string]any{
+			"iteration":      i + 1,
+			"max_iterations": r.MaxIterations,
+		})
 
 		// Activate final mode on last iteration
 		if i == r.MaxIterations-1 {
@@ -193,7 +213,8 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 
 		result, err := r.LM.Generate(ctx, messages, options)
 		if err != nil {
-			return nil, fmt.Errorf("LM generation failed at iteration %d: %w", i+1, err)
+			predErr = fmt.Errorf("LM generation failed at iteration %d: %w", i+1, err)
+			return nil, predErr
 		}
 
 		// Implicit Finish: model chose direct answer over tools.
@@ -233,7 +254,9 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 					if r.Verbose {
 						fmt.Println("⚠️  Final answer parsing failed - running extraction")
 					}
-					return r.runExtract(ctx, messages, inputs)
+					var res *core.Prediction
+					res, predErr = r.runExtract(ctx, messages, inputs)
+					return res, predErr
 				}
 
 				// FALLBACK: If structured parsing fails, attempt text extraction for string fields
@@ -249,7 +272,9 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 					if r.Verbose {
 						fmt.Println("⚠️  All parsing failed - running extraction")
 					}
-					return r.runExtract(ctx, messages, inputs)
+					var res *core.Prediction
+					res, predErr = r.runExtract(ctx, messages, inputs)
+					return res, predErr
 				}
 			}
 
@@ -265,7 +290,9 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				if r.Verbose {
 					fmt.Printf("⚠️  Output validation failed: %v - running extraction\n", err)
 				}
-				return r.runExtract(ctx, messages, inputs)
+				var res *core.Prediction
+				res, predErr = r.runExtract(ctx, messages, inputs)
+				return res, predErr
 			}
 
 			// Extract adapter metadata
@@ -301,7 +328,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 			prediction := core.NewPrediction(outputs).
 				WithRationale(rationale).
 				WithUsage(result.Usage).
-				WithModuleName("ReAct").
+				WithModuleName(logging.ModuleReAct).
 				WithInputs(inputs)
 
 			// Add adapter metrics if available
@@ -361,7 +388,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				// Build prediction and return
 				prediction := core.NewPrediction(outputs).
 					WithUsage(result.Usage).
-					WithModuleName("ReAct").
+					WithModuleName(logging.ModuleReAct).
 					WithInputs(inputs)
 
 				return prediction, nil
@@ -427,7 +454,9 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 	if r.Verbose {
 		fmt.Printf("\n⚠️  Exceeded maximum iterations (%d) - running extraction\n", r.MaxIterations)
 	}
-	return r.runExtract(ctx, messages, inputs)
+	var res *core.Prediction
+	res, predErr = r.runExtract(ctx, messages, inputs)
+	return res, predErr
 }
 
 func (r *ReAct) buildSystemPrompt() string {

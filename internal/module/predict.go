@@ -62,15 +62,16 @@ func (p *Predict) GetSignature() *core.Signature {
 
 // Forward executes the prediction
 func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
-	// Ensure context has a request ID
+	// Ensure context has IDs
 	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
 
 	startTime := time.Now()
-	logging.LogPredictionStart(ctx, "Predict", p.Signature.Description)
+	logging.LogPredictionStart(ctx, logging.ModulePredict, p.Signature.Description)
 
 	var predErr error
 	defer func() {
-		logging.LogPredictionEnd(ctx, "Predict", time.Since(startTime), predErr)
+		logging.LogPredictionEnd(ctx, logging.ModulePredict, time.Since(startTime), predErr)
 	}()
 
 	if err := p.Signature.ValidateInputs(inputs); err != nil {
@@ -173,7 +174,7 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 	// Build Prediction object
 	prediction := core.NewPrediction(outputs).
 		WithUsage(result.Usage).
-		WithModuleName("Predict").
+		WithModuleName(logging.ModulePredict).
 		WithInputs(inputs)
 
 	// Add adapter metrics if available
@@ -197,14 +198,15 @@ type StreamResult struct {
 // The prediction channel emits the final parsed prediction after the stream completes
 // The errors channel emits any errors that occur during streaming or parsing
 func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamResult, error) {
-	// Ensure context has a request ID
+	// Ensure context has IDs
 	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
 
 	startTime := time.Now()
-	logging.LogPredictionStart(ctx, "Predict.Stream", p.Signature.Description)
+	logging.LogPredictionStart(ctx, logging.ModulePredict+".Stream", p.Signature.Description)
 
 	if err := p.Signature.ValidateInputs(inputs); err != nil {
-		logging.LogPredictionEnd(ctx, "Predict.Stream", time.Since(startTime), err)
+		logging.LogPredictionEnd(ctx, logging.ModulePredict+".Stream", time.Since(startTime), err)
 		return nil, fmt.Errorf("input validation failed: %w", err)
 	}
 
@@ -260,7 +262,7 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 
 		var streamErr error
 		defer func() {
-			logging.LogPredictionEnd(ctx, "Predict.Stream", time.Since(startTime), streamErr)
+			logging.LogPredictionEnd(ctx, logging.ModulePredict+".Stream", time.Since(startTime), streamErr)
 		}()
 
 		// Use StreamingBuffer for automatic recovery
@@ -364,7 +366,7 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		// Build Prediction object
 		prediction := core.NewPrediction(outputs).
 			WithUsage(finalUsage).
-			WithModuleName("Predict").
+			WithModuleName(logging.ModulePredict).
 			WithInputs(inputs)
 
 		// Add adapter metrics if available

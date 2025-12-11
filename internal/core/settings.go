@@ -4,6 +4,8 @@ import (
 	"maps"
 	"sync"
 	"time"
+
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // Settings holds global DSGo configuration.
@@ -39,6 +41,9 @@ type Settings struct {
 
 	// CacheTTL is the cache time-to-live (0 = no expiry).
 	CacheTTL time.Duration
+
+	// Logger is the global logger instance.
+	Logger logging.Logger
 }
 
 // globalSettings is the singleton instance of Settings.
@@ -47,7 +52,8 @@ var globalSettings = &Settings{
 	APIKey:         make(map[string]string),
 	MaxRetries:     3,
 	EnableTracing:  false,
-	CacheTTL:       0, // No expiry by default
+	CacheTTL:       0,   // No expiry by default
+	Logger:         nil, // Will be set by logging package initialization
 }
 
 // GetSettings returns a copy of the current global settings.
@@ -69,6 +75,7 @@ func GetSettings() Settings {
 		Collector:       globalSettings.Collector,
 		DefaultCache:    globalSettings.DefaultCache,
 		CacheTTL:        globalSettings.CacheTTL,
+		Logger:          globalSettings.Logger,
 	}
 }
 
@@ -139,6 +146,13 @@ func (s *Settings) SetCollector(collector Collector) {
 	s.Collector = collector
 }
 
+// SetLogger sets the global logger instance.
+func (s *Settings) SetLogger(logger logging.Logger) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Logger = logger
+}
+
 // Reset resets the settings to default values.
 func (s *Settings) Reset() {
 	s.mu.Lock()
@@ -153,4 +167,5 @@ func (s *Settings) Reset() {
 	s.Collector = nil
 	s.DefaultCache = nil
 	s.CacheTTL = 0
+	s.Logger = nil
 }

@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // loadEnv loads configuration from environment variables.
@@ -60,5 +62,11 @@ func loadEnv() {
 		if ttl, err := time.ParseDuration(ttlStr); err == nil {
 			globalSettings.CacheTTL = ttl
 		}
+	}
+
+	// Configure logger from environment if not already set
+	if globalSettings.Logger == nil {
+		logging.ConfigureLoggerFromEnv()
+		globalSettings.Logger = logging.GetLogger()
 	}
 }

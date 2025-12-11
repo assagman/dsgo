@@ -3,6 +3,8 @@ package core
 import (
 	"strings"
 	"time"
+
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // Option is a functional option for configuring DSGo.
@@ -19,6 +21,11 @@ func Configure(opts ...Option) {
 
 	for _, opt := range opts {
 		opt(globalSettings)
+	}
+
+	// Propagate logger to logging package if set
+	if globalSettings.Logger != nil {
+		logging.SetLogger(globalSettings.Logger)
 	}
 }
 
@@ -79,6 +86,13 @@ func WithTracing(enable bool) Option {
 func WithCollector(collector Collector) Option {
 	return func(s *Settings) {
 		s.Collector = collector
+	}
+}
+
+// WithLogger sets the global logger instance.
+func WithLogger(logger logging.Logger) Option {
+	return func(s *Settings) {
+		s.Logger = logger
 	}
 }
 

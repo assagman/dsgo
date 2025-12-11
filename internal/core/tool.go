@@ -8,6 +8,9 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // ParamType represents a tool parameter type
@@ -21,6 +24,8 @@ const (
 	ParamJSON   ParamType = "json"
 	ParamArray  ParamType = "array"
 )
+
+const toolSlowLogThreshold = 100 * time.Millisecond
 
 // ToolParameter represents a parameter for a tool
 type ToolParameter struct {
@@ -201,15 +206,54 @@ func (t *Tool) validateType(name string, paramType ParamType, value any) error {
 
 // Execute executes the tool with given arguments
 func (t *Tool) Execute(ctx context.Context, args map[string]any) (any, error) {
+	start := time.Now()
 	// Normalize arguments (convert arrays to strings for string parameters)
 	normalizedArgs := t.normalizeArguments(args)
 
 	// Validate arguments before execution
 	if err := t.Validate(normalizedArgs); err != nil {
+		logging.GetLogger().Warn(ctx, "Tool validation failed", map[string]any{
+			"module": "tool.Tool",
+			"tool":   t.Name,
+			"error":  err.Error(),
+		})
 		return nil, fmt.Errorf("argument validation failed: %w", err)
 	}
 
-	return t.Function(ctx, normalizedArgs)
+	argKeys := make([]string, 0, len(normalizedArgs))
+	for key := range normalizedArgs {
+		argKeys = append(argKeys, key)
+	}
+
+	logging.GetLogger().Info(ctx, "Executing tool", map[string]any{
+		"module":     "tool.Tool",
+		"tool":       t.Name,
+		"args_count": len(normalizedArgs),
+		"arg_keys":   strings.Join(argKeys, ","),
+	})
+
+	result, err := t.Function(ctx, normalizedArgs)
+	duration := time.Since(start)
+
+	fields := map[string]any{
+		"module":      "tool.Tool",
+		"tool":        t.Name,
+		"duration_ms": duration.Milliseconds(),
+	}
+
+	if err != nil {
+		fields["error"] = err.Error()
+		logging.GetLogger().Error(ctx, "Tool execution failed", fields)
+		return nil, err
+	}
+
+	if duration > toolSlowLogThreshold {
+		logging.GetLogger().Info(ctx, "Tool execution completed", fields)
+	} else {
+		logging.GetLogger().Debug(ctx, "Tool execution completed", fields)
+	}
+
+	return result, nil
 }
 
 // normalizeArguments converts arguments to match their expected parameter types

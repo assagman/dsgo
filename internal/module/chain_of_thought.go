@@ -3,8 +3,10 @@ package module
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // ChainOfThought module encourages step-by-step reasoning
@@ -58,14 +60,28 @@ func (cot *ChainOfThought) GetSignature() *core.Signature {
 
 // Forward executes the chain of thought reasoning
 func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	// Ensure context has IDs
+	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, logging.ModuleChainOfThought, cot.Signature.Description)
+
+	var predErr error
+	defer func() {
+		logging.LogPredictionEnd(ctx, logging.ModuleChainOfThought, time.Since(startTime), predErr)
+	}()
+
 	if err := cot.Signature.ValidateInputs(inputs); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+		predErr = fmt.Errorf("input validation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Use adapter to format messages with demos
 	newMessages, err := cot.Adapter.Format(cot.Signature, inputs, cot.Demos)
 	if err != nil {
-		return nil, fmt.Errorf("failed to format messages: %w", err)
+		predErr = fmt.Errorf("failed to format messages: %w", err)
+		return nil, predErr
 	}
 
 	// Build final message list
@@ -99,32 +115,38 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 
 	result, err := cot.LM.Generate(ctx, messages, options)
 	if err != nil {
-		return nil, fmt.Errorf("LM generation failed: %w", err)
+		predErr = fmt.Errorf("LM generation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Handle finish_reason: ChainOfThought doesn't support tool execution loops
 	if result.FinishReason == "tool_calls" {
-		return nil, fmt.Errorf("model requested tool execution (finish_reason=tool_calls) but ChainOfThought module doesn't support tool loops - use React module instead")
+		predErr = fmt.Errorf("model requested tool execution (finish_reason=tool_calls) but ChainOfThought module doesn't support tool loops - use React module instead")
+		return nil, predErr
 	}
 
 	// Handle finish_reason=length: Model hit max_tokens, output truncated/incomplete
 	if result.FinishReason == "length" {
-		return nil, fmt.Errorf("model hit max_tokens limit (finish_reason=length) - output truncated - increase MaxTokens in options")
+		predErr = fmt.Errorf("model hit max_tokens limit (finish_reason=length) - output truncated - increase MaxTokens in options")
+		return nil, predErr
 	}
 
 	// Check for empty content with finish_reason=stop (actual error)
 	if result.Content == "" && result.FinishReason == "stop" {
-		return nil, fmt.Errorf("model returned empty content despite finish_reason=stop (model error)")
+		predErr = fmt.Errorf("model returned empty content despite finish_reason=stop (model error)")
+		return nil, predErr
 	}
 
 	// Use adapter to parse output
 	outputs, err := cot.Adapter.Parse(cot.Signature, result.Content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse output: %w", err)
+		predErr = fmt.Errorf("failed to parse output: %w", err)
+		return nil, predErr
 	}
 
 	if err := cot.Signature.ValidateOutputs(outputs); err != nil {
-		return nil, fmt.Errorf("output validation failed: %w", err)
+		predErr = fmt.Errorf("output validation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Extract adapter metadata
@@ -160,7 +182,7 @@ func (cot *ChainOfThought) Forward(ctx context.Context, inputs map[string]any) (
 	prediction := core.NewPrediction(outputs).
 		WithRationale(rationale).
 		WithUsage(result.Usage).
-		WithModuleName("ChainOfThought").
+		WithModuleName(logging.ModuleChainOfThought).
 		WithInputs(inputs)
 
 	// Add adapter metrics if available

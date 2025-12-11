@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // Refine implements iterative refinement of predictions
@@ -62,14 +64,28 @@ func (r *Refine) GetSignature() *core.Signature {
 
 // Forward executes the refinement loop
 func (r *Refine) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	// Ensure context has IDs
+	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, logging.ModuleRefine, r.Signature.Description)
+
+	var predErr error
+	defer func() {
+		logging.LogPredictionEnd(ctx, logging.ModuleRefine, time.Since(startTime), predErr)
+	}()
+
 	if err := r.Signature.ValidateInputs(inputs); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+		predErr = fmt.Errorf("input validation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Generate initial prediction
 	prediction, err := r.generatePrediction(ctx, inputs, nil)
 	if err != nil {
-		return nil, fmt.Errorf("initial prediction failed: %w", err)
+		predErr = fmt.Errorf("initial prediction failed: %w", err)
+		return nil, predErr
 	}
 
 	// Check if feedback is provided for refinement
@@ -80,10 +96,18 @@ func (r *Refine) Forward(ctx context.Context, inputs map[string]any) (*core.Pred
 
 	// Refinement loop
 	for i := 0; i < r.MaxIterations-1; i++ {
+		logging.GetLogger().Debug(ctx, "Refine iteration", map[string]any{
+			"iteration": i + 1,
+			"feedback":  feedback,
+		})
+
 		// Generate refinement prompt
 		refined, err := r.generateRefinement(ctx, inputs, prediction.Outputs, fmt.Sprintf("%v", feedback))
 		if err != nil {
 			// If refinement fails, return the last valid prediction
+			logging.GetLogger().Warn(ctx, "Refinement step failed", map[string]any{
+				"error": err.Error(),
+			})
 			return prediction, nil
 		}
 
@@ -206,7 +230,7 @@ func (r *Refine) generatePrediction(ctx context.Context, inputs map[string]any, 
 	// Build Prediction object
 	prediction := core.NewPrediction(outputs).
 		WithUsage(result.Usage).
-		WithModuleName("Refine").
+		WithModuleName(logging.ModuleRefine).
 		WithInputs(inputs)
 
 	// Add adapter metrics if available
@@ -320,7 +344,7 @@ func (r *Refine) generateRefinement(ctx context.Context, inputs map[string]any, 
 	// Build Prediction object
 	prediction := core.NewPrediction(outputs).
 		WithUsage(result.Usage).
-		WithModuleName("Refine").
+		WithModuleName(logging.ModuleRefine).
 		WithInputs(inputs)
 
 	// Add adapter metrics if available

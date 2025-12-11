@@ -2,12 +2,15 @@ package core
 
 import (
 	"container/list"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // Cache interface for LM result caching
@@ -58,6 +61,8 @@ type LMCache struct {
 	misses   int64
 }
 
+const cacheSlowLogThreshold = 100 * time.Millisecond
+
 // cacheEntry represents a cached item
 type cacheEntry struct {
 	key     string
@@ -89,6 +94,7 @@ func NewLMCacheWithTTL(capacity int, ttl time.Duration) *LMCache {
 // Get retrieves a cached result by key
 // Returns a deep copy to prevent mutation of cached data
 func (c *LMCache) Get(key string) (*GenerateResult, bool) {
+	start := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -107,17 +113,44 @@ func (c *LMCache) Get(key string) (*GenerateResult, bool) {
 		// Move to front (most recently used)
 		c.lru.MoveToFront(elem)
 		c.hits++
+		duration := time.Since(start)
+		fields := map[string]any{
+			"module":      "cache.LRUCache",
+			"key":         key,
+			"size":        c.lru.Len(),
+			"capacity":    c.capacity,
+			"duration_ms": duration.Milliseconds(),
+		}
+		if duration > cacheSlowLogThreshold {
+			logging.GetLogger().Info(context.Background(), "Cache hit", fields)
+		} else {
+			logging.GetLogger().Debug(context.Background(), "Cache hit", fields)
+		}
 		// Return a deep copy to prevent external mutation
 		return deepCopyResult(entry.result), true
 	}
 
 	c.misses++
+	duration := time.Since(start)
+	fields := map[string]any{
+		"module":      "cache.LRUCache",
+		"key":         key,
+		"size":        c.lru.Len(),
+		"capacity":    c.capacity,
+		"duration_ms": duration.Milliseconds(),
+	}
+	if duration > cacheSlowLogThreshold {
+		logging.GetLogger().Info(context.Background(), "Cache miss", fields)
+	} else {
+		logging.GetLogger().Debug(context.Background(), "Cache miss", fields)
+	}
 	return nil, false
 }
 
 // Set stores a result in the cache
 // Stores a deep copy to prevent external mutation of cached data
 func (c *LMCache) Set(key string, result *GenerateResult) {
+	start := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -130,9 +163,7 @@ func (c *LMCache) Set(key string, result *GenerateResult) {
 		expires = time.Now().Add(c.ttl)
 	}
 
-	// Check if key already exists
 	if elem, ok := c.items[key]; ok {
-		// Update existing entry and move to front
 		c.lru.MoveToFront(elem)
 		entry := elem.Value.(*cacheEntry)
 		entry.result = resultCopy
@@ -140,7 +171,6 @@ func (c *LMCache) Set(key string, result *GenerateResult) {
 		return
 	}
 
-	// Add new entry
 	entry := &cacheEntry{
 		key:     key,
 		result:  resultCopy,
@@ -148,6 +178,19 @@ func (c *LMCache) Set(key string, result *GenerateResult) {
 	}
 	elem := c.lru.PushFront(entry)
 	c.items[key] = elem
+	duration := time.Since(start)
+	fields := map[string]any{
+		"module":      "cache.LRUCache",
+		"key":         key,
+		"size":        c.lru.Len(),
+		"capacity":    c.capacity,
+		"duration_ms": duration.Milliseconds(),
+	}
+	if duration > cacheSlowLogThreshold {
+		logging.GetLogger().Info(context.Background(), "Cache set", fields)
+	} else {
+		logging.GetLogger().Debug(context.Background(), "Cache set", fields)
+	}
 
 	// Evict oldest entry if capacity exceeded
 	if c.lru.Len() > c.capacity {
@@ -156,6 +199,19 @@ func (c *LMCache) Set(key string, result *GenerateResult) {
 			c.lru.Remove(oldest)
 			oldEntry := oldest.Value.(*cacheEntry)
 			delete(c.items, oldEntry.key)
+			evictDuration := time.Since(start)
+			evictFields := map[string]any{
+				"module":      "cache.LRUCache",
+				"key":         oldEntry.key,
+				"size":        c.lru.Len(),
+				"capacity":    c.capacity,
+				"duration_ms": evictDuration.Milliseconds(),
+			}
+			if evictDuration > cacheSlowLogThreshold {
+				logging.GetLogger().Info(context.Background(), "Cache eviction", evictFields)
+			} else {
+				logging.GetLogger().Debug(context.Background(), "Cache eviction", evictFields)
+			}
 		}
 	}
 }

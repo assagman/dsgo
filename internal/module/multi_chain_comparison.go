@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // MultiChainComparison synthesizes the best answer from M reasoning attempts.
@@ -105,14 +107,32 @@ func (mcc *MultiChainComparison) GetSignature() *core.Signature {
 // Forward executes multi-chain comparison synthesis.
 // It expects completions to be provided via inputs["completions"].
 func (mcc *MultiChainComparison) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	// Ensure context has IDs
+	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, logging.ModuleMultiChainComparison, mcc.BaseSignature.Description)
+
+	var predErr error
+	defer func() {
+		logging.LogPredictionEnd(ctx, logging.ModuleMultiChainComparison, time.Since(startTime), predErr)
+	}()
+
 	// Extract and validate completions from inputs["completions"]
 	completions, err := mcc.extractCompletions(inputs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract completions: %w", err)
+		predErr = fmt.Errorf("failed to extract completions: %w", err)
+		return nil, predErr
 	}
 	if len(completions) != mcc.M {
-		return nil, fmt.Errorf("expected %d completions, got %d", mcc.M, len(completions))
+		predErr = fmt.Errorf("expected %d completions, got %d", mcc.M, len(completions))
+		return nil, predErr
 	}
+
+	logging.GetLogger().Debug(ctx, "MCC synthesizing", map[string]any{
+		"completions": len(completions),
+	})
 
 	// Build new inputs with reasoning_attempt_N fields
 	newInputs := make(map[string]any)
@@ -131,7 +151,8 @@ func (mcc *MultiChainComparison) Forward(ctx context.Context, inputs map[string]
 	// Call underlying Predict
 	result, err := mcc.predict.Forward(ctx, newInputs)
 	if err != nil {
-		return nil, fmt.Errorf("synthesis failed: %w", err)
+		predErr = fmt.Errorf("synthesis failed: %w", err)
+		return nil, predErr
 	}
 
 	// Map synthesis outputs back to original signature
@@ -151,7 +172,7 @@ func (mcc *MultiChainComparison) Forward(ctx context.Context, inputs map[string]
 
 	// Create final prediction
 	prediction := core.NewPrediction(finalOutputs).
-		WithModuleName("MultiChainComparison").
+		WithModuleName(logging.ModuleMultiChainComparison).
 		WithInputs(inputs).
 		WithUsage(result.Usage)
 

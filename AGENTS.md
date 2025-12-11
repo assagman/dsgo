@@ -148,9 +148,6 @@ go test -v -run TestReActWithTools ./module/
 ```bash
 # Run all integration tests (parallel, race, coverage)
 make integration-test
-
-# Integration tests with coverage (alias)
-make integration-coverage
 ```
 
 ### Example Testing

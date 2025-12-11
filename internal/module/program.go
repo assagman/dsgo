@@ -3,8 +3,10 @@ package module
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // Program represents a composable pipeline of modules
@@ -30,8 +32,21 @@ func (p *Program) AddModule(module core.Module) *Program {
 // Forward executes the program by running modules in sequence
 // Each module's outputs become available as inputs to subsequent modules
 func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	// Ensure context has IDs
+	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, logging.ModuleProgram, p.name)
+
+	var predErr error
+	defer func() {
+		logging.LogPredictionEnd(ctx, logging.ModuleProgram, time.Since(startTime), predErr)
+	}()
+
 	if len(p.modules) == 0 {
-		return nil, fmt.Errorf("program has no modules")
+		predErr = fmt.Errorf("program has no modules")
+		return nil, predErr
 	}
 
 	currentInputs := inputs
@@ -40,15 +55,22 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 	var totalUsage core.Usage
 
 	for i, module := range p.modules {
+		logging.GetLogger().Debug(ctx, "Program step", map[string]any{
+			"step":   i + 1,
+			"module": i,
+		})
+
 		prediction, err := module.Forward(ctx, currentInputs)
 		if err != nil {
-			return nil, fmt.Errorf("module %d failed: %w", i, err)
+			predErr = fmt.Errorf("module %d failed: %w", i, err)
+			return nil, predErr
 		}
 
 		// Validate outputs against module signature to catch malformed data early
 		if sig := module.GetSignature(); sig != nil {
 			if err := sig.ValidateOutputs(prediction.Outputs); err != nil {
-				return nil, fmt.Errorf("module %d produced invalid outputs: %w", i, err)
+				predErr = fmt.Errorf("module %d produced invalid outputs: %w", i, err)
+				return nil, predErr
 			}
 		}
 

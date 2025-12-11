@@ -86,6 +86,7 @@ type (
 	DefaultLogger = logging.DefaultLogger
 	NoOpLogger    = logging.NoOpLogger
 	Level         = logging.Level
+	LogEntry      = logging.LogEntry
 )
 
 // Re-export MCP types
@@ -152,6 +153,7 @@ var (
 	WithMaxRetries              = core.WithMaxRetries
 	WithTracing                 = core.WithTracing
 	WithCollector               = core.WithCollector
+	WithLogger                  = core.WithLogger
 	WithCache                   = core.WithCache
 	WithCacheTTL                = core.WithCacheTTL
 	GenerateCacheKey            = core.GenerateCacheKey
@@ -190,13 +192,20 @@ var (
 
 // Re-export logging functions
 var (
-	NewDefaultLogger  = logging.NewDefaultLogger
-	SetLogger         = logging.SetLogger
-	GetLogger         = logging.GetLogger
-	WithRequestID     = logging.WithRequestID
-	GetRequestID      = logging.GetRequestID
-	EnsureRequestID   = logging.EnsureRequestID
-	GenerateRequestID = logging.GenerateRequestID
+	NewDefaultLogger           = logging.NewDefaultLogger
+	NewDefaultLoggerWithConfig = logging.NewDefaultLoggerWithConfig
+
+	SetLogger              = logging.SetLogger
+	GetLogger              = logging.GetLogger
+	StopLogger             = logging.StopLogger
+	WithRequestID          = logging.WithRequestID
+	GetRequestID           = logging.GetRequestID
+	EnsureRequestID        = logging.EnsureRequestID
+	GenerateRequestID      = logging.GenerateRequestID
+	WithCorrelationID      = logging.WithCorrelationID
+	GetCorrelationID       = logging.GetCorrelationID
+	EnsureCorrelationID    = logging.EnsureCorrelationID
+	ConfigureLoggerFromEnv = logging.ConfigureLoggerFromEnv
 )
 
 // Re-export MCP functions
@@ -314,6 +323,7 @@ const (
 	LevelInfo  = logging.LevelInfo
 	LevelWarn  = logging.LevelWarn
 	LevelError = logging.LevelError
+	LevelFatal = logging.LevelFatal
 
 	// MCP error codes (JSON-RPC 2.0 specification)
 	MCPErrCodeParseError     = mcp.ErrCodeParseError

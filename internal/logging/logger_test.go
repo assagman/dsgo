@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestRequestIDGeneration(t *testing.T) {
@@ -173,7 +171,7 @@ func TestLogAPIRequest(t *testing.T) {
 	SetLogger(logger)
 
 	ctx := WithRequestID(context.Background(), "test-123")
-	LogAPIRequest(ctx, "gpt-4", 100)
+	LogAPIRequest(ctx, "test-provider", "gpt-4", 100)
 }
 
 func TestLogAPIResponse(t *testing.T) {
@@ -184,12 +182,12 @@ func TestLogAPIResponse(t *testing.T) {
 	SetLogger(logger)
 
 	ctx := WithRequestID(context.Background(), "test-123")
-	usage := core.Usage{
+	usage := Usage{
 		PromptTokens:     100,
 		CompletionTokens: 50,
 		TotalTokens:      150,
 	}
-	LogAPIResponse(ctx, "gpt-4", 200, 500*time.Millisecond, usage)
+	LogAPIResponse(ctx, "test-provider", "gpt-4", 200, 500*time.Millisecond, usage)
 }
 
 func TestLogAPIError(t *testing.T) {
@@ -201,7 +199,7 @@ func TestLogAPIError(t *testing.T) {
 
 	ctx := WithRequestID(context.Background(), "test-123")
 	err := context.DeadlineExceeded
-	LogAPIError(ctx, "gpt-4", err)
+	LogAPIError(ctx, "test-provider", "gpt-4", err)
 }
 
 func TestLogPredictionStart(t *testing.T) {

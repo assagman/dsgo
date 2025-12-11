@@ -1307,6 +1307,10 @@ func (c *capturingLogger) Error(ctx context.Context, message string, fields map[
 	// Not used in these tests
 }
 
+func (c *capturingLogger) Fatal(ctx context.Context, message string, fields map[string]any) {
+	// Not used in these tests
+}
+
 func (c *capturingLogger) getLastInfo() *logEntry {
 	c.mu.Lock()
 	defer c.mu.Unlock()

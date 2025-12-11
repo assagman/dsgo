@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // MockLM for testing
@@ -257,8 +258,8 @@ func TestMultiChainComparison_Forward(t *testing.T) {
 		t.Fatalf("Forward failed: %v", err)
 	}
 
-	if prediction.ModuleName != "MultiChainComparison" {
-		t.Errorf("Expected module name 'MultiChainComparison', got '%s'", prediction.ModuleName)
+	if prediction.ModuleName != logging.ModuleMultiChainComparison {
+		t.Errorf("Expected module name '%s', got '%s'", logging.ModuleMultiChainComparison, prediction.ModuleName)
 	}
 
 	// Should have answer field

@@ -151,13 +151,6 @@ go test -v -run TestJSONL ./integration/...
 go test -v -run TestComposite ./integration/...
 ```
 
-### With Coverage
-
-```bash
-make integration-coverage
-# Generates integration_coverage.out
-```
-
 ## Writing Tests
 
 ### Using the Test Builder

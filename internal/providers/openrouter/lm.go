@@ -98,7 +98,7 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 	}
 
 	// Log API request start
-	logging.LogAPIRequest(ctx, o.Model, promptLength)
+	logging.LogAPIRequest(ctx, "provider.OpenRouter", o.Model, promptLength)
 
 	// Check cache if available
 	if o.Cache != nil {
@@ -131,7 +131,7 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 		return o.Client.Do(req)
 	})
 	if err != nil {
-		logging.LogAPIError(ctx, o.Model, err)
+		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -178,14 +178,14 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 		fmt.Fprintf(os.Stderr, "=======================\n\n")
 
 		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-		logging.LogAPIError(ctx, o.Model, err)
+		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
 		return nil, err
 	}
 
 	// Read response body for logging and decoding
 	bodyBytes, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		logging.LogAPIError(ctx, o.Model, readErr)
+		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, readErr)
 		return nil, fmt.Errorf("failed to read response body: %w", readErr)
 	}
 
@@ -198,7 +198,7 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 
 	var apiResp openRouterResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
-		logging.LogAPIError(ctx, o.Model, err)
+		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
 
 		if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
 			// Save failed response for debugging
@@ -211,7 +211,7 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 
 	result, err := o.parseResponse(&apiResp)
 	if err != nil {
-		logging.LogAPIError(ctx, o.Model, err)
+		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
 
 		if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
 			// Save raw response on parse error
@@ -227,7 +227,13 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 
 	// Log API response
 	duration := time.Since(startTime)
-	logging.LogAPIResponse(ctx, o.Model, resp.StatusCode, duration, result.Usage)
+	logging.LogAPIResponse(ctx, "provider.OpenRouter", o.Model, resp.StatusCode, duration, logging.Usage{
+		PromptTokens:     result.Usage.PromptTokens,
+		CompletionTokens: result.Usage.CompletionTokens,
+		TotalTokens:      result.Usage.TotalTokens,
+		Cost:             result.Usage.Cost,
+		Latency:          result.Usage.Latency,
+	})
 
 	// Store in cache if available
 	if o.Cache != nil {

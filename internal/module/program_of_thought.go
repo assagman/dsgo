@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // ProgramOfThought generates and executes code to solve problems
@@ -58,13 +59,27 @@ func (pot *ProgramOfThought) GetSignature() *core.Signature {
 
 // Forward executes the program of thought
 func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	// Ensure context has IDs
+	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
+
+	startTime := time.Now()
+	logging.LogPredictionStart(ctx, logging.ModuleProgramOfThought, pot.Signature.Description)
+
+	var predErr error
+	defer func() {
+		logging.LogPredictionEnd(ctx, logging.ModuleProgramOfThought, time.Since(startTime), predErr)
+	}()
+
 	if err := pot.Signature.ValidateInputs(inputs); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+		predErr = fmt.Errorf("input validation failed: %w", err)
+		return nil, predErr
 	}
 
 	prompt, err := pot.buildPrompt(inputs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build prompt: %w", err)
+		predErr = fmt.Errorf("failed to build prompt: %w", err)
+		return nil, predErr
 	}
 
 	messages := []core.Message{
@@ -88,22 +103,26 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 
 	result, err := pot.LM.Generate(ctx, messages, options)
 	if err != nil {
-		return nil, fmt.Errorf("LM generation failed: %w", err)
+		predErr = fmt.Errorf("LM generation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Handle finish_reason: ProgramOfThought doesn't support tool execution loops
 	if result.FinishReason == "tool_calls" {
-		return nil, fmt.Errorf("model requested tool execution (finish_reason=tool_calls) but ProgramOfThought module doesn't support tool loops - use React module instead")
+		predErr = fmt.Errorf("model requested tool execution (finish_reason=tool_calls) but ProgramOfThought module doesn't support tool loops - use React module instead")
+		return nil, predErr
 	}
 
 	// Handle finish_reason=length: Model hit max_tokens, output truncated/incomplete
 	if result.FinishReason == "length" {
-		return nil, fmt.Errorf("model hit max_tokens limit (finish_reason=length) - output truncated - increase MaxTokens in options")
+		predErr = fmt.Errorf("model hit max_tokens limit (finish_reason=length) - output truncated - increase MaxTokens in options")
+		return nil, predErr
 	}
 
 	// Check for empty content with finish_reason=stop (actual error)
 	if result.Content == "" && result.FinishReason == "stop" {
-		return nil, fmt.Errorf("model returned empty content despite finish_reason=stop (model error)")
+		predErr = fmt.Errorf("model returned empty content despite finish_reason=stop (model error)")
+		return nil, predErr
 	}
 
 	// Use FallbackAdapter to parse output
@@ -116,7 +135,8 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 		if len(extractedOutputs) > 0 {
 			outputs = extractedOutputs
 		} else {
-			return nil, fmt.Errorf("failed to parse output: %w", err)
+			predErr = fmt.Errorf("failed to parse output: %w", err)
+			return nil, predErr
 		}
 	}
 
@@ -127,11 +147,13 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 	// Use case-insensitive lookup since NormalizeOutputKeys may use capitalized field names
 	codeVal := getFieldCaseInsensitive(outputs, "code")
 	if codeVal == nil || strings.TrimSpace(fmt.Sprintf("%v", codeVal)) == "" {
-		return nil, fmt.Errorf("output validation failed: code field is empty or missing")
+		predErr = fmt.Errorf("output validation failed: code field is empty or missing")
+		return nil, predErr
 	}
 	explanationVal := getFieldCaseInsensitive(outputs, "explanation")
 	if explanationVal == nil || strings.TrimSpace(fmt.Sprintf("%v", explanationVal)) == "" {
-		return nil, fmt.Errorf("output validation failed: explanation field is empty or missing")
+		predErr = fmt.Errorf("output validation failed: explanation field is empty or missing")
+		return nil, predErr
 	}
 
 	// Extract adapter metadata
@@ -140,23 +162,34 @@ func (pot *ProgramOfThought) Forward(ctx context.Context, inputs map[string]any)
 	// Execute code if enabled
 	if pot.AllowExecution {
 		if code := getFieldCaseInsensitive(outputs, "code"); code != nil {
+			logging.GetLogger().Debug(ctx, "Executing code", map[string]any{
+				"language": pot.Language,
+				"code_len": len(fmt.Sprintf("%v", code)),
+			})
 			executionResult, err := pot.executeCode(ctx, fmt.Sprintf("%v", code))
 			if err != nil {
 				outputs["execution_error"] = err.Error()
+				logging.GetLogger().Warn(ctx, "Code execution failed", map[string]any{
+					"error": err.Error(),
+				})
 			} else {
 				outputs["execution_result"] = executionResult
+				logging.GetLogger().Debug(ctx, "Code execution success", map[string]any{
+					"result_len": len(executionResult),
+				})
 			}
 		}
 	}
 
 	if err := pot.Signature.ValidateOutputs(outputs); err != nil {
-		return nil, fmt.Errorf("output validation failed: %w", err)
+		predErr = fmt.Errorf("output validation failed: %w", err)
+		return nil, predErr
 	}
 
 	// Build Prediction object
 	prediction := core.NewPrediction(outputs).
 		WithUsage(result.Usage).
-		WithModuleName("ProgramOfThought").
+		WithModuleName(logging.ModuleProgramOfThought).
 		WithInputs(inputs)
 
 	// Add adapter metrics if available

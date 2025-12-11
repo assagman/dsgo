@@ -103,7 +103,7 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 	}
 
 	// Log API request start
-	logging.LogAPIRequest(ctx, o.Model, promptLength)
+	logging.LogAPIRequest(ctx, "provider.OpenAI", o.Model, promptLength)
 
 	// Check cache if available
 	if o.Cache != nil {
@@ -130,7 +130,7 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 		return o.Client.Do(req)
 	})
 	if err != nil {
-		logging.LogAPIError(ctx, o.Model, err)
+		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -138,14 +138,14 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-		logging.LogAPIError(ctx, o.Model, err)
+		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
 		return nil, err
 	}
 
 	// Read response body for logging and decoding
 	bodyBytes, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		logging.LogAPIError(ctx, o.Model, readErr)
+		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, readErr)
 		return nil, fmt.Errorf("failed to read response body: %w", readErr)
 	}
 
@@ -158,7 +158,7 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 
 	var apiResp openAIResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
-		logging.LogAPIError(ctx, o.Model, err)
+		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
 		// Save failed response for debugging
 		if err := saveRawExchange(o.Model+"_DECODE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
@@ -168,7 +168,7 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 
 	result, err := o.parseResponse(&apiResp)
 	if err != nil {
-		logging.LogAPIError(ctx, o.Model, err)
+		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
 		// Save raw response on parse error
 		if err := saveRawExchange(o.Model+"_PARSE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
@@ -181,7 +181,13 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 
 	// Log API response
 	duration := time.Since(startTime)
-	logging.LogAPIResponse(ctx, o.Model, resp.StatusCode, duration, result.Usage)
+	logging.LogAPIResponse(ctx, "provider.OpenAI", o.Model, resp.StatusCode, duration, logging.Usage{
+		PromptTokens:     result.Usage.PromptTokens,
+		CompletionTokens: result.Usage.CompletionTokens,
+		TotalTokens:      result.Usage.TotalTokens,
+		Cost:             result.Usage.Cost,
+		Latency:          result.Usage.Latency,
+	})
 
 	// Store in cache if available
 	if o.Cache != nil {

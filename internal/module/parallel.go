@@ -266,12 +266,13 @@ func (p *Parallel) GetSignature() *core.Signature {
 // Forward executes the module in parallel across expanded inputs
 func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	ctx = logging.EnsureRequestID(ctx)
+	ctx = logging.EnsureCorrelationID(ctx)
 	startTime := time.Now()
-	logging.LogPredictionStart(ctx, "Parallel", "Parallel execution")
+	logging.LogPredictionStart(ctx, logging.ModuleParallel, "Parallel execution")
 
 	var predErr error
 	defer func() {
-		logging.LogPredictionEnd(ctx, "Parallel", time.Since(startTime), predErr)
+		logging.LogPredictionEnd(ctx, logging.ModuleParallel, time.Since(startTime), predErr)
 	}()
 
 	// Expand inputs into batch
@@ -549,7 +550,7 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 	// Build final prediction
 	prediction := core.NewPrediction(primary.Outputs).
 		WithUsage(totalUsage).
-		WithModuleName("Parallel").
+		WithModuleName(logging.ModuleParallel).
 		WithInputs(inputs)
 
 	// Add completions if requested

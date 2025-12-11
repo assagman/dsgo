@@ -9,10 +9,34 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 	"unicode"
 
 	"github.com/assagman/dsgo/internal/jsonutil"
+	"github.com/assagman/dsgo/internal/logging"
 )
+
+const (
+	adapterModuleJSON     = "adapter.JSONAdapter"
+	adapterModuleChat     = "adapter.ChatAdapter"
+	adapterModuleTwoStep  = "adapter.TwoStepAdapter"
+	adapterModuleFallback = "adapter.FallbackAdapter"
+)
+
+func adapterName(adapter Adapter) string {
+	switch adapter.(type) {
+	case *JSONAdapter:
+		return adapterModuleJSON
+	case *ChatAdapter:
+		return adapterModuleChat
+	case *TwoStepAdapter:
+		return adapterModuleTwoStep
+	case *FallbackAdapter:
+		return adapterModuleFallback
+	default:
+		return fmt.Sprintf("%T", adapter)
+	}
+}
 
 // truncateString truncates a string to maxLen characters
 func truncateString(s string, maxLen int) string {
@@ -234,9 +258,15 @@ func (a *JSONAdapter) WithReasoning(include bool) *JSONAdapter {
 
 // Format builds prompt messages from signature and inputs
 func (a *JSONAdapter) Format(sig *Signature, inputs map[string]any, demos []Example) ([]Message, error) {
+	logging.GetLogger().Debug(context.Background(), "Formatting prompt", map[string]any{
+		"module":       adapterModuleJSON,
+		"signature":    sig.Description,
+		"num_examples": len(demos),
+	})
 	var prompt strings.Builder
 
 	// Add description
+
 	if sig.Description != "" {
 		prompt.WriteString(sig.Description)
 		prompt.WriteString("\n\n")
@@ -428,6 +458,11 @@ func (a *ChatAdapter) WithReasoning(include bool) *ChatAdapter {
 
 // Format builds prompt messages from signature and inputs
 func (a *ChatAdapter) Format(sig *Signature, inputs map[string]any, demos []Example) ([]Message, error) {
+	logging.GetLogger().Debug(context.Background(), "Formatting prompt", map[string]any{
+		"module":       adapterModuleChat,
+		"signature":    sig.Description,
+		"num_examples": len(demos),
+	})
 	var prompt strings.Builder
 
 	// Add description
@@ -919,16 +954,45 @@ func (f *FallbackAdapter) Parse(sig *Signature, content string) (map[string]any,
 	var parseErrors []error
 
 	for i, adapter := range f.adapters {
+		attemptStart := time.Now()
+		adapterModule := adapterName(adapter)
+		logging.GetLogger().Debug(context.Background(), "Adapter parse attempt", map[string]any{
+			"module":  adapterModuleFallback,
+			"adapter": adapterModule,
+			"attempt": i + 1,
+		})
+
 		outputs, err := adapter.Parse(sig, content)
+		attemptDuration := time.Since(attemptStart)
 		if err == nil {
+			fields := map[string]any{
+				"module":         adapterModuleFallback,
+				"adapter":        adapterModule,
+				"attempt":        i + 1,
+				"duration_ms":    attemptDuration.Milliseconds(),
+				"prior_failures": len(parseErrors),
+			}
+			if i > 0 {
+				logging.GetLogger().Warn(context.Background(), "Fallback adapter used", fields)
+			} else {
+				logging.GetLogger().Debug(context.Background(), "Adapter parse succeeded", fields)
+			}
 			atomic.StoreInt64(&f.lastUsedAdapter, int64(i))
 			// Add adapter metadata to outputs for tracking
 			// This will be picked up by modules to add to Prediction
-			outputs["__adapter_used"] = fmt.Sprintf("%T", adapter)
+			outputs["__adapter_used"] = adapterModule
 			outputs["__parse_attempts"] = i + 1
 			outputs["__fallback_used"] = i > 0
 			return outputs, nil
 		}
+		logging.GetLogger().Debug(context.Background(), "Adapter parse failed", map[string]any{
+			"module":       adapterModuleFallback,
+			"adapter":      adapterModule,
+			"error":        err.Error(),
+			"attempt":      i + 1,
+			"duration_ms":  attemptDuration.Milliseconds(),
+			"prior_errors": len(parseErrors) + 1,
+		})
 		parseErrors = append(parseErrors, fmt.Errorf("adapter %d (%T): %w", i, adapter, err))
 	}
 
@@ -984,6 +1048,11 @@ func (a *TwoStepAdapter) WithReasoning(include bool) *TwoStepAdapter {
 // Format builds prompt messages for stage 1 (free-form generation)
 // This allows the reasoning model to work without structured output constraints
 func (a *TwoStepAdapter) Format(sig *Signature, inputs map[string]any, demos []Example) ([]Message, error) {
+	logging.GetLogger().Debug(context.Background(), "Formatting prompt", map[string]any{
+		"module":       adapterModuleTwoStep,
+		"signature":    sig.Description,
+		"num_examples": len(demos),
+	})
 	var prompt strings.Builder
 
 	// Add description
