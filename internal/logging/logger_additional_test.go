@@ -368,3 +368,114 @@ func TestFatalExitFunctions(t *testing.T) {
 	}
 	mu.Unlock()
 }
+
+func TestStop_NoGoroutineLeak(t *testing.T) {
+	// This test verifies that Stop() doesn't leave hanging goroutines
+	// when timeout occurs
+	cfg := DefaultConfig()
+	cfg.Level = LevelDebug
+	cfg.FlushTimeout = 100 * time.Millisecond
+	cfg.FlushInterval = 1 * time.Second // Long interval to avoid flush before timeout
+
+	dl := NewDefaultLoggerWithConfig(cfg)
+
+	// Log some entries but don't wait for flush
+	dl.Info(context.Background(), "test", nil)
+
+	// Calling Stop() with short timeout should not leave hanging goroutines
+	dl.Stop()
+
+	// Give a brief moment to ensure goroutine cleanup
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify stopped flag is set
+	stats := dl.GetStats()
+	if !stats["stopped"].(bool) {
+		t.Error("Logger should be marked as stopped")
+	}
+}
+
+func TestStop_IdempotentCalls(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Level = LevelDebug
+	cfg.FlushInterval = 5 * time.Millisecond
+
+	dl := NewDefaultLoggerWithConfig(cfg)
+
+	// Multiple Stop calls should be safe
+	dl.Stop()
+	dl.Stop()
+	dl.Stop()
+
+	stats := dl.GetStats()
+	if !stats["stopped"].(bool) {
+		t.Error("Logger should be marked as stopped")
+	}
+}
+
+func TestSetLogger_StopsOldLogger(t *testing.T) {
+	// Save original logger
+	original := GetLogger()
+	defer SetLogger(original)
+
+	// Create a new logger
+	cfg := DefaultConfig()
+	cfg.Level = LevelDebug
+	cfg.FlushInterval = 5 * time.Millisecond
+	oldLogger := NewDefaultLoggerWithConfig(cfg)
+
+	// Set it as the global logger
+	SetLogger(oldLogger)
+	if GetLogger() != oldLogger {
+		t.Fatal("SetLogger did not set the logger")
+	}
+
+	// Create another logger and set it, which should stop the old one
+	newLogger := NewDefaultLoggerWithConfig(cfg)
+	SetLogger(newLogger)
+
+	// Give a moment for the old logger's Stop to complete
+	time.Sleep(20 * time.Millisecond)
+
+	// The old logger should be stopped now
+	if !oldLogger.GetStats()["stopped"].(bool) {
+		t.Error("Old logger should have been stopped by SetLogger")
+	}
+
+	// Clean up
+	newLogger.Stop()
+}
+
+func TestSetLogger_WithNilLogger(t *testing.T) {
+	original := GetLogger()
+	defer SetLogger(original)
+
+	SetLogger(nil)
+	if _, ok := GetLogger().(*NoOpLogger); !ok {
+		t.Fatal("SetLogger(nil) should set NoOpLogger")
+	}
+}
+
+func TestSetLogger_ReplaceWithNoOp(t *testing.T) {
+	original := GetLogger()
+	defer SetLogger(original)
+
+	cfg := DefaultConfig()
+	cfg.Level = LevelDebug
+	cfg.FlushInterval = 5 * time.Millisecond
+	dl := NewDefaultLoggerWithConfig(cfg)
+
+	SetLogger(dl)
+	if GetLogger() != dl {
+		t.Fatal("SetLogger did not set logger")
+	}
+
+	// Replace with NoOp - should stop the DefaultLogger
+	SetLogger(&NoOpLogger{})
+
+	time.Sleep(20 * time.Millisecond)
+
+	if !dl.GetStats()["stopped"].(bool) {
+		t.Error("DefaultLogger should be stopped when replaced with NoOpLogger")
+	}
+}

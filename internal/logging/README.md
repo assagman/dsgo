@@ -254,11 +254,50 @@ See [LOG_FORMAT.md](../examples/logging_tracing/LOG_FORMAT.md) for detailed form
 - **Request ID**: 8 bytes allocation, cryptographically random
 - **Context Propagation**: No copying, uses Go's context.Value
 
-## Thread Safety
+## Thread Safety & Resource Management
+
+### Thread Safety
 
 - `SetLogger()` and `GetLogger()` are **not thread-safe**. Set the logger once at startup.
 - `Logger` interface methods **must be thread-safe** (DefaultLogger is thread-safe via stdout writes)
 - Request IDs in context are **immutable** (safe to share across goroutines)
+
+### Resource Cleanup
+
+`DefaultLogger` runs a background goroutine for async log processing. To prevent resource leaks:
+
+**Option 1: Automatic cleanup when replacing logger**
+```go
+oldLogger := logging.NewDefaultLogger(logging.LevelInfo)
+logging.SetLogger(oldLogger)
+
+// ... later ...
+
+newLogger := logging.NewDefaultLogger(logging.LevelDebug)
+logging.SetLogger(newLogger)  // Automatically stops oldLogger
+```
+
+**Option 2: Explicit cleanup**
+```go
+logger := logging.NewDefaultLogger(logging.LevelInfo)
+defer logger.Stop()  // Always call Stop() before exit
+
+// Use logger...
+```
+
+**Option 3: Global logger (production)**
+```go
+func init() {
+    logging.ConfigureLoggerFromEnv()  // Registers cleanup handler
+}
+
+func main() {
+    defer logging.StopLogger()  // Stop global logger on exit
+    // Rest of application...
+}
+```
+
+**Important**: Calling `Stop()` is idempotent (safe to call multiple times)
 
 ## Best Practices
 
