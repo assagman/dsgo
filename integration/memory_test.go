@@ -23,7 +23,8 @@ func TestMemory_NoLeaksOnSuccess(t *testing.T) {
 	ctx := context.Background()
 	iterations := 1000
 
-	lm := NewMockLMWithResponse(`{"answer": "response"}`)
+	lm := NewMockLMWithResponse(`[[ ## answer ## ]]
+response`)
 	sig := fixtures.SimplePredictSig()
 	predictor := dsgo.NewPredict(sig, lm)
 
@@ -110,7 +111,8 @@ func TestMemory_StreamingCleanup(t *testing.T) {
 	t.Parallel()
 	iterations := 100
 
-	lm := NewMockLMWithResponse(`{"answer": "streaming response"}`)
+	lm := NewMockLMWithResponse(`[[ ## answer ## ]]
+streaming response`)
 	sig := fixtures.SimplePredictSig()
 	predictor := dsgo.NewPredict(sig, lm)
 
@@ -300,7 +302,8 @@ func TestMemory_StreamingFootprint(t *testing.T) {
 	iterations := 50
 
 	// Create a mock that returns chunks
-	lm := NewMockLMWithResponse(`{"answer": "This is a streaming response that contains some content"}`)
+	lm := NewMockLMWithResponse(`[[ ## answer ## ]]
+This is a streaming response that contains some content`)
 	sig := fixtures.SimplePredictSig()
 	predictor := dsgo.NewPredict(sig, lm)
 
@@ -351,7 +354,8 @@ func TestMemory_ConcurrentOperations(t *testing.T) {
 	t.Parallel()
 	concurrency := 50
 
-	lm := NewConcurrentSafeMockLM(`{"answer": "concurrent response"}`)
+	lm := NewConcurrentSafeMockLM(`[[ ## answer ## ]]
+concurrent response`)
 	sig := fixtures.SimplePredictSig()
 
 	// Force GC before measuring
@@ -409,7 +413,8 @@ func TestMemory_AllocationRate(t *testing.T) {
 	t.Parallel()
 	iterations := 1000
 
-	lm := NewMockLMWithResponse(`{"answer": "response"}`)
+	lm := NewMockLMWithResponse(`[[ ## answer ## ]]
+response`)
 	sig := fixtures.SimplePredictSig()
 	predictor := dsgo.NewPredict(sig, lm)
 	ctx := context.Background()

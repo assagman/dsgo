@@ -31,6 +31,7 @@ type Config struct {
 	FlushTimeout          time.Duration
 	BatchSize             int
 	DropWhenFull          bool
+	BlockTimeout          time.Duration // Max time to wait when buffer is full (0 = block forever)
 	MaxMemoryUsage        int64
 	CacheSlowLogThreshold time.Duration
 	ToolSlowLogThreshold  time.Duration
@@ -110,6 +111,13 @@ func LoadConfigFromEnv() *Config {
 	if toolSlowStr := os.Getenv("DSGO_LOG_TOOL_SLOW_THRESHOLD"); toolSlowStr != "" {
 		if duration := parseDuration(toolSlowStr); duration > 0 {
 			config.ToolSlowLogThreshold = duration
+		}
+	}
+
+	// Parse DSGO_LOG_BLOCK_TIMEOUT
+	if blockTimeoutStr := os.Getenv("DSGO_LOG_BLOCK_TIMEOUT"); blockTimeoutStr != "" {
+		if duration := parseDuration(blockTimeoutStr); duration > 0 {
+			config.BlockTimeout = duration
 		}
 	}
 
@@ -425,9 +433,21 @@ func (l *DefaultLogger) queueLog(ctx context.Context, level Level, msg string, f
 			atomic.AddInt64(&l.droppedCount, 1)
 			return
 		}
-		// Block until space available
-		l.entryChan <- entry
-		atomic.AddInt64(&l.memoryUsage, int64(size))
+		// Wait with timeout if configured, otherwise block forever
+		if l.config.BlockTimeout > 0 {
+			select {
+			case l.entryChan <- entry:
+				atomic.AddInt64(&l.memoryUsage, int64(size))
+			case <-time.After(l.config.BlockTimeout):
+				// Timeout reached, drop the log entry
+				atomic.AddInt64(&l.droppedCount, 1)
+				return
+			}
+		} else {
+			// Block until space available (legacy behavior)
+			l.entryChan <- entry
+			atomic.AddInt64(&l.memoryUsage, int64(size))
+		}
 	}
 }
 
@@ -604,7 +624,8 @@ func DefaultConfig() *Config {
 		FlushTimeout:          5 * time.Second,
 		BatchSize:             100,
 		DropWhenFull:          false,
-		MaxMemoryUsage:        10 * 1024 * 1024, // 10MB
+		BlockTimeout:          100 * time.Millisecond, // Prevent indefinite blocking
+		MaxMemoryUsage:        10 * 1024 * 1024,       // 10MB
 		CacheSlowLogThreshold: 100 * time.Millisecond,
 		ToolSlowLogThreshold:  100 * time.Millisecond,
 	}
