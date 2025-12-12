@@ -1,4 +1,4 @@
-.PHONY: all test test-race test-unit test-unit-with-race test-integration test-integration-with-race build fmt vet lint check check-lint check-eof verify clean install-hooks test-matrix test-matrix-quick test-matrix-sample fmt-fix help
+.PHONY: all test test-race test-unit test-unit-with-race test-integration test-integration-with-race build fmt vet lint check check-lint check-eof verify clean install-hooks fmt-fix help
 
 PACKAGES := $$(go list ./... | grep -v /examples | grep -v /scripts | grep -v /integration)
 INTEGRATION_PACKAGES := $$(go list ./integration)

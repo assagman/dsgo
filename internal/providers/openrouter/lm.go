@@ -841,10 +841,10 @@ func debugEnabled() bool {
 
 // saveRawExchange saves complete request/response exchange to a file for debugging
 func saveRawExchange(model string, request map[string]any, statusCode int, headers http.Header, responseBody []byte, saveErr error) error {
-	// Determine output directory - prefer DSGO_ARTIFACT_DIR, fallback to test_matrix_logs
+	// Determine output directory - prefer DSGO_ARTIFACT_DIR, fallback to dsgo_artifacts
 	baseDir := os.Getenv("DSGO_ARTIFACT_DIR")
 	if baseDir == "" {
-		baseDir = "test_matrix_logs"
+		baseDir = "dsgo_artifacts"
 	}
 	rawDir := filepath.Join(baseDir, "raw")
 	if err := os.MkdirAll(rawDir, 0755); err != nil {

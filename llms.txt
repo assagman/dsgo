@@ -12,9 +12,12 @@ DSGo provides a batteries-included approach to LLM orchestration in Go. Build ev
 
 ## Documentation
 
-- [README.md](README.md): Complete project reference with architecture diagrams and API overview
+- [README.md](README.md): Index + diagrams + tiny example
 - [QUICKSTART.md](QUICKSTART.md): Step-by-step tutorials to get started in minutes
-- [API.md](API.md): Detailed API documentation with all types and methods
+- [ARCHITECTURE.md](ARCHITECTURE.md): Diagram-first deep dive
+- [DEVELOPMENT.md](DEVELOPMENT.md): Contributor workflow
+- [REFERENCE.md](REFERENCE.md): Tables + links (quick reference)
+- [examples/README.md](examples/README.md): Runnable examples index
 - [AGENTS.md](AGENTS.md): Development guide for contributors and AI agents
 - [ROADMAP.md](ROADMAP.md): Implementation status and future plans
 
@@ -41,11 +44,12 @@ High-level behaviors implementing the Module interface:
 | Predict | Basic structured prediction |
 | ChainOfThought | Step-by-step reasoning with rationale |
 | ReAct | Tool-using agent (Reason + Act loop) |
-| Refine | Iterative output improvement |
-| BestOfN | Multi-candidate sampling with scoring |
+| Refine | Iterative improvement (triggered by `inputs["feedback"]`) |
+| BestOfN | Multi-candidate sampling with scoring (requires a scorer) |
 | Program | Sequential module composition |
 | Parallel | Concurrent execution with worker pool |
-| MultiChainComparison | DSPy-style answer synthesis |
+| ProgramOfThought | Code-first reasoning; optional local execution disabled by default |
+| MultiChainComparison | DSPy-style answer synthesis from multiple attempts |
 
 ### Adapters
 
@@ -92,6 +96,7 @@ LLM API implementations (auto-registered via init()):
 - [best_of_n.go](internal/module/best_of_n.go): Multi-candidate selection with scoring
 - [program.go](internal/module/program.go): Module pipeline composition
 - [parallel.go](internal/module/parallel.go): Concurrent execution with auto-cloning
+- [program_of_thought.go](internal/module/program_of_thought.go): Code-first reasoning module
 - [multi_chain_comparison.go](internal/module/multi_chain_comparison.go): DSPy-style synthesis
 
 ### Provider Layer (internal/providers/)

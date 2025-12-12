@@ -370,12 +370,12 @@ DSGO_DEBUG_PARSE=1           # Show parse attempts
 
 | Document | Purpose |
 |----------|---------|
-| [README.md](README.md) | Complete project reference |
+| [README.md](README.md) | Index + diagrams + tiny example |
 | [QUICKSTART.md](QUICKSTART.md) | Step-by-step tutorials |
-| [API.md](API.md) | Detailed API documentation |
+| [REFERENCE.md](REFERENCE.md) | Tables + links (quick reference) |
 | [ROADMAP.md](ROADMAP.md) | Implementation status |
 | [llms.txt](llms.txt) | LLM-friendly documentation |
-| [examples/](examples/) | Working code examples |
+| [examples/README.md](examples/README.md) | Runnable examples index |
 
 ---
 
