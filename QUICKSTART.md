@@ -261,15 +261,24 @@ sig := dsgo.NewSignature("Write professional email").
     AddInput("tone", dsgo.FieldTypeString, "Desired tone (formal/casual)").
     AddOutput("email", dsgo.FieldTypeString, "Final email")
 
-refiner := dsgo.NewRefine(sig, lm, 
-    "Make the email more professional and clear", // Refinement instruction
-    2) // Maximum refinement iterations
+// Refine takes optional feedback via inputs["feedback"].
+// If no feedback is provided, it returns the initial prediction.
+refiner := dsgo.NewRefine(sig, lm).WithMaxIterations(2)
 
+// Initial draft (no refinement)
 result, _ := refiner.Forward(ctx, map[string]any{
     "topic": "Project status update",
     "tone": "formal",
 })
-fmt.Println(result.GetString("email"))
+fmt.Println("Draft:", result.GetString("email"))
+
+// Refined draft (feedback triggers refinement loop)
+refined, _ := refiner.Forward(ctx, map[string]any{
+    "topic": "Project status update",
+    "tone": "formal",
+    "feedback": "Make the email more professional and clear",
+})
+fmt.Println("Refined:", refined.GetString("email"))
 ```
 
 ### BestOfN - Generate Multiple Candidates
@@ -281,8 +290,13 @@ sig := dsgo.NewSignature("Generate marketing slogan").
     AddInput("product", dsgo.FieldTypeString, "Product name").
     AddOutput("slogan", dsgo.FieldTypeString, "Marketing slogan")
 
-// Generate 3 candidates and pick the best
-bestof := dsgo.NewBestOfN(sig, lm, 3)
+// Wrap a base module, then run it N times.
+base := dsgo.NewPredict(sig, lm)
+
+// Generate 3 candidates and pick the best (requires a scorer).
+bestof := dsgo.NewBestOfN(base, 3).
+    WithScorer(dsgo.DefaultScorer()).
+    WithParallel(true)   // optional
 
 result, _ := bestof.Forward(ctx, map[string]any{
     "product": "Eco-friendly water bottle",
@@ -349,15 +363,24 @@ sig := dsgo.NewSignature("Write professional email").
     AddInput("tone", dsgo.FieldTypeString, "Desired tone (formal/casual)").
     AddOutput("email", dsgo.FieldTypeString, "Final email")
 
-refiner := module.NewRefine(sig, lm, 
-    "Make the email more professional and clear", // Refinement instruction
-    2) // Maximum refinement iterations
+// Refine takes optional feedback via inputs["feedback"].
+// If no feedback is provided, it returns the initial prediction.
+refiner := module.NewRefine(sig, lm).WithMaxIterations(2)
 
+// Initial draft (no refinement)
 result, _ := refiner.Forward(ctx, map[string]any{
     "topic": "Project status update",
     "tone": "formal",
 })
-fmt.Println(result.GetString("email"))
+fmt.Println("Draft:", result.GetString("email"))
+
+// Refined draft (feedback triggers refinement loop)
+refined, _ := refiner.Forward(ctx, map[string]any{
+    "topic": "Project status update",
+    "tone": "formal",
+    "feedback": "Make the email more professional and clear",
+})
+fmt.Println("Refined:", refined.GetString("email"))
 ```
 
 ### BestOfN - Generate Multiple Candidates
@@ -369,8 +392,13 @@ sig := dsgo.NewSignature("Generate marketing slogan").
     AddInput("product", dsgo.FieldTypeString, "Product name").
     AddOutput("slogan", dsgo.FieldTypeString, "Marketing slogan")
 
-// Generate 3 candidates and pick the best
-bestof := module.NewBestOfN(sig, lm, 3)
+// Wrap a base module, then run it N times.
+base := module.NewPredict(sig, lm)
+
+// Generate 3 candidates and pick the best (requires a scorer).
+bestof := module.NewBestOfN(base, 3).
+    WithScorer(module.DefaultScorer()).
+    WithParallel(true)   // optional
 
 result, _ := bestof.Forward(ctx, map[string]any{
     "product": "Eco-friendly water bottle",
@@ -714,7 +742,8 @@ if completions := result.Completions; completions != nil {
 ## Next Steps
 
 - **See [examples/](examples/)** — Working code for all patterns
-- **Read [README.md](README.md)** — Full API reference
+- **Read [REFERENCE.md](REFERENCE.md)** — Tables / quick reference
+- **Read [README.md](README.md)** — Index + diagrams + tiny example
 - **Check [AGENTS.md](AGENTS.md)** — Development guide
 - **Review [ROADMAP.md](ROADMAP.md)** — Feature status
 
@@ -725,10 +754,12 @@ if completions := result.Completions; completions != nil {
 | Simple I/O | Predict | `dsgo.NewPredict(sig, lm)` |
 | Reasoning | ChainOfThought | `dsgo.NewChainOfThought(sig, lm)` |
 | Tools | ReAct | `dsgo.NewReAct(sig, lm, tools)` |
-| Improvement | Refine | `dsgo.NewRefine(sig, lm, instruction, maxIter)` |
-| Quality | BestOfN | `dsgo.NewBestOfN(sig, lm, n)` |
+| Improvement | Refine | `dsgo.NewRefine(sig, lm).WithMaxIterations(n)` *(uses `inputs["feedback"]`)* |
+| Quality | BestOfN | `dsgo.NewBestOfN(base, n).WithScorer(dsgo.DefaultScorer())` |
 | Composition | Program | `dsgo.NewProgram("name").AddModule(...)` |
 | Parallel | Parallel | `dsgo.NewParallel(module).WithMaxWorkers(n)` |
+| Reasoning (code) | ProgramOfThought | `dsgo.NewProgramOfThought(sig, lm, "python")` |
+| Synthesis | MultiChainComparison | `dsgo.NewMultiChainComparison(sig, lm, m)` *(expects `inputs["completions"]`)* |
 
 ### Common Patterns
 
