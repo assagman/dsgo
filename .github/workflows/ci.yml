@@ -54,7 +54,7 @@ jobs:
           go-version: "1.25"
 
       - name: Run unit tests
-        run: make test
+        run: make test-unit-with-race
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
@@ -77,4 +77,4 @@ jobs:
           go-version: "1.25"
 
       - name: Run integration tests
-        run: make integration-test
+        run: make test-integration-with-race
