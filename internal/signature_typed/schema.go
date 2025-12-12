@@ -173,11 +173,11 @@ func MapToStruct(m map[string]any, target any) error {
 			fieldVal.Set(convertedVal)
 		} else if convertedVal.Type().ConvertibleTo(fieldVal.Type()) {
 			fieldVal.Set(convertedVal.Convert(fieldVal.Type()))
-		} else if fieldVal.Kind() == reflect.Struct ||
-			(fieldVal.Kind() == reflect.Slice && fieldVal.Type().Elem().Kind() == reflect.Struct) ||
-			(fieldVal.Kind() == reflect.Map && fieldVal.Type().Elem().Kind() == reflect.Struct) {
-			// Handle nested structs/complex types via JSON marshaling
-			// This handles: structs, slices of structs, maps with struct values
+		} else if fieldVal.Kind() == reflect.Struct || fieldVal.Kind() == reflect.Slice || fieldVal.Kind() == reflect.Map {
+			// Handle nested/complex types via JSON marshaling.
+			// This also enables common JSON-decoding shapes like:
+			// - []any -> []string
+			// - map[string]any -> map[string]string
 			if err := convertViaJSON(value, fieldVal.Addr().Interface()); err != nil {
 				return fmt.Errorf("failed to convert nested structure for field %s: %w", field.Name, err)
 			}

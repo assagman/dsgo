@@ -590,6 +590,25 @@ func TestMapToStruct_NestedStruct(t *testing.T) {
 }
 
 // TestMapToStruct_SliceOfStructs tests conversion of a slice of structs
+func TestMapToStruct_SliceOfStrings_FromAnySlice(t *testing.T) {
+	type TestStruct struct {
+		Items []string `dsgo:"output"`
+	}
+
+	m := map[string]any{
+		"Items": []any{"a", "b", "c"},
+	}
+
+	var s TestStruct
+	if err := MapToStruct(m, &s); err != nil {
+		t.Fatalf("MapToStruct() error = %v", err)
+	}
+
+	if len(s.Items) != 3 || s.Items[0] != "a" || s.Items[2] != "c" {
+		t.Fatalf("Items = %#v, want [a b c]", s.Items)
+	}
+}
+
 func TestMapToStruct_SliceOfStructs(t *testing.T) {
 	type Item struct {
 		ID   int    `json:"id"`
