@@ -9,6 +9,15 @@ import (
 	"github.com/assagman/dsgo/internal/logging"
 )
 
+// getMapKeys extracts keys from a map for debugging purposes
+func getMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // Program represents a composable pipeline of modules
 type Program struct {
 	modules []core.Module
@@ -96,6 +105,19 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 		for k, v := range prediction.Outputs {
 			merged[k] = v
 		}
+
+		// Diagnostic logging for pipeline data flow debugging
+		if logger := logging.GetLogger(); logger != nil {
+			logger.Debug(ctx, "Program module data flow", map[string]any{
+				"step":        i + 1,
+				"moduleIndex": i,
+				"inputKeys":   getMapKeys(currentInputs),
+				"outputKeys":  getMapKeys(prediction.Outputs),
+				"mergedKeys":  getMapKeys(merged),
+				"module":      p.name,
+			})
+		}
+
 		currentInputs = merged
 	}
 
