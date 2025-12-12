@@ -786,7 +786,7 @@ func createOpenAIProvider(t *testing.T, model string, baseURL string) dsgo.LM {
 	t.Helper()
 
 	// Set API key
-	_ = os.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_API_KEY", "test-key")
 
 	// If we have a mock server, use it
 	if baseURL != "" {
@@ -806,7 +806,7 @@ func createOpenAIProvider(t *testing.T, model string, baseURL string) dsgo.LM {
 func createOpenRouterProvider(t *testing.T, model string, baseURL string) dsgo.LM {
 	t.Helper()
 
-	_ = os.Setenv("OPENROUTER_API_KEY", "test-key")
+	t.Setenv("OPENROUTER_API_KEY", "test-key")
 
 	if baseURL != "" {
 		return &mockOpenRouterProvider{

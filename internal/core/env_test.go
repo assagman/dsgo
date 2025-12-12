@@ -1,42 +1,39 @@
 package core
 
 import (
-	"os"
 	"testing"
 	"time"
 )
 
 func TestLoadEnv(t *testing.T) {
-	setupEnv := func() {
-		_ = os.Setenv("DSGO_TIMEOUT", "45")
-		_ = os.Setenv("DSGO_MAX_RETRIES", "5")
-		_ = os.Setenv("DSGO_TRACING", "true")
-		_ = os.Setenv("DSGO_OPENAI_API_KEY", "test-openai-key")
-		_ = os.Setenv("DSGO_OPENROUTER_API_KEY", "test-openrouter-key")
-	}
+	// Not parallel: mutates process-wide env + global config.
 
-	cleanupEnv := func() {
-		_ = os.Unsetenv("DSGO_TIMEOUT")
-		_ = os.Unsetenv("DSGO_MAX_RETRIES")
-		_ = os.Unsetenv("DSGO_TRACING")
-		_ = os.Unsetenv("DSGO_CACHE_TTL")
-		_ = os.Unsetenv("DSGO_OPENAI_API_KEY")
-		_ = os.Unsetenv("DSGO_OPENROUTER_API_KEY")
-		_ = os.Unsetenv("OPENAI_API_KEY")
-		_ = os.Unsetenv("OPENROUTER_API_KEY")
+	resetEnv := func(t *testing.T) {
+		t.Helper()
+		// Setting to empty simulates "unset" for loadEnv() because it ignores empty values.
+		t.Setenv("DSGO_TIMEOUT", "")
+		t.Setenv("DSGO_MAX_RETRIES", "")
+		t.Setenv("DSGO_TRACING", "")
+		t.Setenv("DSGO_CACHE_TTL", "")
+		t.Setenv("DSGO_OPENAI_API_KEY", "")
+		t.Setenv("DSGO_OPENROUTER_API_KEY", "")
+		t.Setenv("OPENAI_API_KEY", "")
+		t.Setenv("OPENROUTER_API_KEY", "")
 	}
 
 	t.Run("LoadAllEnvVars", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		setupEnv()
+		resetEnv(t)
+		t.Setenv("DSGO_TIMEOUT", "45")
+		t.Setenv("DSGO_MAX_RETRIES", "5")
+		t.Setenv("DSGO_TRACING", "true")
+		t.Setenv("DSGO_OPENAI_API_KEY", "test-openai-key")
+		t.Setenv("DSGO_OPENROUTER_API_KEY", "test-openrouter-key")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if settings.DefaultTimeout != 45*time.Second {
 			t.Errorf("expected timeout 45s, got %v", settings.DefaultTimeout)
 		}
@@ -46,7 +43,6 @@ func TestLoadEnv(t *testing.T) {
 		if !settings.EnableTracing {
 			t.Error("expected tracing to be enabled")
 		}
-
 		if key, ok := settings.APIKey["openai"]; !ok || key != "test-openai-key" {
 			t.Errorf("expected OpenAI API key 'test-openai-key', got '%s'", key)
 		}
@@ -56,17 +52,15 @@ func TestLoadEnv(t *testing.T) {
 	})
 
 	t.Run("FallbackAPIKeys", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("OPENAI_API_KEY", "fallback-openai-key")
-		_ = os.Setenv("OPENROUTER_API_KEY", "fallback-openrouter-key")
+		resetEnv(t)
+		t.Setenv("OPENAI_API_KEY", "fallback-openai-key")
+		t.Setenv("OPENROUTER_API_KEY", "fallback-openrouter-key")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if key, ok := settings.APIKey["openai"]; !ok || key != "fallback-openai-key" {
 			t.Errorf("expected OpenAI API key 'fallback-openai-key', got '%s'", key)
 		}
@@ -76,25 +70,22 @@ func TestLoadEnv(t *testing.T) {
 	})
 
 	t.Run("PrefixedAPIKeysOverrideFallback", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("DSGO_OPENAI_API_KEY", "prefixed-key")
-		_ = os.Setenv("OPENAI_API_KEY", "fallback-key")
+		resetEnv(t)
+		t.Setenv("DSGO_OPENAI_API_KEY", "prefixed-key")
+		t.Setenv("OPENAI_API_KEY", "fallback-key")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if key, ok := settings.APIKey["openai"]; !ok || key != "prefixed-key" {
 			t.Errorf("expected prefixed key to override fallback, got '%s'", key)
 		}
 	})
 
 	t.Run("OptionsOverrideEnv", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
+		resetEnv(t)
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
@@ -104,7 +95,6 @@ func TestLoadEnv(t *testing.T) {
 		)
 
 		settings := GetSettings()
-
 		if settings.DefaultProvider != "openrouter" {
 			t.Errorf("expected provider to be set, got provider '%s'", settings.DefaultProvider)
 		}
@@ -114,96 +104,84 @@ func TestLoadEnv(t *testing.T) {
 	})
 
 	t.Run("InvalidTimeout", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("DSGO_TIMEOUT", "invalid")
+		resetEnv(t)
+		t.Setenv("DSGO_TIMEOUT", "invalid")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if settings.DefaultTimeout != 30*time.Second {
 			t.Errorf("expected default timeout for invalid value, got %v", settings.DefaultTimeout)
 		}
 	})
 
 	t.Run("InvalidMaxRetries", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("DSGO_MAX_RETRIES", "invalid")
+		resetEnv(t)
+		t.Setenv("DSGO_MAX_RETRIES", "invalid")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if settings.MaxRetries != 3 {
 			t.Errorf("expected default max retries for invalid value, got %d", settings.MaxRetries)
 		}
 	})
 
 	t.Run("InvalidTracing", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("DSGO_TRACING", "invalid")
+		resetEnv(t)
+		t.Setenv("DSGO_TRACING", "invalid")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if settings.EnableTracing {
 			t.Error("expected tracing to be false for invalid value")
 		}
 	})
 
 	t.Run("ZeroTimeout", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("DSGO_TIMEOUT", "0")
+		resetEnv(t)
+		t.Setenv("DSGO_TIMEOUT", "0")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if settings.DefaultTimeout != 30*time.Second {
 			t.Errorf("expected default timeout for zero value, got %v", settings.DefaultTimeout)
 		}
 	})
 
 	t.Run("NegativeMaxRetries", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("DSGO_MAX_RETRIES", "-1")
+		resetEnv(t)
+		t.Setenv("DSGO_MAX_RETRIES", "-1")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if settings.MaxRetries != 3 {
 			t.Errorf("expected default max retries for negative value, got %d", settings.MaxRetries)
 		}
 	})
 
 	t.Run("CacheTTL", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("DSGO_CACHE_TTL", "5m")
+		resetEnv(t)
+		t.Setenv("DSGO_CACHE_TTL", "5m")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		expected := 5 * time.Minute
 		if settings.CacheTTL != expected {
 			t.Errorf("expected CacheTTL=%v, got %v", expected, settings.CacheTTL)
@@ -211,16 +189,14 @@ func TestLoadEnv(t *testing.T) {
 	})
 
 	t.Run("CacheTTL_InvalidDuration", func(t *testing.T) {
-		cleanupEnv()
-		defer cleanupEnv()
-		_ = os.Setenv("DSGO_CACHE_TTL", "invalid")
+		resetEnv(t)
+		t.Setenv("DSGO_CACHE_TTL", "invalid")
 
 		ResetConfig()
 		t.Cleanup(ResetConfig)
 		Configure()
 
 		settings := GetSettings()
-
 		if settings.CacheTTL != 0 {
 			t.Errorf("expected default CacheTTL=0 for invalid value, got %v", settings.CacheTTL)
 		}
@@ -241,17 +217,14 @@ func TestLoadEnv(t *testing.T) {
 		for _, tt := range tests {
 			tt := tt
 			t.Run(tt.name, func(t *testing.T) {
-				cleanupEnv()
-				defer cleanupEnv()
-
-				_ = os.Setenv("DSGO_CACHE_TTL", tt.value)
+				resetEnv(t)
+				t.Setenv("DSGO_CACHE_TTL", tt.value)
 
 				ResetConfig()
 				t.Cleanup(ResetConfig)
 				Configure()
 
 				settings := GetSettings()
-
 				if settings.CacheTTL != tt.expected {
 					t.Errorf("expected CacheTTL=%v, got %v", tt.expected, settings.CacheTTL)
 				}

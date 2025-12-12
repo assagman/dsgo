@@ -5,26 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestNewOpenRouter(t *testing.T) {
-	t.Parallel()
-	originalKey := os.Getenv("OPENROUTER_API_KEY")
-	originalSiteName := os.Getenv("OPENROUTER_SITE_NAME")
-	originalSiteURL := os.Getenv("OPENROUTER_SITE_URL")
-	defer func() {
-		_ = os.Setenv("OPENROUTER_API_KEY", originalKey)
-		_ = os.Setenv("OPENROUTER_SITE_NAME", originalSiteName)
-		_ = os.Setenv("OPENROUTER_SITE_URL", originalSiteURL)
-	}()
-
-	_ = os.Setenv("OPENROUTER_API_KEY", "test-key")
-	_ = os.Setenv("OPENROUTER_SITE_NAME", "test-site")
-	_ = os.Setenv("OPENROUTER_SITE_URL", "https://test.com")
+	// Not parallel: modifies process-wide environment variables.
+	t.Setenv("OPENROUTER_API_KEY", "test-key")
+	t.Setenv("OPENROUTER_SITE_NAME", "test-site")
+	t.Setenv("OPENROUTER_SITE_URL", "https://test.com")
 
 	lm := newOpenRouter("gpt-4")
 	if lm.APIKey != "test-key" {

@@ -5,18 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/assagman/dsgo/internal/core"
 )
 
 func TestNewOpenAI(t *testing.T) {
-	t.Parallel()
-	originalKey := os.Getenv("OPENAI_API_KEY")
-	defer func() { _ = os.Setenv("OPENAI_API_KEY", originalKey) }()
-
-	_ = os.Setenv("OPENAI_API_KEY", "test-key")
+	// Not parallel: modifies process-wide environment variables.
+	t.Setenv("OPENAI_API_KEY", "test-key")
 
 	lm := newOpenAI("gpt-4")
 	if lm.APIKey != "test-key" {
@@ -796,11 +792,9 @@ func TestOpenAI_Generate_CacheSet(t *testing.T) {
 }
 
 func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
-	t.Parallel()
-	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
-	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
-
-	_ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+	// Not parallel: modifies process-wide environment variables.
+	t.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+	t.Setenv("DSGO_ARTIFACT_DIR", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -825,11 +819,9 @@ func TestOpenAI_Generate_JSONDecodeError(t *testing.T) {
 }
 
 func TestOpenAI_Generate_ParseResponseError(t *testing.T) {
-	t.Parallel()
-	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
-	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
-
-	_ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+	// Not parallel: modifies process-wide environment variables.
+	t.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+	t.Setenv("DSGO_ARTIFACT_DIR", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := openAIResponse{
@@ -1169,12 +1161,8 @@ func TestOpenAI_Stream_EmptyChoices(t *testing.T) {
 // TestOpenAI_InitRegistration tests that OpenAI provider is registered
 // This verifies the init() function properly registers the provider
 func TestOpenAI_InitRegistration(t *testing.T) {
-	t.Parallel()
-	// Test that factory function registered in init() works
-	originalKey := os.Getenv("OPENAI_API_KEY")
-	defer func() { _ = os.Setenv("OPENAI_API_KEY", originalKey) }()
-
-	_ = os.Setenv("OPENAI_API_KEY", "test-registration-key")
+	// Not parallel: modifies process-wide environment variables.
+	t.Setenv("OPENAI_API_KEY", "test-registration-key")
 
 	// Get LM through the registered factory
 	lm, err := core.NewLM(context.Background(), "openai/gpt-4-registration")
@@ -1297,11 +1285,9 @@ func TestOpenAI_ExtractMetadata(t *testing.T) {
 }
 
 func TestOpenAI_Generate_SaveRawExchange(t *testing.T) {
-	t.Parallel()
-	originalEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
-	defer func() { _ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", originalEnv) }()
-
-	_ = os.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+	// Not parallel: modifies process-wide environment variables.
+	t.Setenv("DSGO_SAVE_RAW_RESPONSES", "1")
+	t.Setenv("DSGO_ARTIFACT_DIR", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := openAIResponse{

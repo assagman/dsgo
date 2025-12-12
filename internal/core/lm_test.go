@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 )
 
@@ -253,25 +252,10 @@ func TestDefaultGenerateOptions(t *testing.T) {
 }
 
 func TestDefaultGenerateOptions_WithEnvOverrides(t *testing.T) {
-	// Save original env vars
-	origMaxTokens := getEnv("EXAMPLES_MAX_TOKENS")
-	origTemp := getEnv("EXAMPLES_TEMPERATURE")
-	defer func() {
-		if origMaxTokens != "" {
-			setEnv("EXAMPLES_MAX_TOKENS", origMaxTokens)
-		} else {
-			unsetEnv("EXAMPLES_MAX_TOKENS")
-		}
-		if origTemp != "" {
-			setEnv("EXAMPLES_TEMPERATURE", origTemp)
-		} else {
-			unsetEnv("EXAMPLES_TEMPERATURE")
-		}
-	}()
-
+	// Not parallel: modifies process-wide environment variables.
 	// Test with max tokens override
-	setEnv("EXAMPLES_MAX_TOKENS", "5000")
-	setEnv("EXAMPLES_TEMPERATURE", "0.3")
+	t.Setenv("EXAMPLES_MAX_TOKENS", "5000")
+	t.Setenv("EXAMPLES_TEMPERATURE", "0.3")
 
 	opts := DefaultGenerateOptions()
 
@@ -284,8 +268,8 @@ func TestDefaultGenerateOptions_WithEnvOverrides(t *testing.T) {
 	}
 
 	// Test with negative temperature (should use defaults since parsed < 0)
-	setEnv("EXAMPLES_MAX_TOKENS", "-100")
-	setEnv("EXAMPLES_TEMPERATURE", "-1.5")
+	t.Setenv("EXAMPLES_MAX_TOKENS", "-100")
+	t.Setenv("EXAMPLES_TEMPERATURE", "-1.5")
 
 	opts = DefaultGenerateOptions()
 
@@ -296,14 +280,6 @@ func TestDefaultGenerateOptions_WithEnvOverrides(t *testing.T) {
 	if opts.Temperature != 0.7 {
 		t.Errorf("Expected default Temperature=0.7 with negative env, got %f", opts.Temperature)
 	}
-}
-
-func setEnv(key, value string) {
-	_ = os.Setenv(key, value)
-}
-
-func unsetEnv(key string) {
-	_ = os.Unsetenv(key)
 }
 
 func TestParseInt(t *testing.T) {
@@ -384,10 +360,7 @@ func TestGetEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envVal != "" || tt.cleanup {
-				_ = os.Setenv(tt.envKey, tt.envVal)
-				defer func() {
-					_ = os.Unsetenv(tt.envKey)
-				}()
+				t.Setenv(tt.envKey, tt.envVal)
 			}
 
 			got := getEnv(tt.envKey)
