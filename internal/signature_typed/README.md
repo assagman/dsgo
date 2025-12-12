@@ -1,6 +1,6 @@
-# typed - Type-Safe Signatures for DSGo
+# signature_typed - Type-Safe Signatures for DSGo
 
-The `typed` package provides generic, type-safe wrappers for DSGo modules using Go struct tags.
+The `signature_typed` package provides generic, type-safe wrappers for DSGo modules using Go struct tags.
 
 ## Features
 
@@ -19,7 +19,6 @@ package main
 import (
     "context"
     "github.com/assagman/dsgo"
-    "github.com/assagman/dsgo/typed"
 )
 
 // Define input and output structs with dsgo tags
@@ -37,7 +36,7 @@ func main() {
     lm, _ := dsgo.NewLM(ctx)
     
     // Create type-safe predictor
-    predictor, _ := typed.NewPredict[SentimentInput, SentimentOutput](lm)
+    predictor, _ := dsgo.NewTypedPredict[SentimentInput, SentimentOutput](lm)
     
     // Run with type-safe input
     output, _ := predictor.Run(ctx, SentimentInput{
@@ -186,9 +185,9 @@ The package has 81.6% test coverage with comprehensive tests for:
 
 Run tests:
 ```bash
-go test -v ./typed/
+go test -v ./internal/signature_typed/
 ```
 
 ## Example
 
-See [examples/typed_signatures/](../examples/typed_signatures/) for a complete working example.
+See [examples/codebase_analysis/](../../examples/codebase_analysis/) for a complete working example using typed signatures.

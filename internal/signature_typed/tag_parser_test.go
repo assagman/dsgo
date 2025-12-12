@@ -1,4 +1,4 @@
-package typed
+package signature_typed
 
 import (
 	"reflect"
@@ -402,8 +402,8 @@ func TestInferFieldType_StructType(t *testing.T) {
 
 func TestInferFieldType_DefaultFallback(t *testing.T) {
 	// Use an unusual type that should fall back to string
-	ptrType := reflect.TypeOf((*int)(nil))
-	got := inferFieldType(ptrType, nil)
+	chType := reflect.TypeOf((chan int)(nil))
+	got := inferFieldType(chType, nil)
 	if got != core.FieldTypeString {
 		t.Errorf("inferFieldType(unusual type) = %v, want String (fallback)", got)
 	}

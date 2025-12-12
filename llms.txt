@@ -103,7 +103,7 @@ LLM API implementations (auto-registered via init()):
 
 - [internal/logging/logger.go](internal/logging/logger.go): Structured logging with request IDs
 - [internal/mcp/client.go](internal/mcp/client.go): Model Context Protocol integration
-- [internal/typed/func.go](internal/typed/func.go): Generic Func[I,O] type-safe wrappers
+- [internal/signature_typed/func.go](internal/signature_typed/func.go): Generic Func[I,O] type-safe wrappers (implementation; use via dsgo.Func, dsgo.NewTypedPredict, etc.)
 - [internal/jsonutil/extract.go](internal/jsonutil/extract.go): JSON extraction and repair
 - [internal/cost/cost.go](internal/cost/cost.go): Model pricing tables
 - [internal/retry/retry.go](internal/retry/retry.go): Exponential backoff retry logic
@@ -148,6 +148,38 @@ agent := dsgo.NewReAct(sig, lm, []dsgo.Tool{*tool}).
     WithMaxIterations(10).
     WithVerbose(true)
 ```
+
+### Typed API (Func[I,O])
+
+```go
+// Import only github.com/assagman/dsgo
+import "github.com/assagman/dsgo"
+
+// Define input/output structs with dsgo tags
+type Input struct {
+    Query string `dsgo:"input,desc=Search query"`
+}
+
+type Output struct {
+    Result string `dsgo:"output,desc=Search result"`
+}
+
+// Create typed function
+predictor, err := dsgo.NewTypedPredict[Input, Output](lm)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Use with type safety
+input := Input{Query: "What is Go?"}
+output, err := predictor.Run(ctx, input)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Result: %s\n", output.Result)
+```
+
+**Note**: Do not import `internal/signature_typed` from applications; treat it as internal.
 
 ### Module Composition
 
@@ -198,12 +230,13 @@ DSGO_CACHE_SIZE=1000               # LRU cache size
 - **Builder pattern**: Fluent API for configuration
 - **Adapter fallback chain**: >95% parsing success rate
 - **Internal packages**: Clean public API via re-exports
+- **Typed generics via dsgo only**: Typed helpers (Func[I,O], typed Predict, struct mappers) are implemented in `internal/signature_typed` and re-exported from `dsgo`; do not introduce public `typed` or `signature_typed` packages.
 - **Context propagation**: Request IDs and cancellation throughout
 
 ## Optional
 
 - [internal/mcp/transport.go](internal/mcp/transport.go): MCP HTTP/SSE/Stdio transports
-- [internal/typed/schema.go](internal/typed/schema.go): Struct-to-signature conversion
+- [internal/signature_typed/schema.go](internal/signature_typed/schema.go): Struct-to-signature conversion (implementation; use via dsgo.Func, dsgo.NewTypedPredict, etc.)
 - [internal/core/streaming_buffer.go](internal/core/streaming_buffer.go): Thread-safe streaming buffer
 - [internal/core/streaming_marker_filter.go](internal/core/streaming_marker_filter.go): Field marker filtering
 - [integration/](integration/): Integration test suite with fixtures

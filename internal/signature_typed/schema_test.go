@@ -1,4 +1,4 @@
-package typed
+package signature_typed
 
 import (
 	"reflect"

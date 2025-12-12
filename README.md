@@ -134,7 +134,7 @@ graph TB
 | **Modules** | High-level behaviors | Predict, ChainOfThought, ReAct, Refine, BestOfN, Program | `internal/module/` |
 | **Core** | Foundational primitives | Signatures, LM interface, Adapters, Tools, Cache, History | `internal/core/` |
 | **Providers** | LLM API implementations | OpenAI, OpenRouter, Custom providers | `internal/providers/` |
-| **Infrastructure** | Utilities and observability | Logging, typed signatures, cost tracking | `internal/logging/`, `internal/typed/`, `internal/cost/` |
+| **Infrastructure** | Utilities and observability | Logging, typed signatures, cost tracking | `internal/logging/`, `internal/signature_typed/`, `internal/cost/` |
 
 ---
 
@@ -606,7 +606,7 @@ dsgo/
 │   │   ├── logger.go          # Structured logging
 │   │   └── request_id.go      # Request ID propagation
 │   │
-│   ├── 📁 typed/              # Type-safe signatures
+│   ├── 📁 signature_typed/     # Type-safe signatures (internal; use via dsgo.Func/NewTyped* APIs)
 │   │   ├── func.go            # Generic Func[I, O] wrapper
 │   │   └── schema.go          # Struct-to-signature conversion
 │   │
