@@ -1,4 +1,4 @@
-package typed
+package signature_typed
 
 import (
 	"encoding/json"
@@ -70,7 +70,21 @@ func StructToMap(v any) (map[string]any, error) {
 			continue
 		}
 
-		result[field.Name] = val.Field(i).Interface()
+		fv := val.Field(i)
+		// Pointer handling:
+		// - nil pointers are treated as "missing" and omitted from the map
+		//   (avoids typed-nil pointers inside interface{} and produces clearer
+		//   "missing required" validation errors).
+		// - non-nil pointers are dereferenced to their element value.
+		if fv.Kind() == reflect.Ptr {
+			if fv.IsNil() {
+				continue
+			}
+			result[field.Name] = fv.Elem().Interface()
+			continue
+		}
+
+		result[field.Name] = fv.Interface()
 	}
 
 	return result, nil
@@ -121,6 +135,40 @@ func MapToStruct(m map[string]any, target any) error {
 
 		// Convert value to correct type
 		convertedVal := reflect.ValueOf(value)
+
+		// Pointer fields: allocate and set when value is non-nil.
+		if fieldVal.Kind() == reflect.Ptr {
+			elemType := fieldVal.Type().Elem()
+
+			// If the incoming value is already a pointer of the right type, set directly.
+			if convertedVal.Type().AssignableTo(fieldVal.Type()) {
+				fieldVal.Set(convertedVal)
+				continue
+			}
+
+			// Otherwise treat it as the pointed-to value.
+			if convertedVal.Type().AssignableTo(elemType) {
+				newPtr := reflect.New(elemType)
+				newPtr.Elem().Set(convertedVal)
+				fieldVal.Set(newPtr)
+				continue
+			}
+			if convertedVal.Type().ConvertibleTo(elemType) {
+				newPtr := reflect.New(elemType)
+				newPtr.Elem().Set(convertedVal.Convert(elemType))
+				fieldVal.Set(newPtr)
+				continue
+			}
+
+			// Allow JSON-based conversion into the element type.
+			newPtr := reflect.New(elemType)
+			if err := convertViaJSON(value, newPtr.Interface()); err != nil {
+				return fmt.Errorf("failed to convert nested structure for field %s: %w", field.Name, err)
+			}
+			fieldVal.Set(newPtr)
+			continue
+		}
+
 		if convertedVal.Type().AssignableTo(fieldVal.Type()) {
 			fieldVal.Set(convertedVal)
 		} else if convertedVal.Type().ConvertibleTo(fieldVal.Type()) {

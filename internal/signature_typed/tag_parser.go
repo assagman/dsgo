@@ -1,4 +1,4 @@
-package typed
+package signature_typed
 
 import (
 	"fmt"
@@ -116,6 +116,12 @@ func inferFieldType(goType reflect.Type, classes []string) core.FieldType {
 	// If enum is specified, it's a class type
 	if len(classes) > 0 {
 		return core.FieldTypeClass
+	}
+
+	// Treat pointers as their element type. Optionality is expressed via the
+	// "optional" tag rather than pointer-ness.
+	if goType.Kind() == reflect.Ptr {
+		return inferFieldType(goType.Elem(), classes)
 	}
 
 	switch goType.Kind() {

@@ -10,7 +10,7 @@ import (
 	"github.com/assagman/dsgo/internal/logging"
 	"github.com/assagman/dsgo/internal/mcp"
 	"github.com/assagman/dsgo/internal/module"
-	"github.com/assagman/dsgo/internal/typed"
+	signature_typed "github.com/assagman/dsgo/internal/signature_typed"
 
 	// Import all standard providers to trigger their init() registration
 	_ "github.com/assagman/dsgo/internal/providers/openai"
@@ -128,10 +128,10 @@ type (
 )
 
 // Re-export typed generic type
-type Func[I, O any] = typed.Func[I, O]
+type Func[I, O any] = signature_typed.Func[I, O]
 
 // Re-export typed types
-type FieldInfo = typed.FieldInfo
+type FieldInfo = signature_typed.FieldInfo
 
 // Re-export all core functions
 var (
@@ -241,7 +241,7 @@ var (
 //
 //	predictor, err := dsgo.NewTypedPredict[Input, Output](lm)
 func NewTypedPredict[I, O any](lm LM) (*Func[I, O], error) {
-	return typed.NewPredict[I, O](lm)
+	return signature_typed.NewPredict[I, O](lm)
 }
 
 // NewTypedCoT creates a new typed function module using ChainOfThought with type-safe I/O
@@ -254,7 +254,7 @@ func NewTypedPredict[I, O any](lm LM) (*Func[I, O], error) {
 //
 //	cot, err := dsgo.NewTypedCoT[Input, Output](lm)
 func NewTypedCoT[I, O any](lm LM) (*Func[I, O], error) {
-	return typed.NewCoT[I, O](lm)
+	return signature_typed.NewCoT[I, O](lm)
 }
 
 // NewTypedReAct creates a new typed function module using ReAct with type-safe I/O
@@ -268,7 +268,7 @@ func NewTypedCoT[I, O any](lm LM) (*Func[I, O], error) {
 //
 //	react, err := dsgo.NewTypedReAct[Input, Output](lm, tools)
 func NewTypedReAct[I, O any](lm LM, tools []Tool) (*Func[I, O], error) {
-	return typed.NewReAct[I, O](lm, tools)
+	return signature_typed.NewReAct[I, O](lm, tools)
 }
 
 // NewTypedProgramOfThought creates a new typed function module using ProgramOfThought with type-safe I/O
@@ -282,7 +282,7 @@ func NewTypedReAct[I, O any](lm LM, tools []Tool) (*Func[I, O], error) {
 //
 //	pot, err := dsgo.NewTypedProgramOfThought[Input, Output](lm, "python")
 func NewTypedProgramOfThought[I, O any](lm LM, language string) (*Func[I, O], error) {
-	return typed.NewProgramOfThought[I, O](lm, language)
+	return signature_typed.NewProgramOfThought[I, O](lm, language)
 }
 
 // NewTypedPredictWithDescription creates a typed Predict function with a custom description
@@ -295,16 +295,16 @@ func NewTypedProgramOfThought[I, O any](lm LM, language string) (*Func[I, O], er
 //
 //	predictor, err := dsgo.NewTypedPredictWithDescription[Input, Output](lm, "Analyze text sentiment")
 func NewTypedPredictWithDescription[I, O any](lm LM, description string) (*Func[I, O], error) {
-	return typed.NewPredictWithDescription[I, O](lm, description)
+	return signature_typed.NewPredictWithDescription[I, O](lm, description)
 }
 
 // Re-export typed non-generic utility functions
 // These functions provide utilities for working with typed structs and signatures
 var (
-	StructToSignature = typed.StructToSignature
-	StructToMap       = typed.StructToMap
-	MapToStruct       = typed.MapToStruct
-	ParseStructTags   = typed.ParseStructTags
+	StructToSignature = signature_typed.StructToSignature
+	StructToMap       = signature_typed.StructToMap
+	MapToStruct       = signature_typed.MapToStruct
+	ParseStructTags   = signature_typed.ParseStructTags
 )
 
 // Re-export constants

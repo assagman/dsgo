@@ -67,7 +67,7 @@ dsgo/
 │   │
 │   ├── logging/               # Structured logging
 │   ├── mcp/                   # Model Context Protocol
-│   ├── typed/                 # Generic Func[I,O] wrappers
+│   ├── signature_typed/       # Typed signatures & Func[I,O] implementation
 │   ├── jsonutil/              # JSON extraction & repair
 │   ├── cost/                  # Pricing tables
 │   ├── retry/                 # Retry logic
@@ -79,6 +79,8 @@ dsgo/
 ```
 
 **Key principle**: Implementation in `internal/*`, public API via re-exports in `dsgo.go`.
+
+Typed functionality (Func[I,O], typed Predict, struct helpers) lives in `internal/signature_typed` but must always be used via the `dsgo` package (e.g., `dsgo.Func`, `dsgo.NewTypedPredict`, `dsgo.StructToMap`).
 
 ---
 
@@ -386,6 +388,7 @@ DSGO_DEBUG_PARSE=1           # Show parse attempts
 3. **Test immediately**: Write tests alongside implementation
 4. **Validate always**: Run `make all` before marking work complete
 5. **Follow patterns**: Look at similar code for consistency
+6. **Use dsgo for typed APIs**: prefer `dsgo.Func`, `dsgo.NewTypedPredict`, etc.; never introduce public imports for `internal/signature_typed`.
 
 ### File Navigation Tips
 
@@ -398,3 +401,4 @@ DSGO_DEBUG_PARSE=1           # Show parse attempts
 | Add observability | `internal/core/collector.go` |
 | See usage patterns | `examples/codebase_analysis/main.go` |
 | Understand tests | `internal/module/*_test.go` |
+| Work on typed Func[I,O] / typed modules | `internal/signature_typed/*.go` (implementation), `dsgo.go` (typed re-exports) |

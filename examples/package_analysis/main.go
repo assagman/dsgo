@@ -17,7 +17,7 @@ const (
 	// Package targets
 	PkgRetry    = "internal/retry"
 	PkgJsonUtil = "internal/jsonutil"
-	PkgTyped    = "internal/typed"
+	PkgTyped    = "internal/signature_typed"
 
 	// Input/Output Fields
 	FieldPkgName     = "package_name"

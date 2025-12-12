@@ -1,6 +1,6 @@
 # DSGo Roadmap
 
-*Note: The DSGo implementation is organized in internal packages (`internal/core/`, `internal/module/`, `internal/logging/`, `internal/typed/`, etc.) for better maintainability, while maintaining the same public API through re-exports in the main package.*
+*Note: The DSGo implementation is organized in internal packages (`internal/core/`, `internal/module/`, `internal/logging/`, `internal/signature_typed/`, etc.) for better maintainability, while maintaining the same public API through re-exports in the main package.*
 
 ---
 
@@ -35,7 +35,7 @@
 - ✅ Provider naming standardization
 
 ### Phase 5: Typed Signatures
-- ✅ typed.Func[I, O] with generics
+- ✅ dsgo.Func[I, O] with generics (implemented in internal/signature_typed)
 - ✅ Struct tag parsing
 - ✅ Type-safe few-shot examples
 

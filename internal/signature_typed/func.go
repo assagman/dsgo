@@ -1,4 +1,4 @@
-package typed
+package signature_typed
 
 import (
 	"context"
@@ -323,7 +323,11 @@ func (f *Func[I, O]) WithExecutionTimeout(seconds int) *Func[I, O] {
 	return f
 }
 
-// WithDemosTyped sets few-shot examples using typed inputs/outputs
+// WithDemosTyped sets few-shot examples using typed inputs/outputs.
+//
+// NOTE: Demos are currently only supported by the underlying Predict module.
+// If this Func wraps another module type (e.g. ChainOfThought/ReAct), demos are
+// ignored.
 func (f *Func[I, O]) WithDemosTyped(inputs []I, outputs []O) (*Func[I, O], error) {
 	if len(inputs) != len(outputs) {
 		return nil, fmt.Errorf("inputs and outputs must have the same length")
