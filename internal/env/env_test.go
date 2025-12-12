@@ -7,7 +7,7 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	t.Parallel()
+	// Not parallel: uses t.Setenv (process-wide env).
 	// Create a temporary .env file for testing
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
@@ -29,12 +29,12 @@ INVALID_LINE
 	}
 
 	// Clear any existing test environment variables
-	_ = os.Unsetenv("TEST_KEY1")
-	_ = os.Unsetenv("TEST_KEY2")
-	_ = os.Unsetenv("TEST_KEY3")
-	_ = os.Unsetenv("TEST_KEY4")
-	_ = os.Unsetenv("TEST_KEY5")
-	_ = os.Unsetenv("TEST_KEY6")
+	t.Setenv("TEST_KEY1", "")
+	t.Setenv("TEST_KEY2", "")
+	t.Setenv("TEST_KEY3", "")
+	t.Setenv("TEST_KEY4", "")
+	t.Setenv("TEST_KEY5", "")
+	t.Setenv("TEST_KEY6", "")
 
 	// Load the .env file
 	err = Load(envFile)
@@ -60,7 +60,6 @@ INVALID_LINE
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.key, func(t *testing.T) {
-			t.Parallel()
 			got := os.Getenv(tt.key)
 			if tt.found {
 				if got != tt.want {
@@ -76,7 +75,7 @@ INVALID_LINE
 }
 
 func TestLoadNonExistentFile(t *testing.T) {
-	t.Parallel()
+	// Not parallel: this package has tests that mutate env/CWD.
 	err := Load("/non/existent/file.env")
 	if err == nil {
 		t.Error("expected error for non-existent file, got nil")
@@ -84,7 +83,7 @@ func TestLoadNonExistentFile(t *testing.T) {
 }
 
 func TestFindEnvFile(t *testing.T) {
-	t.Parallel()
+	// Not parallel: this package has tests that mutate env/CWD.
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
 
@@ -133,12 +132,11 @@ func TestAutoLoadWithCustomPath(t *testing.T) {
 	}
 
 	// Clear test variables
-	_ = os.Unsetenv("AUTOLOAD_CUSTOM")
-	_ = os.Unsetenv("TEST_OVERRIDE")
+	t.Setenv("AUTOLOAD_CUSTOM", "")
+	t.Setenv("TEST_OVERRIDE", "")
 
 	// Set DSGO_ENV_FILE_PATH
-	_ = os.Setenv("DSGO_ENV_FILE_PATH", customEnvFile)
-	defer func() { _ = os.Unsetenv("DSGO_ENV_FILE_PATH") }()
+	t.Setenv("DSGO_ENV_FILE_PATH", customEnvFile)
 
 	// Run AutoLoad
 	err = AutoLoad()
@@ -153,10 +151,8 @@ func TestAutoLoadWithCustomPath(t *testing.T) {
 }
 
 func TestAutoLoadWithNonExistentCustomPath(t *testing.T) {
-	t.Parallel()
-	// Set DSGO_ENV_FILE_PATH to non-existent file
-	_ = os.Setenv("DSGO_ENV_FILE_PATH", "/non/existent/path.env")
-	defer func() { _ = os.Unsetenv("DSGO_ENV_FILE_PATH") }()
+	// Not parallel: modifies process-wide environment variables.
+	t.Setenv("DSGO_ENV_FILE_PATH", "/non/existent/path.env")
 
 	// Run AutoLoad - should return error
 	err := AutoLoad()
@@ -181,7 +177,7 @@ func TestAutoLoadWithDiscovery(t *testing.T) {
 	}
 
 	// Clear test variable
-	_ = os.Unsetenv("AUTOLOAD_DISCOVERY")
+	t.Setenv("AUTOLOAD_DISCOVERY", "")
 
 	// Run AutoLoad (no DSGO_ENV_FILE_PATH set)
 	err = AutoLoad()
@@ -219,8 +215,8 @@ func TestAutoLoadWithLocalOverride(t *testing.T) {
 	}
 
 	// Clear test variables
-	_ = os.Unsetenv("SHARED_KEY")
-	_ = os.Unsetenv("LOCAL_ONLY")
+	t.Setenv("SHARED_KEY", "")
+	t.Setenv("LOCAL_ONLY", "")
 
 	// Run AutoLoad
 	err = AutoLoad()
@@ -245,7 +241,7 @@ func TestAutoLoadNoFiles(t *testing.T) {
 	defer func() { _ = os.Chdir(oldWd) }()
 
 	// Ensure no DSGO_ENV_FILE_PATH
-	_ = os.Unsetenv("DSGO_ENV_FILE_PATH")
+	t.Setenv("DSGO_ENV_FILE_PATH", "")
 
 	// Run AutoLoad - should succeed with no error
 	err := AutoLoad()
@@ -270,7 +266,7 @@ func TestAutoLoadDoesNotOverrideExisting(t *testing.T) {
 	}
 
 	// Pre-set the environment variable
-	_ = os.Setenv("EXISTING_VAR", "pre_existing")
+	t.Setenv("EXISTING_VAR", "pre_existing")
 
 	// Run AutoLoad
 	err = AutoLoad()
