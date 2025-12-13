@@ -841,6 +841,12 @@ func debugEnabled() bool {
 
 // saveRawExchange saves complete request/response exchange to a file for debugging
 func saveRawExchange(model string, request map[string]any, statusCode int, headers http.Header, responseBody []byte, saveErr error) error {
+	// Only write artifacts when explicitly enabled.
+	debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
+	if debugEnv != "1" && strings.ToLower(debugEnv) != "true" {
+		return nil
+	}
+
 	// Determine output directory - prefer DSGO_ARTIFACT_DIR, fallback to dsgo_artifacts
 	baseDir := os.Getenv("DSGO_ARTIFACT_DIR")
 	if baseDir == "" {
