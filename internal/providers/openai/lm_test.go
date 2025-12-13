@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/assagman/dsgo/internal/core"
@@ -244,6 +246,35 @@ func TestOpenAI_Generate_NoChoices(t *testing.T) {
 	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
 	if err == nil || err.Error() != "no choices in response" {
 		t.Fatalf("expected 'no choices in response' error, got %v", err)
+	}
+}
+
+func TestOpenAI_Generate_NoChoices_DoesNotWriteArtifactsWhenDisabled(t *testing.T) {
+	// Not parallel: modifies process-wide environment variables.
+	t.Setenv("DSGO_SAVE_RAW_RESPONSES", "0")
+	artifactDir := t.TempDir()
+	t.Setenv("DSGO_ARTIFACT_DIR", artifactDir)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer server.Close()
+
+	lm := &openAI{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+	}
+
+	_, err := lm.Generate(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
+	if err == nil || err.Error() != "no choices in response" {
+		t.Fatalf("expected 'no choices in response' error, got %v", err)
+	}
+
+	// When DSGO_SAVE_RAW_RESPONSES is not enabled, no artifact directories should be created.
+	if _, statErr := os.Stat(filepath.Join(artifactDir, "raw")); statErr == nil || !os.IsNotExist(statErr) {
+		t.Fatalf("expected no raw artifact directory, stat error: %v", statErr)
 	}
 }
 
