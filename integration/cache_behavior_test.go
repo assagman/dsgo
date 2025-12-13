@@ -1,13 +1,18 @@
 package integration
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/assagman/dsgo"
 )
+
+// globalConfigMu serializes tests that mutate global dsgo configuration.
+var globalConfigMu sync.Mutex
 
 // TestCacheBehavior_BasicHitMiss tests basic cache hit and miss behavior
 func TestCacheBehavior_BasicHitMiss(t *testing.T) {
@@ -75,6 +80,178 @@ func TestCacheBehavior_BasicHitMiss(t *testing.T) {
 				t.Errorf("Expected %d misses, got %d", tt.expectedMisses, misses)
 			}
 		})
+	}
+}
+
+// ============================================================================
+// Provider Cache Integration Tests (mock provider + HTTP mock server)
+// ============================================================================
+
+func TestCacheIntegration_MockProvider_CacheHitAvoidsSecondRequest(t *testing.T) {
+	globalConfigMu.Lock()
+	t.Cleanup(globalConfigMu.Unlock)
+	t.Cleanup(dsgo.ResetConfig)
+
+	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, `{
+			"id":"test",
+			"model":"gpt-4",
+			"choices":[{"index":0,"message":{"role":"assistant","content":"Hello"},"finish_reason":"stop"}],
+			"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+		}`)
+	})
+	defer server.Close()
+
+	dsgo.Configure(dsgo.WithCache(10))
+	settings := dsgo.GetSettings()
+	if settings.DefaultCache == nil {
+		t.Fatal("expected DefaultCache to be configured")
+	}
+
+	// Wire mock provider to server.
+	t.Setenv("DSGO_MOCK_BASE_URL", server.URL)
+
+	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4")
+	if err != nil {
+		t.Fatalf("failed to create mock LM: %v", err)
+	}
+
+	messages := []dsgo.Message{{Role: "user", Content: "Hello"}}
+	opts := dsgo.DefaultGenerateOptions()
+
+	// First call should hit network and populate cache.
+	_, err = lm.Generate(context.Background(), messages, opts)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	// Second call should be served from cache.
+	_, err = lm.Generate(context.Background(), messages, opts)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	if got := len(recorder.All()); got != 1 {
+		t.Fatalf("expected 1 HTTP request (second served from cache), got %d", got)
+	}
+
+	stats := settings.DefaultCache.Stats()
+	if stats.Misses != 1 || stats.Hits != 1 {
+		t.Fatalf("expected 1 miss + 1 hit, got misses=%d hits=%d", stats.Misses, stats.Hits)
+	}
+}
+
+func TestCacheIntegration_MockProvider_CacheTTLExpires(t *testing.T) {
+	globalConfigMu.Lock()
+	t.Cleanup(globalConfigMu.Unlock)
+	t.Cleanup(dsgo.ResetConfig)
+
+	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, `{
+			"id":"test",
+			"model":"gpt-4",
+			"choices":[{"index":0,"message":{"role":"assistant","content":"Hello"},"finish_reason":"stop"}],
+			"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+		}`)
+	})
+	defer server.Close()
+
+	t.Setenv("DSGO_MOCK_BASE_URL", server.URL)
+
+	ttl := 5 * time.Millisecond
+	dsgo.Configure(
+		dsgo.WithCacheTTL(ttl),
+		dsgo.WithCache(10),
+	)
+
+	settings := dsgo.GetSettings()
+	if settings.DefaultCache == nil {
+		t.Fatal("expected DefaultCache to be configured")
+	}
+
+	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4")
+	if err != nil {
+		t.Fatalf("failed to create mock LM: %v", err)
+	}
+
+	messages := []dsgo.Message{{Role: "user", Content: "Hello"}}
+	opts := dsgo.DefaultGenerateOptions()
+
+	_, err = lm.Generate(context.Background(), messages, opts)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	// Wait for TTL to elapse.
+	time.Sleep(ttl + 25*time.Millisecond)
+
+	_, err = lm.Generate(context.Background(), messages, opts)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	if got := len(recorder.All()); got != 2 {
+		t.Fatalf("expected 2 HTTP requests (cache expired), got %d", got)
+	}
+}
+
+func TestCacheIntegration_MockProvider_CacheClearForcesRefetch(t *testing.T) {
+	globalConfigMu.Lock()
+	t.Cleanup(globalConfigMu.Unlock)
+	t.Cleanup(dsgo.ResetConfig)
+
+	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, `{
+			"id":"test",
+			"model":"gpt-4",
+			"choices":[{"index":0,"message":{"role":"assistant","content":"Hello"},"finish_reason":"stop"}],
+			"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
+		}`)
+	})
+	defer server.Close()
+
+	t.Setenv("DSGO_MOCK_BASE_URL", server.URL)
+
+	dsgo.Configure(dsgo.WithCache(10))
+	settings := dsgo.GetSettings()
+	if settings.DefaultCache == nil {
+		t.Fatal("expected DefaultCache to be configured")
+	}
+
+	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4")
+	if err != nil {
+		t.Fatalf("failed to create mock LM: %v", err)
+	}
+
+	messages := []dsgo.Message{{Role: "user", Content: "Hello"}}
+	opts := dsgo.DefaultGenerateOptions()
+
+	_, err = lm.Generate(context.Background(), messages, opts)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	_, err = lm.Generate(context.Background(), messages, opts)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	if got := len(recorder.All()); got != 1 {
+		t.Fatalf("expected 1 HTTP request (second served from cache), got %d", got)
+	}
+
+	settings.DefaultCache.Clear()
+
+	_, err = lm.Generate(context.Background(), messages, opts)
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	if got := len(recorder.All()); got != 2 {
+		t.Fatalf("expected 2 HTTP requests after cache clear, got %d", got)
 	}
 }
 

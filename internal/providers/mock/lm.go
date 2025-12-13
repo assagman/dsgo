@@ -40,6 +40,7 @@ type mockHTTP struct {
 	model   string
 	baseURL string
 	client  *http.Client
+	cache   core.Cache
 
 	supportsJSON  bool
 	supportsTools bool
@@ -99,6 +100,11 @@ func (m *mockHTTP) IsOpenAI() bool {
 	return m.isOpenAI
 }
 
+// SetCache sets the cache instance for this LM.
+func (m *mockHTTP) SetCache(cache core.Cache) {
+	m.cache = cache
+}
+
 func (m *mockHTTP) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	if m.baseURL == "" {
 		return nil, fmt.Errorf("mock provider base URL not configured: set DSGO_MOCK_BASE_URL")
@@ -106,6 +112,14 @@ func (m *mockHTTP) Generate(ctx context.Context, messages []core.Message, option
 
 	if options == nil {
 		options = core.DefaultGenerateOptions()
+	}
+
+	// Check cache if available.
+	if m.cache != nil {
+		cacheKey := core.GenerateCacheKey(m.model, messages, options)
+		if cached, ok := m.cache.Get(cacheKey); ok {
+			return cached, nil
+		}
 	}
 
 	reqBody := m.buildRequest(messages, options)
@@ -149,6 +163,12 @@ func (m *mockHTTP) Generate(ctx context.Context, messages []core.Message, option
 
 	result.Metadata = map[string]any{
 		"mock": true,
+	}
+
+	// Store in cache if available.
+	if m.cache != nil {
+		cacheKey := core.GenerateCacheKey(m.model, messages, options)
+		m.cache.Set(cacheKey, result)
 	}
 
 	return result, nil
