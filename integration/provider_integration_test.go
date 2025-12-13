@@ -1,5 +1,4 @@
 //go:build providers
-// +build providers
 
 package integration
 

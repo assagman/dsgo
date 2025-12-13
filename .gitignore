@@ -46,3 +46,4 @@ example_execution_results.txt
 .opencode
 
 examples/snowflake_trainer/output/
+.dsgo
