@@ -2,6 +2,7 @@ package module
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -112,15 +113,20 @@ func (p *Parallel) baseModule() core.Module {
 	return nil
 }
 
-// summarizeInputsForLog creates a log-friendly summary of inputs
-func summarizeInputsForLog(inputs map[string]any) map[string]any {
+// summarizeInputsForLog creates a log-friendly summary of inputs.
+//
+// Returns (summary, truncated) where truncated is true if any string value was
+// shortened.
+func summarizeInputsForLog(inputs map[string]any) (map[string]any, bool) {
 	summary := make(map[string]any, len(inputs))
+	truncated := false
 	for k, v := range inputs {
 		switch val := v.(type) {
 		case string:
 			// Truncate long strings (e.g., file_contents)
 			if len(val) > 512 {
 				summary[k] = val[:512] + "...[truncated]"
+				truncated = true
 			} else {
 				summary[k] = val
 			}
@@ -135,7 +141,63 @@ func summarizeInputsForLog(inputs map[string]any) map[string]any {
 			}
 		}
 	}
-	return summary
+	return summary, truncated
+}
+
+func (p *Parallel) parallelMode() string {
+	if p.factory != nil {
+		return "factory"
+	}
+	if len(p.instances) > 0 {
+		return "instances"
+	}
+	return "clone"
+}
+
+func (p *Parallel) commonLogFields(parallelID string, info parallelModuleInfo, batchSize int) map[string]any {
+	return map[string]any{
+		"module":        logging.ModuleParallel,
+		"parallel_id":   parallelID,
+		"parallel_mode": p.parallelMode(),
+		"inner_module":  info.ModuleType,
+		"lm_model":      info.LMModel,
+		"batch_size":    batchSize,
+		"max_workers":   p.maxWorkers,
+		"fail_fast":     p.failFast,
+		"max_failures":  p.maxFailures,
+		"return_all":    p.returnAll,
+		"only_success":  p.onlySuccessful,
+		"repeat_factor": p.repeat,
+		"batch_key":     p.batchKey,
+		"verbose":       p.verbose,
+	}
+}
+
+func classifyParallelTaskError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, context.Canceled) {
+		return "context_canceled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "deadline_exceeded"
+	}
+	return "task_error"
+}
+
+func firstNStrings(in []string, n int) []string {
+	if n <= 0 {
+		return nil
+	}
+	if len(in) <= n {
+		out := make([]string, len(in))
+		copy(out, in)
+		return out
+	}
+	out := make([]string, n)
+	copy(out, in[:n])
+	return out
 }
 
 // NewParallel creates a Parallel module with automatic module cloning.
@@ -240,8 +302,37 @@ func (p *Parallel) WithRepeat(n int) *Parallel {
 	return p
 }
 
-// WithVerbose enables verbose logging of parallel execution details
-// When enabled, logs per-task information at INFO level instead of DEBUG
+// WithVerbose enables verbose logging of parallel execution details.
+//
+// Verbose logging contract (schema v1)
+//
+// When verbose is enabled, Parallel emits the following log messages:
+//   - "Parallel batch started" (always INFO)
+//   - "Parallel task started"
+//   - "Parallel task completed"
+//   - "Parallel task failed"
+//   - "Parallel batch completed"
+//
+// Per-task and batch-completed logs are emitted at INFO when verbose, DEBUG otherwise.
+// Each log includes a stable set of structured fields to make it easy to filter
+// and aggregate. The canonical module name is always "module.Parallel".
+//
+// Common fields (present on all Parallel verbose logs):
+//   - module: "module.Parallel"
+//   - parallel_id: correlation identifier for the whole batch
+//   - parallel_mode: one of "clone", "factory", "instances"
+//   - inner_module: inner module type name (best-effort; may be empty for factory mode at batch start)
+//   - lm_model: LM model name (best-effort)
+//   - batch_size: number of tasks
+//   - max_workers: maximum concurrent workers
+//   - fail_fast, max_failures, return_all, only_success, repeat_factor, batch_key, verbose
+//
+// Task fields (present on per-task logs):
+//   - task_index: 0-based index within the batch
+//   - task_total: total tasks in the batch (equals batch_size)
+//   - inputs: summarized inputs (truncated; complex types are summarized)
+//
+// When enabled, per-task logs are emitted at INFO level instead of DEBUG.
 func (p *Parallel) WithVerbose(verbose bool) *Parallel {
 	p.verbose = verbose
 	return p
@@ -287,31 +378,17 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 		return nil, predErr
 	}
 
+	parallelID := logging.GetCorrelationID(ctx)
+
 	// Log batch-level information
-	// For factory-based parallels, we don't have module info yet
+	// For factory-based parallels, we don't have module info yet.
 	var info parallelModuleInfo
 	if p.module != nil || len(p.instances) > 0 {
 		info = getParallelModuleInfo(p.baseModule())
 	}
-	// For factory-based parallels, info will be captured lazily during task execution
+	// For factory-based parallels, info will be captured lazily during task execution.
 
-	// Include verbose flag in batch log for clarity
-	logData := map[string]any{
-		"module":        "Parallel",
-		"inner_module":  info.ModuleType,
-		"lm_model":      info.LMModel,
-		"batch_size":    len(batch),
-		"max_workers":   p.maxWorkers,
-		"max_failures":  p.maxFailures,
-		"fail_fast":     p.failFast,
-		"return_all":    p.returnAll,
-		"only_success":  p.onlySuccessful,
-		"batch_key":     p.batchKey,
-		"repeat_factor": p.repeat,
-		"verbose":       p.verbose,
-	}
-
-	logging.GetLogger().Info(ctx, "Parallel batch started", logData)
+	logging.GetLogger().Info(ctx, "Parallel batch started", p.commonLogFields(parallelID, info, len(batch)))
 
 	// Create cancellable context
 	ctx, cancel := context.WithCancel(ctx)
@@ -319,8 +396,9 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 
 	// Job and result types
 	type job struct {
-		idx    int
-		inputs map[string]any
+		idx        int
+		inputs     map[string]any
+		enqueuedAt time.Time
 	}
 
 	type result struct {
@@ -349,7 +427,8 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 
 	// Start workers
 	workers := min(p.maxWorkers, len(batch))
-	for range workers {
+	for workerID := 0; workerID < workers; workerID++ {
+		wid := workerID
 		wg.Go(func() {
 			for j := range jobs {
 				select {
@@ -359,6 +438,10 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 				}
 
 				start := time.Now()
+				queueWaitMs := time.Since(j.enqueuedAt).Milliseconds()
+				if queueWaitMs < 0 {
+					queueWaitMs = 0
+				}
 				mod := getModule(j.idx)
 				info := getParallelModuleInfo(mod)
 
@@ -367,21 +450,24 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 					p.moduleInfo = info
 				})
 
-				// Use INFO level when verbose is enabled, otherwise DEBUG
+				taskCorrelationID := fmt.Sprintf("%s/task/%d", parallelID, j.idx)
+				taskCtx := logging.WithCorrelationID(ctx, taskCorrelationID)
+
+				fields := p.commonLogFields(parallelID, info, len(batch))
+				fields["task_index"] = j.idx
+				fields["task_total"] = len(batch)
+				fields["worker_id"] = wid
+				fields["queue_wait_ms"] = queueWaitMs
+
+				inputsSummary, inputsTruncated := summarizeInputsForLog(j.inputs)
+				fields["inputs"] = inputsSummary
+				fields["inputs_truncated"] = inputsTruncated
+
+				// Use INFO level when verbose is enabled, otherwise DEBUG.
 				if p.verbose {
-					logging.GetLogger().Info(ctx, "Parallel task started", map[string]any{
-						"inner_module": info.ModuleType,
-						"lm_model":     info.LMModel,
-						"task_index":   j.idx,
-						"inputs":       summarizeInputsForLog(j.inputs),
-					})
+					logging.GetLogger().Info(taskCtx, "Parallel task started", fields)
 				} else {
-					logging.GetLogger().Debug(ctx, "Parallel task started", map[string]any{
-						"inner_module": info.ModuleType,
-						"lm_model":     info.LMModel,
-						"task_index":   j.idx,
-						"inputs":       summarizeInputsForLog(j.inputs),
-					})
+					logging.GetLogger().Debug(taskCtx, "Parallel task started", fields)
 				}
 
 				// Verbose direct prints (bypass log level, like ReAct)
@@ -394,7 +480,7 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 					}
 				}
 
-				pred, err := mod.Forward(ctx, j.inputs)
+				pred, err := mod.Forward(taskCtx, j.inputs)
 				duration := time.Since(start)
 
 				// Verbose direct prints for completion (bypass log level, like ReAct)
@@ -410,43 +496,43 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 				}
 
 				// Log task completion
-				if p.verbose {
-					if err != nil {
-						logging.GetLogger().Info(ctx, "Parallel task failed", map[string]any{
-							"inner_module": info.ModuleType,
-							"lm_model":     info.LMModel,
-							"task_index":   j.idx,
-							"duration_ms":  duration.Milliseconds(),
-							"error":        err.Error(),
-						})
+				completionFields := p.commonLogFields(parallelID, info, len(batch))
+				completionFields["task_index"] = j.idx
+				completionFields["task_total"] = len(batch)
+				completionFields["worker_id"] = wid
+				completionFields["queue_wait_ms"] = queueWaitMs
+				completionFields["duration_ms"] = duration.Milliseconds()
+
+				if err != nil {
+					completionFields["error"] = err.Error() // legacy
+					completionFields["error.message"] = err.Error()
+					completionFields["error.kind"] = classifyParallelTaskError(err)
+					if p.verbose {
+						logging.GetLogger().Info(taskCtx, "Parallel task failed", completionFields)
 					} else {
-						logging.GetLogger().Info(ctx, "Parallel task completed", map[string]any{
-							"inner_module": info.ModuleType,
-							"lm_model":     info.LMModel,
-							"task_index":   j.idx,
-							"duration_ms":  duration.Milliseconds(),
-							"tokens":       pred.Usage.TotalTokens,
-							"cost":         pred.Usage.Cost,
-						})
+						logging.GetLogger().Debug(taskCtx, "Parallel task failed", completionFields)
 					}
 				} else {
-					if err != nil {
-						logging.GetLogger().Debug(ctx, "Parallel task failed", map[string]any{
-							"inner_module": info.ModuleType,
-							"lm_model":     info.LMModel,
-							"task_index":   j.idx,
-							"duration_ms":  duration.Milliseconds(),
-							"error":        err.Error(),
-						})
+					completionFields["prompt_tokens"] = pred.Usage.PromptTokens
+					completionFields["completion_tokens"] = pred.Usage.CompletionTokens
+					completionFields["total_tokens"] = pred.Usage.TotalTokens
+					completionFields["cost"] = pred.Usage.Cost
+
+					completionFields["adapter_used"] = pred.AdapterUsed
+					completionFields["parse_attempts"] = pred.ParseAttempts
+					completionFields["fallback_used"] = pred.FallbackUsed
+					completionFields["parse_success"] = pred.ParseSuccess
+
+					if pred.ParseDiagnostics != nil {
+						completionFields["missing_required_fields"] = firstNStrings(pred.ParseDiagnostics.MissingFields, 5)
+						completionFields["missing_required_fields_count"] = len(pred.ParseDiagnostics.MissingFields)
+						completionFields["invalid_fields_count"] = len(pred.ParseDiagnostics.TypeErrors) + len(pred.ParseDiagnostics.ClassErrors)
+					}
+
+					if p.verbose {
+						logging.GetLogger().Info(taskCtx, "Parallel task completed", completionFields)
 					} else {
-						logging.GetLogger().Debug(ctx, "Parallel task completed", map[string]any{
-							"inner_module": info.ModuleType,
-							"lm_model":     info.LMModel,
-							"task_index":   j.idx,
-							"duration_ms":  duration.Milliseconds(),
-							"tokens":       pred.Usage.TotalTokens,
-							"cost":         pred.Usage.Cost,
-						})
+						logging.GetLogger().Debug(taskCtx, "Parallel task completed", completionFields)
 					}
 				}
 
@@ -467,7 +553,7 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 			select {
 			case <-ctx.Done():
 				return
-			case jobs <- job{idx: i, inputs: in}:
+			case jobs <- job{idx: i, inputs: in, enqueuedAt: time.Now()}:
 			}
 		}
 	}()
@@ -532,6 +618,27 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 		Failures:  failureCount,
 	}
 	metrics.Latency = summarizeLatencies(latencies)
+
+	// Batch summary log (when verbose is on, this is always INFO)
+	batchCompletedFields := p.commonLogFields(parallelID, info, len(batch))
+	batchCompletedFields["successes"] = len(successes)
+	batchCompletedFields["failures"] = failureCount
+	batchCompletedFields["latency_min_ms"] = metrics.Latency.MinMs
+	batchCompletedFields["latency_max_ms"] = metrics.Latency.MaxMs
+	batchCompletedFields["latency_avg_ms"] = metrics.Latency.AvgMs
+	batchCompletedFields["latency_p50_ms"] = metrics.Latency.P50Ms
+	batchCompletedFields["prompt_tokens"] = totalUsage.PromptTokens
+	batchCompletedFields["completion_tokens"] = totalUsage.CompletionTokens
+	batchCompletedFields["total_tokens"] = totalUsage.TotalTokens
+	batchCompletedFields["cost"] = totalUsage.Cost
+	batchCompletedFields["error_count"] = len(errs)
+	batchCompletedFields["error_sample"] = firstNErrors(errs, 3)
+
+	if p.verbose {
+		logging.GetLogger().Info(ctx, "Parallel batch completed", batchCompletedFields)
+	} else {
+		logging.GetLogger().Debug(ctx, "Parallel batch completed", batchCompletedFields)
+	}
 
 	// Find first successful result for primary outputs
 	var primary *core.Prediction

@@ -583,6 +583,7 @@ func main() {
 		})
 
 	pkgParallel := dsgo.NewParallel(pkgModule).
+		WithVerbose(true).
 		WithMaxWorkers(4).
 		WithReturnAll(true).
 		WithMaxFailures(-1) // allow partial failures; let retry loop handle them

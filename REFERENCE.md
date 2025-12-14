@@ -37,6 +37,68 @@ Tables and quick lookups for DSGo.
 
 ## Modules (high level)
 
+### Parallel verbose logging fields
+
+Enable:
+
+- Code: `dsgo.NewParallel(...).WithVerbose(true)`
+- Logging output: set up the DSGo logger (e.g., via `logging.ConfigureLoggerFromEnv()` or `DSGO_LOG=pretty`).
+
+Parallel logs are emitted with `module=module.Parallel`. When verbose is enabled, per-task logs are emitted at INFO (otherwise DEBUG).
+
+#### Correlation
+
+- `parallel_id`: batch identifier (explicit field; equals the request `correlation_id`)
+- `correlation_id`: task identifier on per-task logs and all downstream logs (inner modules + providers). Format:
+  - `correlation_id = parallel_id + "/task/" + task_index`
+
+This allows filtering either:
+
+- Whole batch: `parallel_id=<id>`
+- Single task: `correlation_id=<id>/task/<n>`
+
+#### Common fields (all Parallel verbose logs)
+
+- `parallel_id`
+- `parallel_mode`: `clone|factory|instances`
+- `inner_module`: best-effort module type name
+- `lm_model`: best-effort LM model name
+- `batch_size`
+- `max_workers`
+- `fail_fast`, `max_failures`, `return_all`, `only_success`, `repeat_factor`, `batch_key`, `verbose`
+
+#### Task fields (task started/completed/failed)
+
+- `task_index` (0-based)
+- `task_total` (equals `batch_size`)
+- `worker_id` (0..max_workers-1)
+- `queue_wait_ms` (time spent waiting in the work queue)
+- `inputs`: safe summarized inputs (strings truncated; complex types summarized as `<T>`)
+- `inputs_truncated`: `true` if any input string was truncated
+
+#### Completion fields (task completed)
+
+- `duration_ms`
+- Usage: `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost`
+- Parsing: `adapter_used`, `parse_attempts`, `fallback_used`, `parse_success`
+- Optional bounded parse diagnostics (no raw content):
+  - `missing_required_fields` (first N)
+  - `missing_required_fields_count`
+  - `invalid_fields_count`
+
+#### Failure fields (task failed)
+
+- `duration_ms`
+- `error.message`
+- `error.kind`: `context_canceled|deadline_exceeded|task_error`
+
+#### Batch summary fields (batch completed)
+
+- Outcome: `successes`, `failures`
+- Latency summary: `latency_min_ms`, `latency_max_ms`, `latency_avg_ms`, `latency_p50_ms`
+- Aggregated usage: `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost`
+- Errors: `error_count`, `error_sample` (bounded)
+
 | Module | Constructor | Notes |
 |---|---|---|
 | Predict | `dsgo.NewPredict(sig, lm)` | Structured prediction |
