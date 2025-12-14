@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sync/atomic"
 
 	"github.com/assagman/dsgo/internal/core"
@@ -51,8 +52,15 @@ func NewJinaClient(apiKey string) (*Client, error) {
 func NewTavilyClient(apiKey string) (*Client, error) {
 	// Tavily MCP URL: https://mcp.tavily.com/mcp?tavilyApiKey=<api-key>
 	// The API key is passed as a query parameter, not as a header
-	url := "https://mcp.tavily.com/mcp?tavilyApiKey=" + apiKey
-	transport := NewHTTPTransport(url, "")
+	baseURL, err := url.Parse("https://mcp.tavily.com/mcp")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Tavily MCP URL: %w", err)
+	}
+	q := baseURL.Query()
+	q.Set("tavilyApiKey", apiKey)
+	baseURL.RawQuery = q.Encode()
+
+	transport := NewHTTPTransport(baseURL.String(), "")
 	return NewClient(ClientConfig{Transport: transport})
 }
 
