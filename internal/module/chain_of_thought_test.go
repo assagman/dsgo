@@ -219,6 +219,7 @@ func TestChainOfThought_WithAdapter(t *testing.T) {
 // TestChainOfThought_FinishReasonHandling tests all finish_reason scenarios
 func TestChainOfThought_FinishReasonHandling(t *testing.T) {
 	t.Parallel()
+
 	sig := core.NewSignature("Test signature").
 		AddOutput("answer", core.FieldTypeString, "Answer")
 

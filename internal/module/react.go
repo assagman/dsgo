@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"regexp"
 	"strconv"
 	"strings"
@@ -365,9 +366,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 
 				// Extract outputs from finish tool arguments
 				outputs := make(map[string]any)
-				for k, v := range toolCall.Arguments {
-					outputs[k] = v
-				}
+				maps.Copy(outputs, toolCall.Arguments)
 
 				// Validate outputs match signature
 				if err := r.Signature.ValidateOutputs(outputs); err != nil {
@@ -750,13 +749,133 @@ func coerceBasicTypes(signature *core.Signature, outputs map[string]any) map[str
 // fallback that ensures ReAct always returns something, even if the main
 // loop fails or produces unparseable output.
 //
-// This phase uses a temporary adapter WITH reasoning enabled, mimicking
-// ChainOfThought behavior during extraction.
+// This phase uses structured output enforcement (when enabled) to ensure
+// the extraction converges to valid outputs, with bounded retries.
 func (r *ReAct) runExtract(ctx context.Context, messages []core.Message, inputs map[string]any) (*core.Prediction, error) {
 	if r.Verbose {
 		fmt.Println("\n=== Running Post-Loop Extraction (with reasoning) ===")
 	}
 
+	// Check if structured outputs are enabled
+	settings := core.GetSettings()
+	useStructuredMode := settings.StructuredOutput.Enabled
+
+	if useStructuredMode {
+		return r.runExtractStructured(ctx, messages, inputs)
+	}
+
+	return r.runExtractLegacy(ctx, messages, inputs)
+}
+
+// runExtractStructured performs extraction with structured output enforcement
+func (r *ReAct) runExtractStructured(ctx context.Context, messages []core.Message, inputs map[string]any) (*core.Prediction, error) {
+	settings := core.GetSettings()
+
+	// Build extraction prompt
+	extractPrompt := r.buildExtractionPrompt()
+
+	// Append extraction request to message history
+	extractMessages := make([]core.Message, len(messages))
+	copy(extractMessages, messages)
+	extractMessages = append(extractMessages, core.Message{
+		Role:    "user",
+		Content: extractPrompt,
+	})
+
+	// Create a custom adapter wrapper that includes extraction messages
+	wrappedAdapter := &reactExtractAdapter{
+		base:     core.NewSchemaFirstAdapter(r.LM.SupportsJSON()).WithReasoning(true),
+		messages: extractMessages,
+	}
+
+	// Copy options and set Tools/ToolChoice for Bedrock compatibility:
+	// when conversation history contains tool calls, some providers require
+	// toolConfig to be present even when not requesting tool use.
+	extractOptions := r.Options.Copy()
+	extractOptions.Tools = r.Tools
+	extractOptions.ToolChoice = "none"
+
+	// Call structured output enforcement loop
+	result, err := core.GenerateStructured(
+		ctx,
+		r.LM,
+		r.Signature,
+		inputs,
+		[]core.Example{}, // No demos for extraction
+		core.GenerateStructuredOptions{
+			Adapter:        wrappedAdapter,
+			BaseOptions:    extractOptions,
+			MaxAttempts:    settings.StructuredOutput.MaxAttempts,
+			Temperature:    settings.StructuredOutput.Temperature,
+			UseJSONFormat:  r.LM.SupportsJSON(),
+			StreamCallback: r.Options.StreamCallback,
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("extraction generation failed: %w", err)
+	}
+
+	// Extract and remove rationale/reasoning field from outputs
+	var rationale string
+	outputs := result.Outputs
+	if val, ok := outputs["rationale"]; ok {
+		if str, ok := val.(string); ok {
+			rationale = str
+			delete(outputs, "rationale")
+		}
+	}
+	if rationale == "" {
+		if val, ok := outputs["reasoning"]; ok {
+			if str, ok := val.(string); ok {
+				rationale = str
+				delete(outputs, "reasoning")
+			}
+		}
+	}
+
+	// Build prediction with diagnostics and rationale
+	pred := core.NewPrediction(outputs).
+		WithRationale(rationale).
+		WithUsage(result.Usage).
+		WithModuleName(logging.ModuleReAct).
+		WithInputs(inputs)
+
+	if result.Diagnostics != nil {
+		pred.WithParseDiagnostics(result.Diagnostics)
+	}
+
+	if r.Verbose {
+		fmt.Printf("Extracted outputs: %+v\n", outputs)
+		if result.Diagnostics != nil && result.Diagnostics.HasErrors() {
+			fmt.Printf("⚠️  Extraction diagnostics: %v\n", result.Diagnostics)
+		}
+	}
+
+	return pred, nil
+}
+
+// reactExtractAdapter wraps adapter to inject extraction messages
+type reactExtractAdapter struct {
+	base     core.Adapter
+	messages []core.Message
+}
+
+func (rea *reactExtractAdapter) Format(sig *core.Signature, inputs map[string]any, demos []core.Example) ([]core.Message, error) {
+	// Return pre-built extraction messages instead of formatting
+	return rea.messages, nil
+}
+
+func (rea *reactExtractAdapter) Parse(sig *core.Signature, content string) (map[string]any, error) {
+	return rea.base.Parse(sig, content)
+}
+
+func (rea *reactExtractAdapter) FormatHistory(history *core.History) []core.Message {
+	return rea.base.FormatHistory(history)
+}
+
+// runExtractLegacy performs extraction using the legacy path (without structured output enforcement)
+func (r *ReAct) runExtractLegacy(ctx context.Context, messages []core.Message, inputs map[string]any) (*core.Prediction, error) {
 	// Build extraction prompt
 	extractPrompt := r.buildExtractionPrompt()
 
@@ -847,14 +966,12 @@ func (r *ReAct) runExtract(ctx context.Context, messages []core.Message, inputs 
 	adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
 	// Build prediction with diagnostics and rationale
-	pred := &core.Prediction{
-		Outputs:          outputs,
-		Usage:            result.Usage,
-		AdapterUsed:      adapterUsed,
-		ParseAttempts:    parseAttempts,
-		FallbackUsed:     fallbackUsed,
-		ParseDiagnostics: diagnostics,
-	}
+	pred := core.NewPrediction(outputs).
+		WithUsage(result.Usage).
+		WithModuleName(logging.ModuleReAct).
+		WithInputs(inputs).
+		WithAdapterMetrics(adapterUsed, parseAttempts, fallbackUsed).
+		WithParseDiagnostics(diagnostics)
 
 	// Attach rationale if found
 	if rationale != "" {

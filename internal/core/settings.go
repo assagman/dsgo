@@ -8,6 +8,22 @@ import (
 	"github.com/assagman/dsgo/internal/logging"
 )
 
+// StructuredOutputConfig holds configuration for structured output enforcement.
+type StructuredOutputConfig struct {
+	// Enabled controls whether structured output enforcement is active.
+	// Default: true (structured outputs enabled by default).
+	Enabled bool
+
+	// MaxAttempts is the maximum number of retries for structured output validation.
+	// Default: 3 (attempt 1 initial, then up to 2 retries).
+	MaxAttempts int
+
+	// Temperature override for structured output mode.
+	// When structured mode is active, this temperature is forced to ensure deterministic output.
+	// Default: 0.0 (deterministic). Set to 0.1 for slight variation.
+	Temperature float32
+}
+
 // Settings holds global DSGo configuration.
 type Settings struct {
 	mu sync.RWMutex
@@ -44,6 +60,9 @@ type Settings struct {
 
 	// Logger is the global logger instance.
 	Logger logging.Logger
+
+	// StructuredOutputConfig controls structured output enforcement.
+	StructuredOutput StructuredOutputConfig
 }
 
 // globalSettings is the singleton instance of Settings.
@@ -54,6 +73,11 @@ var globalSettings = &Settings{
 	EnableTracing:  false,
 	CacheTTL:       0,   // No expiry by default
 	Logger:         nil, // Will be set by logging package initialization
+	StructuredOutput: StructuredOutputConfig{
+		Enabled:     true, // Structured outputs enabled by default
+		MaxAttempts: 3,    // 1 initial + up to 2 retries
+		Temperature: 0.0,  // Deterministic
+	},
 }
 
 // GetSettings returns a copy of the current global settings.
@@ -65,17 +89,18 @@ func GetSettings() Settings {
 	maps.Copy(apiKeyCopy, globalSettings.APIKey)
 
 	return Settings{
-		DefaultLM:       globalSettings.DefaultLM,
-		DefaultProvider: globalSettings.DefaultProvider,
-		DefaultModel:    globalSettings.DefaultModel,
-		DefaultTimeout:  globalSettings.DefaultTimeout,
-		APIKey:          apiKeyCopy,
-		MaxRetries:      globalSettings.MaxRetries,
-		EnableTracing:   globalSettings.EnableTracing,
-		Collector:       globalSettings.Collector,
-		DefaultCache:    globalSettings.DefaultCache,
-		CacheTTL:        globalSettings.CacheTTL,
-		Logger:          globalSettings.Logger,
+		DefaultLM:        globalSettings.DefaultLM,
+		DefaultProvider:  globalSettings.DefaultProvider,
+		DefaultModel:     globalSettings.DefaultModel,
+		DefaultTimeout:   globalSettings.DefaultTimeout,
+		APIKey:           apiKeyCopy,
+		MaxRetries:       globalSettings.MaxRetries,
+		EnableTracing:    globalSettings.EnableTracing,
+		Collector:        globalSettings.Collector,
+		DefaultCache:     globalSettings.DefaultCache,
+		CacheTTL:         globalSettings.CacheTTL,
+		Logger:           globalSettings.Logger,
+		StructuredOutput: globalSettings.StructuredOutput,
 	}
 }
 
@@ -153,6 +178,34 @@ func (s *Settings) SetLogger(logger logging.Logger) {
 	s.Logger = logger
 }
 
+// SetStructuredOutputConfig sets the structured output configuration.
+func (s *Settings) SetStructuredOutputConfig(config StructuredOutputConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.StructuredOutput = config
+}
+
+// SetStructuredOutputEnabled enables or disables structured output enforcement.
+func (s *Settings) SetStructuredOutputEnabled(enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.StructuredOutput.Enabled = enabled
+}
+
+// SetStructuredOutputMaxAttempts sets the maximum number of attempts for structured output validation.
+func (s *Settings) SetStructuredOutputMaxAttempts(maxAttempts int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.StructuredOutput.MaxAttempts = maxAttempts
+}
+
+// SetStructuredOutputTemperature sets the temperature override for structured output mode.
+func (s *Settings) SetStructuredOutputTemperature(temperature float32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.StructuredOutput.Temperature = temperature
+}
+
 // Reset resets the settings to default values.
 func (s *Settings) Reset() {
 	s.mu.Lock()
@@ -168,4 +221,9 @@ func (s *Settings) Reset() {
 	s.DefaultCache = nil
 	s.CacheTTL = 0
 	s.Logger = nil
+	s.StructuredOutput = StructuredOutputConfig{
+		Enabled:     true,
+		MaxAttempts: 3,
+		Temperature: 0.0,
+	}
 }

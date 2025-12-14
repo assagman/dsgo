@@ -17,6 +17,9 @@ import (
 //   - DSGO_CACHE_TTL: Cache time-to-live duration (e.g., "5m", "1h", "30s")
 //   - DSGO_OPENAI_API_KEY: OpenAI API key
 //   - DSGO_OPENROUTER_API_KEY: OpenRouter API key
+//   - DSGO_STRUCTURED_OUTPUTS: Enable structured outputs ("true" or "false", default "true")
+//   - DSGO_STRUCTURED_MAX_ATTEMPTS: Max attempts for structured output validation (e.g., "3")
+//   - DSGO_STRUCTURED_TEMPERATURE: Temperature override for structured mode (e.g., "0.0", "0.1")
 func loadEnv() {
 
 	if timeoutStr := os.Getenv("DSGO_TIMEOUT"); timeoutStr != "" {
@@ -61,6 +64,27 @@ func loadEnv() {
 	if ttlStr := os.Getenv("DSGO_CACHE_TTL"); ttlStr != "" {
 		if ttl, err := time.ParseDuration(ttlStr); err == nil {
 			globalSettings.CacheTTL = ttl
+		}
+	}
+
+	// Parse DSGO_STRUCTURED_OUTPUTS (default true)
+	if structuredStr := os.Getenv("DSGO_STRUCTURED_OUTPUTS"); structuredStr != "" {
+		if structured, err := strconv.ParseBool(structuredStr); err == nil {
+			globalSettings.StructuredOutput.Enabled = structured
+		}
+	}
+
+	// Parse DSGO_STRUCTURED_MAX_ATTEMPTS
+	if maxAttemptsStr := os.Getenv("DSGO_STRUCTURED_MAX_ATTEMPTS"); maxAttemptsStr != "" {
+		if maxAttempts, err := strconv.Atoi(maxAttemptsStr); err == nil && maxAttempts > 0 {
+			globalSettings.StructuredOutput.MaxAttempts = maxAttempts
+		}
+	}
+
+	// Parse DSGO_STRUCTURED_TEMPERATURE
+	if tempStr := os.Getenv("DSGO_STRUCTURED_TEMPERATURE"); tempStr != "" {
+		if temp, err := strconv.ParseFloat(tempStr, 32); err == nil {
+			globalSettings.StructuredOutput.Temperature = float32(temp)
 		}
 	}
 
