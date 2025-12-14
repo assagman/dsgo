@@ -111,16 +111,32 @@ func NewReadFileTool() dsgo.Tool {
 			return nil, fmt.Errorf("error reading file: %w", err)
 		}
 
-		// Limit content size to prevent overwhelming the LM
-		contentStr := string(content)
-		if len(contentStr) > 10000 { // 10KB limit
-			contentStr = contentStr[:10000] + "\n... [content truncated]"
+		// Calculate file metadata
+		totalBytes := len(content)
+		totalLines := strings.Count(string(content), "\n")
+		if totalBytes > 0 && content[totalBytes-1] != '\n' {
+			totalLines++
 		}
 
-		return map[string]any{
-			"content":  contentStr,
-			"filepath": filepathArg,
-		}, nil
+		// Limit content size to prevent overwhelming the LM
+		contentStr := string(content)
+		truncated := false
+		if len(contentStr) > 10000 { // 10KB limit
+			contentStr = contentStr[:10000]
+			truncated = true
+			truncatedLines := strings.Count(contentStr, "\n")
+			contentStr += fmt.Sprintf("\n... [truncated: showing %d/%d bytes, ~%d/%d lines]",
+				10000, totalBytes, truncatedLines, totalLines)
+		}
+
+		result := map[string]any{
+			"content":     contentStr,
+			"filepath":    filepathArg,
+			"size_bytes":  totalBytes,
+			"total_lines": totalLines,
+			"truncated":   truncated,
+		}
+		return result, nil
 	}
 
 	return *dsgo.NewTool("read_file", "Read the content of a specific file", readFile).
