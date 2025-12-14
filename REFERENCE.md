@@ -58,6 +58,31 @@ Tables and quick lookups for DSGo.
 | TwoStepAdapter | Two-step reasoning then extraction |
 | FallbackAdapter | Chains adapters for robustness |
 
+## GenerateOptions (Advanced)
+
+### ProviderParams
+
+Provider-specific parameters can be passed through to LM providers using `ProviderParams`:
+
+```go
+options := core.DefaultGenerateOptions()
+options.ProviderParams = map[string]any{
+    "reasoning": map[string]any{
+        "effort": "high", // OpenRouter reasoning effort
+    },
+    "custom_param": "value", // Provider-specific field
+}
+```
+
+**Supported values:**
+- **OpenRouter**: `"reasoning": {"effort": "high|medium|low|minimal|none"}`
+- **OpenAI**: Provider-specific fields (merged with request)
+
+**Safety rules:**
+- DSGo-managed keys (`temperature`, `max_tokens`, etc.) take precedence
+- ProviderParams are merged only for non-conflicting keys
+- Nested objects are supported
+
 ## Links
 
 - Getting started: [`QUICKSTART.md`](QUICKSTART.md)

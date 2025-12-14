@@ -1383,3 +1383,84 @@ func TestLMCache_CapacityMultipleCalls(t *testing.T) {
 		t.Errorf("Capacity should be consistent: got %d, %d, %d", cap1, cap2, cap3)
 	}
 }
+
+// TestGenerateCacheKey_ProviderParams tests cache key generation with provider parameters
+func TestGenerateCacheKey_ProviderParams(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	// Test that different ProviderParams produce different cache keys
+	options1 := &GenerateOptions{
+		Temperature: 0.7,
+		ProviderParams: map[string]any{
+			"reasoning": map[string]any{
+				"effort": "high",
+			},
+		},
+	}
+
+	options2 := &GenerateOptions{
+		Temperature: 0.7,
+		ProviderParams: map[string]any{
+			"reasoning": map[string]any{
+				"effort": "medium",
+			},
+		},
+	}
+
+	key1 := GenerateCacheKey("gpt-4", messages, options1)
+	key2 := GenerateCacheKey("gpt-4", messages, options2)
+
+	if key1 == key2 {
+		t.Error("Different ProviderParams should produce different cache keys")
+	}
+
+	// Test that same ProviderParams with different insertion order produce same key
+	options3 := &GenerateOptions{
+		Temperature: 0.7,
+		ProviderParams: map[string]any{
+			"custom_param": "value",
+			"reasoning": map[string]any{
+				"effort": "high",
+			},
+		},
+	}
+
+	options4 := &GenerateOptions{
+		Temperature: 0.7,
+		ProviderParams: map[string]any{
+			"reasoning": map[string]any{
+				"effort": "high",
+			},
+			"custom_param": "value",
+		},
+	}
+
+	key3 := GenerateCacheKey("gpt-4", messages, options3)
+	key4 := GenerateCacheKey("gpt-4", messages, options4)
+
+	if key3 != key4 {
+		t.Error("Same ProviderParams with different insertion order should produce same cache key")
+	}
+
+	// Test that nil ProviderParams works
+	options5 := &GenerateOptions{
+		Temperature:    0.7,
+		ProviderParams: nil,
+	}
+
+	key5 := GenerateCacheKey("gpt-4", messages, options5)
+	if key5 == "" {
+		t.Error("Cache key should not be empty with nil ProviderParams")
+	}
+
+	// Test that empty ProviderParams works
+	options6 := &GenerateOptions{
+		Temperature:    0.7,
+		ProviderParams: map[string]any{},
+	}
+
+	key6 := GenerateCacheKey("gpt-4", messages, options6)
+	if key6 == "" {
+		t.Error("Cache key should not be empty with empty ProviderParams")
+	}
+}

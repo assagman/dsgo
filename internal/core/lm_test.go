@@ -131,6 +131,12 @@ func TestGenerateOptions_Copy(t *testing.T) {
 			{Name: "tool1", Description: "Test tool 1"},
 			{Name: "tool2", Description: "Test tool 2"},
 		},
+		ProviderParams: map[string]any{
+			"reasoning": map[string]any{
+				"effort": "high",
+			},
+			"custom_param": "value",
+		},
 	}
 
 	copied := original.Copy()
@@ -178,6 +184,24 @@ func TestGenerateOptions_Copy(t *testing.T) {
 	copied.Tools[0].Name = "modified"
 	if original.Tools[0].Name == "modified" {
 		t.Error("Modifying copied Tools slice affected original")
+	}
+
+	// Verify ProviderParams is deep copied
+	if copied.ProviderParams == nil {
+		t.Error("ProviderParams should not be nil")
+	}
+	if copied.ProviderParams["custom_param"] != original.ProviderParams["custom_param"] {
+		t.Errorf("ProviderParams not copied correctly: got %v, want %v", copied.ProviderParams["custom_param"], original.ProviderParams["custom_param"])
+	}
+
+	// Verify modifying copied ProviderParams doesn't affect original
+	if reasoning, ok := copied.ProviderParams["reasoning"].(map[string]any); ok {
+		reasoning["effort"] = "modified"
+	}
+	if originalReasoning, ok := original.ProviderParams["reasoning"].(map[string]any); ok {
+		if originalReasoning["effort"] == "modified" {
+			t.Error("Modifying copied ProviderParams affected original")
+		}
 	}
 }
 
