@@ -1282,6 +1282,14 @@ type InfiniteLoopMockLM struct {
 }
 
 func (m *InfiniteLoopMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	// If tool choice is "none", we're in extraction mode - return valid JSON
+	if options != nil && options.ToolChoice == "none" {
+		return &dsgo.GenerateResult{
+			Content:      `{"answer": "Extracted answer from conversation", "reasoning": "Based on gathered information"}`,
+			FinishReason: "stop",
+			Usage:        dsgo.Usage{TotalTokens: 30, Cost: 0.0005},
+		}, nil
+	}
 	return &dsgo.GenerateResult{
 		Content:      "Need to search more",
 		ToolCalls:    []dsgo.ToolCall{m.ToolCall},
