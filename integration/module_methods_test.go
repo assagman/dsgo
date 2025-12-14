@@ -2,12 +2,216 @@ package integration
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/integration/fixtures"
 )
+
+// ============================================================================
+// Phase 3: Basic Module Integration Tests
+// ============================================================================
+
+func TestPredict_BasicForward(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := ContextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	lm := NewMockLMWithResponse(`{"answer":"42"}`)
+	sig := fixtures.SimplePredictSig()
+
+	pred := dsgo.NewPredict(sig, lm)
+	result, err := pred.Forward(ctx, map[string]any{"question": "What is 6*7?"})
+	if err != nil {
+		t.Fatalf("Predict.Forward failed: %v", err)
+	}
+
+	answer, ok := result.GetString("answer")
+	if !ok {
+		t.Fatalf("Expected 'answer' output to exist")
+	}
+	if answer != "42" {
+		t.Fatalf("Expected answer '42', got '%s'", answer)
+	}
+}
+
+func TestChainOfThought_BasicForward(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := ContextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	lm := NewMockLMWithResponse(`{"reasoning":"Multiply 6 by 7.","answer":"42"}`)
+	sig := fixtures.ChainOfThoughtSig()
+
+	cot := dsgo.NewChainOfThought(sig, lm)
+	result, err := cot.Forward(ctx, map[string]any{"problem": "What is 6*7?"})
+	if err != nil {
+		t.Fatalf("ChainOfThought.Forward failed: %v", err)
+	}
+
+	reasoning, ok := result.GetString("reasoning")
+	if !ok {
+		t.Fatalf("Expected 'reasoning' output to exist")
+	}
+	if reasoning == "" {
+		t.Fatalf("Expected non-empty reasoning")
+	}
+
+	answer, ok := result.GetString("answer")
+	if !ok {
+		t.Fatalf("Expected 'answer' output to exist")
+	}
+	if answer != "42" {
+		t.Fatalf("Expected answer '42', got '%s'", answer)
+	}
+}
+
+func TestReAct_BasicForward_WithTool(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := ContextWithTimeout(15 * time.Second)
+	defer cancel()
+
+	lm := &ToolThenFinishMockLM{}
+	sig := fixtures.ReActSig()
+	tools := []dsgo.Tool{*fixtures.CalculatorTool()}
+
+	react := dsgo.NewReAct(sig, lm, tools).WithMaxIterations(5)
+	result, err := react.Forward(ctx, map[string]any{"question": "What is 6*7?"})
+	if err != nil {
+		t.Fatalf("ReAct.Forward failed: %v", err)
+	}
+
+	answer, ok := result.GetString("answer")
+	if !ok {
+		t.Fatalf("Expected 'answer' output to exist")
+	}
+	if answer != "42" {
+		t.Fatalf("Expected answer '42', got '%s'", answer)
+	}
+}
+
+func TestRefine_BasicForward(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := ContextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	lm := NewMockLMWithResponse(`{"output":"draft"}`)
+	sig := fixtures.RefineSig()
+
+	refine := dsgo.NewRefine(sig, lm)
+	result, err := refine.Forward(ctx, map[string]any{"topic": "Write a short draft"})
+	if err != nil {
+		t.Fatalf("Refine.Forward failed: %v", err)
+	}
+
+	output, ok := result.GetString("output")
+	if !ok {
+		t.Fatalf("Expected 'output' to exist")
+	}
+	if output != "draft" {
+		t.Fatalf("Expected output 'draft', got '%s'", output)
+	}
+}
+
+func TestProgram_BasicComposition(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := ContextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	// Program runs modules sequentially; ensure each module consumes one LM response.
+	lm := NewMockLMWithResponses([]string{
+		`{"answer":"step1"}`,
+		`{"answer":"step2"}`,
+	})
+	sig := fixtures.SimplePredictSig()
+
+	pred1 := dsgo.NewPredict(sig, lm)
+	pred2 := dsgo.NewPredict(sig, lm)
+
+	prog := dsgo.NewProgram("basic_program").
+		AddModule(pred1).
+		AddModule(pred2)
+
+	result, err := prog.Forward(ctx, map[string]any{"question": "run"})
+	if err != nil {
+		t.Fatalf("Program.Forward failed: %v", err)
+	}
+
+	answer, ok := result.GetString("answer")
+	if !ok {
+		t.Fatalf("Expected 'answer' output to exist")
+	}
+	if answer != "step2" {
+		t.Fatalf("Expected final answer 'step2', got '%s'", answer)
+	}
+}
+
+type ToolThenFinishMockLM struct {
+	mu   sync.Mutex
+	step int
+}
+
+func (m *ToolThenFinishMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	m.mu.Lock()
+	step := m.step
+	m.step++
+	m.mu.Unlock()
+
+	if step == 0 {
+		return &dsgo.GenerateResult{
+			Content: "Calling calculator tool.",
+			ToolCalls: []dsgo.ToolCall{{
+				ID:   "tool_1",
+				Name: "calculate",
+				Arguments: map[string]any{
+					"operation": "multiply",
+					"a":         6.0,
+					"b":         7.0,
+				},
+			}},
+			FinishReason: "tool_calls",
+			Usage:        dsgo.Usage{TotalTokens: 30, Cost: 0.0005},
+		}, nil
+	}
+
+	return &dsgo.GenerateResult{
+		Content: "Finishing.",
+		ToolCalls: []dsgo.ToolCall{{
+			ID:   "finish_1",
+			Name: "finish",
+			Arguments: map[string]any{
+				"answer":    "42",
+				"reasoning": "Used calculate(multiply,6,7) and returned the result.",
+			},
+		}},
+		FinishReason: "tool_calls",
+		Usage:        dsgo.Usage{TotalTokens: 30, Cost: 0.0005},
+	}, nil
+}
+
+func (m *ToolThenFinishMockLM) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
+	chunkChan := make(chan dsgo.Chunk, 1)
+	errChan := make(chan error, 1)
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		result, err := m.Generate(ctx, messages, options)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		chunkChan <- dsgo.Chunk{Content: result.Content, ToolCalls: result.ToolCalls, FinishReason: result.FinishReason, Usage: result.Usage}
+	}()
+	return chunkChan, errChan
+}
+
+func (m *ToolThenFinishMockLM) Name() string        { return "tool-then-finish-mock" }
+func (m *ToolThenFinishMockLM) SupportsJSON() bool  { return true }
+func (m *ToolThenFinishMockLM) SupportsTools() bool { return true }
+func (m *ToolThenFinishMockLM) IsOpenAI() bool      { return false }
 
 // ============================================================================
 // Module Configuration Methods Tests (covering 0% coverage With* methods)

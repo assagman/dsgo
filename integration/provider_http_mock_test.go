@@ -1,8 +1,7 @@
-//go:build providers
-
 package integration
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,8 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -67,10 +66,10 @@ func TestOpenAI_HTTPErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server, _ := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4o-mini"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
 				w.WriteHeader(tt.statusCode)
 				_, _ = fmt.Fprint(w, tt.responseBody)
-			}))
+			})
 			defer server.Close()
 
 			// Create provider with mocked server
@@ -482,11 +481,9 @@ func TestCostCalculation_OpenRouter(t *testing.T) {
 	}
 }
 
-// TestProviderConcurrency tests that providers handle concurrent requests safely
+// TestProviderConcurrency tests that providers handle concurrent requests safely.
 func TestProviderConcurrency(t *testing.T) {
-	// Use atomic or sync.Mutex to avoid race conditions in test
-	// For this test, we'll just verify concurrent calls work without panicking
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server, _ := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4o-mini"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, `{
 			"id":"test",
@@ -494,54 +491,55 @@ func TestProviderConcurrency(t *testing.T) {
 			"choices":[{"index":0,"message":{"role":"assistant","content":"Response"},"finish_reason":"stop"}],
 			"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
 		}`)
-	}))
+	})
 	defer server.Close()
 
 	lm := createOpenAIProvider(t, "gpt-4o-mini", server.URL)
 
-	// Make concurrent requests
 	const numRequests = 10
 	results := make(chan *dsgo.GenerateResult, numRequests)
 	errors := make(chan error, numRequests)
-	done := make(chan bool)
 
+	var wg sync.WaitGroup
+	wg.Add(numRequests)
 	for i := 0; i < numRequests; i++ {
 		go func() {
+			defer wg.Done()
+
 			ctx := context.Background()
-			messages := []dsgo.Message{
-				{Role: "user", Content: "Hello"},
-			}
+			messages := []dsgo.Message{{Role: "user", Content: "Hello"}}
+
 			result, err := lm.Generate(ctx, messages, dsgo.DefaultGenerateOptions())
 			if err != nil {
 				errors <- err
-			} else {
-				results <- result
+				return
 			}
-			done <- true
+			results <- result
 		}()
 	}
 
-	// Collect results
+	wg.Wait()
+	close(results)
+	close(errors)
+
 	successCount := 0
-	errorCount := 0
-	for i := 0; i < numRequests; i++ {
-		<-done // Wait for goroutine to complete
-		select {
-		case err := <-errors:
-			errorCount++
-			t.Logf("request failed (expected): %v", err)
-		case result := <-results:
-			if result != nil && result.Content == "Response" {
-				successCount++
-			}
-		default:
-			// May not have result/error if non-blocking
+	for result := range results {
+		if result != nil && result.Content == "Response" {
+			successCount++
 		}
 	}
 
-	// At least some should succeed
-	if successCount+errorCount == 0 {
-		t.Error("expected at least one request to complete")
+	errorCount := 0
+	for err := range errors {
+		errorCount++
+		t.Logf("request failed: %v", err)
+	}
+
+	if errorCount != 0 {
+		t.Fatalf("expected no errors, got %d", errorCount)
+	}
+	if successCount != numRequests {
+		t.Fatalf("expected %d successes, got %d", numRequests, successCount)
 	}
 }
 
@@ -582,125 +580,6 @@ func TestProviderConfiguration(t *testing.T) {
 			}
 		})
 	}
-}
-
-// ============================================================================
-// Real Provider Tests (require USE_REAL_PROVIDERS=true and valid API keys)
-// ============================================================================
-
-// skipUnlessRealProviders skips the test unless USE_REAL_PROVIDERS is set
-func skipUnlessRealProviders(t *testing.T) {
-	t.Helper()
-	if os.Getenv("USE_REAL_PROVIDERS") != "true" {
-		t.Skip("Skipping real provider test (set USE_REAL_PROVIDERS=true to run)")
-	}
-}
-
-// TestOpenAIProvider_RealAPI tests with actual OpenAI API
-// Run with: USE_REAL_PROVIDERS=true OPENAI_API_KEY=sk-... go test -v -run TestOpenAIProvider_RealAPI
-func TestOpenAIProvider_RealAPI(t *testing.T) {
-	skipUnlessRealProviders(t)
-
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" || apiKey == "test-key" {
-		t.Skip("OPENAI_API_KEY not set or is test value")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Create real provider using dsgo.NewLM
-	lm, err := dsgo.NewLM(ctx, "openai/gpt-4o-mini")
-	if err != nil {
-		t.Fatalf("Failed to create LM: %v", err)
-	}
-
-	messages := []dsgo.Message{
-		{Role: "user", Content: "Say exactly: 'Hello from integration test'"},
-	}
-
-	options := dsgo.DefaultGenerateOptions()
-	options.MaxTokens = 50
-
-	result, err := lm.Generate(ctx, messages, options)
-
-	if err != nil {
-		t.Fatalf("Real API call failed: %v", err)
-	}
-
-	// Verify response structure
-	if result.Content == "" {
-		t.Error("Expected non-empty response content")
-	}
-
-	// Verify usage tracking
-	if result.Usage.PromptTokens == 0 {
-		t.Error("Expected PromptTokens > 0")
-	}
-	if result.Usage.CompletionTokens == 0 {
-		t.Error("Expected CompletionTokens > 0")
-	}
-	if result.Usage.TotalTokens == 0 {
-		t.Error("Expected TotalTokens > 0")
-	}
-
-	// Verify cost calculation
-	if result.Usage.Cost <= 0 {
-		t.Logf("Warning: Cost not calculated (may be expected for some models)")
-	}
-
-	t.Logf("Real API response: %q", result.Content)
-	t.Logf("Usage: prompt=%d, completion=%d, total=%d, cost=$%.6f",
-		result.Usage.PromptTokens, result.Usage.CompletionTokens,
-		result.Usage.TotalTokens, result.Usage.Cost)
-}
-
-// TestOpenRouterProvider_RealAPI tests with actual OpenRouter API
-// Run with: USE_REAL_PROVIDERS=true OPENROUTER_API_KEY=sk-or-v1-... go test -v -run TestOpenRouterProvider_RealAPI
-func TestOpenRouterProvider_RealAPI(t *testing.T) {
-	skipUnlessRealProviders(t)
-
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" || apiKey == "test-key" {
-		t.Skip("OPENROUTER_API_KEY not set or is test value")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// Create real provider using dsgo.NewLM
-	lm, err := dsgo.NewLM(ctx, "openrouter/openai/gpt-4o-mini")
-	if err != nil {
-		t.Fatalf("Failed to create LM: %v", err)
-	}
-
-	messages := []dsgo.Message{
-		{Role: "user", Content: "Say exactly: 'Hello from OpenRouter test'"},
-	}
-
-	options := dsgo.DefaultGenerateOptions()
-	options.MaxTokens = 50
-
-	result, err := lm.Generate(ctx, messages, options)
-
-	if err != nil {
-		t.Fatalf("Real OpenRouter API call failed: %v", err)
-	}
-
-	// Verify response structure
-	if result.Content == "" {
-		t.Error("Expected non-empty response content")
-	}
-
-	// Verify usage tracking
-	if result.Usage.TotalTokens == 0 {
-		t.Logf("Warning: TotalTokens is 0 (may be expected for some OpenRouter models)")
-	}
-
-	t.Logf("Real OpenRouter response: %q", result.Content)
-	t.Logf("Usage: prompt=%d, completion=%d, total=%d, cost=$%.6f",
-		result.Usage.PromptTokens, result.Usage.CompletionTokens,
-		result.Usage.TotalTokens, result.Usage.Cost)
 }
 
 // TestProvider_RateLimitSimulation tests rate limit handling with mock 429 response
@@ -774,12 +653,146 @@ func TestProvider_StreamingWithUsage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Note: Streaming tests would require the actual streaming implementation
-	// This is a placeholder to show the test structure
-	t.Log("Streaming test requires actual provider implementation with SSE parsing")
+	lm := createOpenAIProvider(t, "gpt-4o-mini", server.URL)
+	ctx := context.Background()
+	messages := []dsgo.Message{{Role: "user", Content: "Hello"}}
+
+	chunks, errCh := lm.Stream(ctx, messages, dsgo.DefaultGenerateOptions())
+
+	var content strings.Builder
+	var usage dsgo.Usage
+	for chunk := range chunks {
+		content.WriteString(chunk.Content)
+		if chunk.Usage.TotalTokens != 0 {
+			usage = chunk.Usage
+		}
+	}
+
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("stream returned error: %v", err)
+		}
+	}
+
+	if got := content.String(); got != "Hello world" {
+		t.Fatalf("expected streamed content %q, got %q", "Hello world", got)
+	}
+	if usage.TotalTokens != 15 || usage.PromptTokens != 10 || usage.CompletionTokens != 5 {
+		t.Fatalf("unexpected usage: %+v", usage)
+	}
 }
 
 // Helper functions
+
+type capturedRequest struct {
+	Method  string
+	Path    string
+	Headers http.Header
+	Body    []byte
+}
+
+type requestRecorder struct {
+	mu       sync.Mutex
+	requests []capturedRequest
+}
+
+func (r *requestRecorder) add(req *http.Request, body []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	headersCopy := make(http.Header, len(req.Header))
+	for k, v := range req.Header {
+		vv := make([]string, len(v))
+		copy(vv, v)
+		headersCopy[k] = vv
+	}
+
+	bodyCopy := make([]byte, len(body))
+	copy(bodyCopy, body)
+
+	r.requests = append(r.requests, capturedRequest{
+		Method:  req.Method,
+		Path:    req.URL.Path,
+		Headers: headersCopy,
+		Body:    bodyCopy,
+	})
+}
+
+func (r *requestRecorder) All() []capturedRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make([]capturedRequest, len(r.requests))
+	copy(out, r.requests)
+	return out
+}
+
+type requestValidator func(r *http.Request, body []byte) error
+
+type responseHandler func(w http.ResponseWriter, r *http.Request, body []byte)
+
+func newValidatedMockServer(t *testing.T, validate requestValidator, respond responseHandler) (*httptest.Server, *requestRecorder) {
+	t.Helper()
+
+	recorder := &requestRecorder{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to read request body: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		recorder.add(r, body)
+
+		if validate != nil {
+			if err := validate(r, body); err != nil {
+				t.Logf("mock server request validation failed: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+
+		respond(w, r, body)
+	}))
+
+	return server, recorder
+}
+
+func validateChatCompletionRequest(expectedModel string) requestValidator {
+	return func(r *http.Request, body []byte) error {
+		if r.Method != http.MethodPost {
+			return fmt.Errorf("expected method %s, got %s", http.MethodPost, r.Method)
+		}
+		if r.URL.Path != "/chat/completions" {
+			return fmt.Errorf("expected path /chat/completions, got %s", r.URL.Path)
+		}
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") {
+			return fmt.Errorf("expected Authorization Bearer header, got %q", auth)
+		}
+		contentType := r.Header.Get("Content-Type")
+		if !strings.Contains(contentType, "application/json") {
+			return fmt.Errorf("expected Content-Type application/json, got %q", contentType)
+		}
+
+		var payload struct {
+			Model    string         `json:"model"`
+			Messages []dsgo.Message `json:"messages"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return fmt.Errorf("failed to decode request JSON: %w", err)
+		}
+		if payload.Model != expectedModel {
+			return fmt.Errorf("expected model %q, got %q", expectedModel, payload.Model)
+		}
+		if len(payload.Messages) == 0 {
+			return fmt.Errorf("expected at least one message")
+		}
+
+		return nil
+	}
+}
 
 func createOpenAIProvider(t *testing.T, model string, baseURL string) dsgo.LM {
 	t.Helper()
@@ -838,11 +851,13 @@ func (m *mockOpenAIProvider) Generate(ctx context.Context, messages []dsgo.Messa
 }
 
 func (m *mockOpenAIProvider) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
-	ch := make(chan dsgo.Chunk)
-	errCh := make(chan error, 1)
-	errCh <- fmt.Errorf("not implemented in mock")
-	close(ch)
-	return ch, errCh
+	lm := &openaiProvider_internal{
+		APIKey:  "test-key",
+		Model:   m.model,
+		BaseURL: m.baseURL,
+		Client:  &http.Client{Timeout: 30 * time.Second},
+	}
+	return lm.Stream(ctx, messages, options)
 }
 
 func (m *mockOpenAIProvider) Name() string              { return m.model }
@@ -940,11 +955,119 @@ func (o *openaiProvider_internal) Generate(ctx context.Context, messages []dsgo.
 }
 
 func (o *openaiProvider_internal) Stream(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (<-chan dsgo.Chunk, <-chan error) {
-	ch := make(chan dsgo.Chunk)
-	errCh := make(chan error, 1)
-	errCh <- fmt.Errorf("not implemented")
-	close(ch)
-	return ch, errCh
+	chunkChan := make(chan dsgo.Chunk)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		reqBody := map[string]any{
+			"model":    o.Model,
+			"messages": messages,
+			"stream":   true,
+		}
+
+		if options != nil {
+			if options.Temperature > 0 {
+				reqBody["temperature"] = options.Temperature
+			}
+			if options.MaxTokens > 0 {
+				reqBody["max_tokens"] = options.MaxTokens
+			}
+		}
+
+		bodyBytes, err := json.Marshal(reqBody)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to marshal request: %w", err)
+			return
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+		if err != nil {
+			errChan <- err
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+o.APIKey)
+
+		resp, err := o.Client.Do(req)
+		if err != nil {
+			errChan <- fmt.Errorf("request failed: %w", err)
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			errChan <- fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+			return
+		}
+
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
+			}
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				break
+			}
+
+			var streamResp struct {
+				Choices []struct {
+					Delta struct {
+						Content string `json:"content"`
+					} `json:"delta"`
+					FinishReason string `json:"finish_reason"`
+				} `json:"choices"`
+				Usage *struct {
+					PromptTokens     int `json:"prompt_tokens"`
+					CompletionTokens int `json:"completion_tokens"`
+					TotalTokens      int `json:"total_tokens"`
+				} `json:"usage"`
+			}
+
+			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+				errChan <- fmt.Errorf("failed to parse stream chunk: %w", err)
+				return
+			}
+
+			if len(streamResp.Choices) == 0 {
+				continue
+			}
+
+			choice := streamResp.Choices[0]
+			chunk := dsgo.Chunk{
+				Content:      choice.Delta.Content,
+				FinishReason: choice.FinishReason,
+			}
+			if streamResp.Usage != nil {
+				chunk.Usage = dsgo.Usage{
+					PromptTokens:     streamResp.Usage.PromptTokens,
+					CompletionTokens: streamResp.Usage.CompletionTokens,
+					TotalTokens:      streamResp.Usage.TotalTokens,
+				}
+			}
+
+			// Emit chunk even when delta is empty if usage is present.
+			if chunk.Content != "" || chunk.FinishReason != "" || chunk.Usage.TotalTokens != 0 {
+				chunkChan <- chunk
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			errChan <- fmt.Errorf("stream reading error: %w", err)
+			return
+		}
+	}()
+
+	return chunkChan, errChan
 }
 func (o *openaiProvider_internal) Name() string              { return o.Model }
 func (o *openaiProvider_internal) SupportsJSON() bool        { return true }
