@@ -47,3 +47,5 @@ example_execution_results.txt
 
 examples/snowflake_trainer/output/
 .dsgo
+
+**/.agents
