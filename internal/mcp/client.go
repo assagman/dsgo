@@ -46,6 +46,16 @@ func NewJinaClient(apiKey string) (*Client, error) {
 	return NewClient(ClientConfig{Transport: transport})
 }
 
+// NewTavilyClient creates a new MCP client for Tavily.
+// Provides tavily-search and tavily-extract tools for web search and content extraction.
+func NewTavilyClient(apiKey string) (*Client, error) {
+	// Tavily MCP URL: https://mcp.tavily.com/mcp?tavilyApiKey=<api-key>
+	// The API key is passed as a query parameter, not as a header
+	url := "https://mcp.tavily.com/mcp?tavilyApiKey=" + apiKey
+	transport := NewHTTPTransport(url, "")
+	return NewClient(ClientConfig{Transport: transport})
+}
+
 // Initialize initializes the client and fetches tools.
 func (c *Client) Initialize(ctx context.Context) error {
 	// Start SSE transport if needed

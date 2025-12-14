@@ -198,23 +198,23 @@ func initializeMCPTools(ctx context.Context) ([]dsgo.Tool, error) {
 		}
 	}
 
-	// Initialize Jina client if API key is available
-	if jinaKey := os.Getenv("JINA_API_KEY"); jinaKey != "" {
-		jinaClient, err := dsgo.NewMCPJinaClient(jinaKey)
+	// Initialize Tavily client if API key is available
+	if tavilyKey := os.Getenv("TAVILY_API_KEY"); tavilyKey != "" {
+		tavilyClient, err := dsgo.NewMCPTavilyClient(tavilyKey)
 		if err != nil {
-			log.Printf("Warning: Failed to initialize Jina client: %v", err)
+			log.Printf("Warning: Failed to initialize Tavily client: %v", err)
 		} else {
-			if err := jinaClient.Initialize(ctx); err != nil {
-				log.Printf("Warning: Failed to initialize Jina connection: %v", err)
+			if err := tavilyClient.Initialize(ctx); err != nil {
+				log.Printf("Warning: Failed to initialize Tavily connection: %v", err)
 			} else {
-				// Jina is for URL reading, no need for domain filtering
-				allTools = append(allTools, jinaClient.GetTools()...)
+				// Tavily provides search and extract tools
+				allTools = append(allTools, tavilyClient.GetTools()...)
 			}
 		}
 	}
 
 	if len(allTools) == 0 {
-		log.Printf("Warning: No MCP tools available. Set EXA_API_KEY and/or JINA_API_KEY for better research results.")
+		log.Printf("Warning: No MCP tools available. Set EXA_API_KEY and/or TAVILY_API_KEY for better research results.")
 	}
 
 	return allTools, nil
@@ -377,9 +377,18 @@ func getSubTopics(p *dsgo.Prediction, key string) ([]string, error) {
 				result = append(result, s)
 				continue
 			}
-			// Handle object items (extract topic/name/title)
+			// Handle object items with nested topics array (e.g., {category: "...", topics: [...]})
 			if obj, ok := item.(map[string]interface{}); ok {
-				// Try common keys for topic name
+				// First check for nested "topics" array (common LLM pattern)
+				if topics, ok := obj["topics"].([]interface{}); ok {
+					for _, t := range topics {
+						if s, ok := t.(string); ok {
+							result = append(result, s)
+						}
+					}
+					continue
+				}
+				// Fallback: try common keys for single topic name
 				for _, k := range []string{"topic", "name", "title", "subTopic", "sub_topic"} {
 					if sVal, ok := obj[k].(string); ok {
 						result = append(result, sVal)

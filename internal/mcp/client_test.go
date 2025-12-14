@@ -475,3 +475,30 @@ func TestErrorFormatting(t *testing.T) {
 		t.Fatalf("unexpected error string: %s", err.Error())
 	}
 }
+
+func TestNewTavilyClient(t *testing.T) {
+	client, err := NewTavilyClient("test-api-key")
+	if err != nil {
+		t.Fatalf("NewTavilyClient failed: %v", err)
+	}
+	if client == nil {
+		t.Fatal("Expected non-nil client")
+	}
+	if client.transport == nil {
+		t.Fatal("Expected non-nil transport")
+	}
+
+	// Verify it's an HTTP transport with the correct URL format
+	httpTransport, ok := client.transport.(*HTTPTransport)
+	if !ok {
+		t.Fatal("Expected HTTPTransport for Tavily client")
+	}
+	expectedURL := "https://mcp.tavily.com/mcp?tavilyApiKey=test-api-key"
+	if httpTransport.url != expectedURL {
+		t.Errorf("Expected URL %q, got %q", expectedURL, httpTransport.url)
+	}
+	// API key should be empty since it's passed as query param
+	if httpTransport.apiKey != "" {
+		t.Errorf("Expected empty apiKey in transport, got %q", httpTransport.apiKey)
+	}
+}

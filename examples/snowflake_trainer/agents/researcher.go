@@ -11,7 +11,7 @@ type WebResearchAgent struct {
 }
 
 func NewWebResearchAgent(lm dsgo.LM, tools []dsgo.Tool) *WebResearchAgent {
-	sig := dsgo.NewSignature("Execute focused web research on Snowflake platform using authoritative sources. CRITICAL: Only search snowflake.com, docs.snowflake.com, and community.snowflake.com domains.").
+	sig := dsgo.NewSignature("Execute focused web research on Snowflake platform using authoritative sources. CRITICAL: Only search snowflake.com, docs.snowflake.com, and community.snowflake.com domains. Use both tavily and exa tools").
 		AddInput("subTopic", dsgo.FieldTypeString, "Specific Snowflake sub-topic to research").
 		AddInput("learningGoal", dsgo.FieldTypeString, "What learner should know about this Snowflake topic").
 		AddInput("skillLevel", dsgo.FieldTypeString, "Target skill level for Snowflake content depth").
