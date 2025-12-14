@@ -168,6 +168,7 @@ func (p *Parallel) commonLogFields(parallelID string, info parallelModuleInfo, b
 		"return_all":    p.returnAll,
 		"only_success":  p.onlySuccessful,
 		"repeat_factor": p.repeat,
+		"batch_key":     p.batchKey,
 		"verbose":       p.verbose,
 	}
 }
@@ -306,11 +307,13 @@ func (p *Parallel) WithRepeat(n int) *Parallel {
 // Verbose logging contract (schema v1)
 //
 // When verbose is enabled, Parallel emits the following log messages:
-//   - "Parallel batch started"
+//   - "Parallel batch started" (always INFO)
 //   - "Parallel task started"
 //   - "Parallel task completed"
 //   - "Parallel task failed"
+//   - "Parallel batch completed"
 //
+// Per-task and batch-completed logs are emitted at INFO when verbose, DEBUG otherwise.
 // Each log includes a stable set of structured fields to make it easy to filter
 // and aggregate. The canonical module name is always "module.Parallel".
 //
@@ -322,7 +325,7 @@ func (p *Parallel) WithRepeat(n int) *Parallel {
 //   - lm_model: LM model name (best-effort)
 //   - batch_size: number of tasks
 //   - max_workers: maximum concurrent workers
-//   - fail_fast, max_failures, return_all, only_success, repeat_factor
+//   - fail_fast, max_failures, return_all, only_success, repeat_factor, batch_key, verbose
 //
 // Task fields (present on per-task logs):
 //   - task_index: 0-based index within the batch

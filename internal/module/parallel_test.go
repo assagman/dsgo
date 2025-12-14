@@ -1416,6 +1416,7 @@ func TestParallelLoggingBatchLevel(t *testing.T) {
 		"return_all":    "true",
 		"only_success":  "true",
 		"repeat_factor": "1",
+		"batch_key":     "_batch",
 	}
 
 	for field, expectedValue := range expectedFields {
@@ -2166,6 +2167,68 @@ func TestParallelWithVerbose(t *testing.T) {
 		}
 		if msg, ok := failed.fields["error.message"].(string); !ok || msg == "" {
 			t.Errorf("Task failed log: expected error.message string, got %T %v", failed.fields["error.message"], failed.fields["error.message"])
+		}
+	})
+
+	t.Run("context cancellation sets error.kind to context_canceled", func(t *testing.T) {
+		// Create an LM that blocks until context is cancelled
+		blockingLM := &mockLMWithName{
+			MockLM: &MockLM{
+				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+					<-ctx.Done()
+					return nil, ctx.Err()
+				},
+			},
+			modelName: "test-model",
+		}
+
+		predictor := NewPredict(sig, blockingLM)
+		parallel := NewParallel(predictor).
+			WithMaxWorkers(2).
+			WithMaxFailures(2).
+			WithFailFast(false).
+			WithVerbose(true)
+
+		capturingLog.reset()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		inputs := map[string]any{
+			"_batch": []map[string]any{
+				{"text": "task1"},
+				{"text": "task2"},
+			},
+		}
+
+		// Cancel context after a short delay
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+		}()
+
+		_, _ = parallel.Forward(ctx, inputs)
+
+		// Look for failed logs with context_canceled error.kind
+		failedLogs := findLogEntriesByLevel(capturingLog.infos, "info", "Parallel task failed")
+		if len(failedLogs) == 0 {
+			// May also be in debug logs if verbose did not apply before cancellation
+			failedLogs = findLogEntriesByLevel(capturingLog.debugs, "debug", "Parallel task failed")
+		}
+
+		if len(failedLogs) == 0 {
+			t.Fatal("Expected at least 1 task failed log")
+		}
+
+		// At least one should have context_canceled
+		foundContextCanceled := false
+		for _, failed := range failedLogs {
+			if kind, ok := failed.fields["error.kind"].(string); ok && kind == "context_canceled" {
+				foundContextCanceled = true
+				break
+			}
+		}
+		if !foundContextCanceled {
+			t.Errorf("Expected at least one task failed log with error.kind=context_canceled")
 		}
 	})
 

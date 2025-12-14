@@ -65,7 +65,7 @@ This allows filtering either:
 - `lm_model`: best-effort LM model name
 - `batch_size`
 - `max_workers`
-- `fail_fast`, `max_failures`, `return_all`, `only_success`, `repeat_factor`
+- `fail_fast`, `max_failures`, `return_all`, `only_success`, `repeat_factor`, `batch_key`, `verbose`
 
 #### Task fields (task started/completed/failed)
 
