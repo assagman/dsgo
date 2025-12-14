@@ -635,8 +635,9 @@ type InfiniteToolMockLM struct {
 }
 
 func (m *InfiniteToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	// If tools are disabled (final mode), return final response
-	if len(options.Tools) == 0 {
+	// If tools are disabled (final mode) or tool use is explicitly prevented, return final response.
+	// Note: For Bedrock compatibility, tools may still be present with ToolChoice="none".
+	if len(options.Tools) == 0 || options.ToolChoice == "none" {
 		return &dsgo.GenerateResult{
 			Content:      m.FinalResponse,
 			FinishReason: "stop",
