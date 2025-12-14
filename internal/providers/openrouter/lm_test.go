@@ -618,6 +618,62 @@ func TestOpenRouter_BuildRequest(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:     "with provider params",
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
+				Temperature: 0.7,
+				ProviderParams: map[string]any{
+					"reasoning": map[string]any{
+						"effort": "high",
+					},
+					"custom_param": "value",
+				},
+			},
+			check: func(t *testing.T, req map[string]interface{}) {
+				if req["temperature"] != 0.7 {
+					t.Errorf("expected temperature 0.7, got %v", req["temperature"])
+				}
+				if reasoning, ok := req["reasoning"].(map[string]any); !ok {
+					t.Error("expected reasoning param to be present")
+				} else if reasoning["effort"] != "high" {
+					t.Errorf("expected reasoning.effort high, got %v", reasoning["effort"])
+				}
+				if req["custom_param"] != "value" {
+					t.Errorf("expected custom_param value, got %v", req["custom_param"])
+				}
+			},
+		},
+		{
+			name:     "provider params don't override DSGo keys",
+			messages: []core.Message{{Role: "user", Content: "test"}},
+			options: &core.GenerateOptions{
+				Temperature: 0.7,
+				MaxTokens:   1000,
+				ProviderParams: map[string]any{
+					"temperature": 0.9, // Should be ignored
+					"max_tokens":  500, // Should be ignored
+					"reasoning": map[string]any{
+						"effort": "high", // Should be included
+					},
+				},
+			},
+			check: func(t *testing.T, req map[string]interface{}) {
+				// DSGo values should take precedence
+				if req["temperature"] != 0.7 {
+					t.Errorf("expected DSGo temperature 0.7, got %v", req["temperature"])
+				}
+				if req["max_tokens"] != 1000 {
+					t.Errorf("expected DSGo max_tokens 1000, got %v", req["max_tokens"])
+				}
+				// Provider-specific params should be included
+				if reasoning, ok := req["reasoning"].(map[string]any); !ok {
+					t.Error("expected reasoning param to be present")
+				} else if reasoning["effort"] != "high" {
+					t.Errorf("expected reasoning.effort high, got %v", reasoning["effort"])
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

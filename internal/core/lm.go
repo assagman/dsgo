@@ -37,6 +37,7 @@ type GenerateOptions struct {
 	StreamCallback   StreamCallback `json:"-"` // Optional callback for each streaming chunk
 	FrequencyPenalty float64
 	PresencePenalty  float64
+	ProviderParams   map[string]any // Provider-specific request fields forwarded verbatim by providers that support it
 }
 
 // GenerateResult represents the result of an LM generation
@@ -157,6 +158,7 @@ func (o *GenerateOptions) Copy() *GenerateOptions {
 		StreamCallback:   o.StreamCallback, // Copy reference (function pointer)
 		FrequencyPenalty: o.FrequencyPenalty,
 		PresencePenalty:  o.PresencePenalty,
+		ProviderParams:   deepCopyMap(o.ProviderParams), // Deep copy provider params
 	}
 
 	// Copy slices

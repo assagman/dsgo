@@ -360,6 +360,22 @@ func (o *openRouter) buildRequest(messages []core.Message, options *core.Generat
 		req["tool_choice"] = "auto"
 	}
 
+	// Merge ProviderParams with request, respecting DSGo-managed keys
+	if len(options.ProviderParams) > 0 {
+		for key, value := range options.ProviderParams {
+			// Don't override DSGo-managed keys to maintain consistency
+			switch key {
+			case "model", "messages", "temperature", "max_tokens", "top_p", "stop",
+				"response_format", "frequency_penalty", "presence_penalty", "tools", "tool_choice":
+				// Skip DSGo-managed keys - DSGo values take precedence
+				continue
+			default:
+				// Merge provider-specific parameter
+				req[key] = value
+			}
+		}
+	}
+
 	return req
 }
 

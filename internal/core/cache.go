@@ -262,8 +262,9 @@ func (c *LMCache) Stats() CacheStats {
 //   - Stop sequences (canonicalized/sorted)
 //   - Tools and ToolChoice (function calling)
 //   - FrequencyPenalty, PresencePenalty (repetition controls)
+//   - ProviderParams (provider-specific parameters)
 //
-// Maps (ResponseSchema, Tool.Parameters) are canonicalized to ensure
+// Maps (ResponseSchema, Tool.Parameters, ProviderParams) are canonicalized to ensure
 // deterministic key generation regardless of insertion order.
 func GenerateCacheKey(lmName string, messages []Message, options *GenerateOptions) string {
 	// Build a deterministic representation
@@ -280,6 +281,7 @@ func GenerateCacheKey(lmName string, messages []Message, options *GenerateOption
 		ToolChoice       string
 		FrequencyPenalty float64
 		PresencePenalty  float64
+		ProviderParams   string // Canonicalized JSON
 	}{
 		LMName:           lmName,
 		Messages:         messages,
@@ -317,6 +319,14 @@ func GenerateCacheKey(lmName string, messages []Message, options *GenerateOption
 				Description: tool.Description,
 				Parameters:  tool.Parameters, // ToolParameter is deterministic already
 			}
+		}
+	}
+
+	// Canonicalize ProviderParams map
+	if options.ProviderParams != nil {
+		canonical, err := canonicalizeMap(options.ProviderParams)
+		if err == nil {
+			keyData.ProviderParams = canonical
 		}
 	}
 
