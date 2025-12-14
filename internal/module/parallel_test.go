@@ -1403,9 +1403,10 @@ func TestParallelLoggingBatchLevel(t *testing.T) {
 		t.Errorf("Expected message 'Parallel batch started', got %q", info.message)
 	}
 
-	// Verify required fields
+	// Verify required fields (schema v1)
 	expectedFields := map[string]string{
-		"module":        "Parallel",
+		"module":        logging.ModuleParallel,
+		"parallel_mode": "clone",
 		"inner_module":  "Predict",
 		"lm_model":      "test-model-gpt-4o",
 		"batch_size":    "3",
@@ -1414,7 +1415,6 @@ func TestParallelLoggingBatchLevel(t *testing.T) {
 		"fail_fast":     "false",
 		"return_all":    "true",
 		"only_success":  "true",
-		"batch_key":     "_batch",
 		"repeat_factor": "1",
 	}
 
@@ -1428,6 +1428,11 @@ func TestParallelLoggingBatchLevel(t *testing.T) {
 		if actualStr != expectedValue {
 			t.Errorf("Field %q: expected %q, got %q", field, expectedValue, actualStr)
 		}
+	}
+
+	parallelID, ok := info.fields["parallel_id"].(string)
+	if !ok || parallelID == "" {
+		t.Fatalf("Expected non-empty parallel_id string, got %T %v", info.fields["parallel_id"], info.fields["parallel_id"])
 	}
 }
 
@@ -1503,8 +1508,8 @@ func TestParallelLoggingPerTask(t *testing.T) {
 			t.Errorf("Debug entry %d: expected message 'Parallel task started', got %q", i, entry.message)
 		}
 
-		// Verify required fields
-		expectedFields := []string{"inner_module", "lm_model", "task_index", "inputs"}
+		// Verify required fields (schema v1)
+		expectedFields := []string{"module", "parallel_id", "parallel_mode", "inner_module", "lm_model", "batch_size", "max_workers", "task_index", "task_total", "worker_id", "queue_wait_ms", "inputs", "inputs_truncated"}
 		for _, field := range expectedFields {
 			if _, ok := entry.fields[field]; !ok {
 				t.Errorf("Debug entry %d: missing field %q", i, field)
@@ -1512,6 +1517,12 @@ func TestParallelLoggingPerTask(t *testing.T) {
 		}
 
 		// Verify module info
+		if entry.fields["module"] != logging.ModuleParallel {
+			t.Errorf("Debug entry %d: expected module %q, got %q", i, logging.ModuleParallel, entry.fields["module"])
+		}
+		if entry.fields["parallel_mode"] != "clone" {
+			t.Errorf("Debug entry %d: expected parallel_mode 'clone', got %q", i, entry.fields["parallel_mode"])
+		}
 		if entry.fields["inner_module"] != "Predict" {
 			t.Errorf("Debug entry %d: expected inner_module 'Predict', got %q", i, entry.fields["inner_module"])
 		}
@@ -1527,11 +1538,45 @@ func TestParallelLoggingPerTask(t *testing.T) {
 			t.Errorf("Debug entry %d: invalid task_index %d", i, taskIndex)
 		}
 
+		taskTotal, ok := entry.fields["task_total"].(int)
+		if !ok {
+			t.Errorf("Debug entry %d: task_total should be int, got %T", i, entry.fields["task_total"])
+		} else if taskTotal != 2 {
+			t.Errorf("Debug entry %d: expected task_total=2, got %d", i, taskTotal)
+		}
+
+		workerID, ok := entry.fields["worker_id"].(int)
+		if !ok {
+			t.Errorf("Debug entry %d: worker_id should be int, got %T", i, entry.fields["worker_id"])
+		} else if workerID < 0 || workerID >= 2 {
+			t.Errorf("Debug entry %d: worker_id out of range [0,2): %d", i, workerID)
+		}
+
+		queueWaitMs, ok := entry.fields["queue_wait_ms"].(int64)
+		if !ok {
+			// Depending on platform/codec, this may come through as int.
+			if qwi, ok2 := entry.fields["queue_wait_ms"].(int); ok2 {
+				queueWaitMs = int64(qwi)
+				ok = true
+			}
+		}
+		if !ok {
+			t.Errorf("Debug entry %d: queue_wait_ms should be int/int64, got %T", i, entry.fields["queue_wait_ms"])
+		} else if queueWaitMs < 0 {
+			t.Errorf("Debug entry %d: queue_wait_ms should be >= 0, got %d", i, queueWaitMs)
+		}
+
 		// Verify inputs summarization
 		inputs, ok := entry.fields["inputs"].(map[string]any)
 		if !ok {
 			t.Errorf("Debug entry %d: inputs should be map[string]any, got %T", i, entry.fields["inputs"])
 			continue
+		}
+
+		// Check that inputs_truncated is correctly reported
+		inputsTruncated, ok := entry.fields["inputs_truncated"].(bool)
+		if !ok {
+			t.Errorf("Debug entry %d: inputs_truncated should be bool, got %T", i, entry.fields["inputs_truncated"])
 		}
 
 		// Check that long content was truncated
@@ -1541,6 +1586,13 @@ func TestParallelLoggingPerTask(t *testing.T) {
 				t.Errorf("Debug entry %d: file_contents should be string, got %T", i, inputs["file_contents"])
 			} else if !strings.Contains(fileContent, "...[truncated]") {
 				t.Errorf("Debug entry %d: long content should be truncated, got length %d", i, len(fileContent))
+			}
+			if ok && !inputsTruncated {
+				t.Errorf("Debug entry %d: expected inputs_truncated=true for task %d", i, taskIndex)
+			}
+		} else {
+			if ok && inputsTruncated {
+				t.Errorf("Debug entry %d: expected inputs_truncated=false for task %d", i, taskIndex)
 			}
 		}
 
@@ -1965,25 +2017,155 @@ func TestParallelWithVerbose(t *testing.T) {
 			t.Fatalf("Forward failed: %v", err)
 		}
 
-		// Should have batch log with verbose=true
+		// Should have batch started log
 		batchLog := findLogEntry(capturingLog.infos, "Parallel batch started")
 		if batchLog == nil {
 			t.Fatal("Expected batch log entry")
 		}
-		if batchLog.fields["verbose"] != true {
-			t.Errorf("Expected verbose=true, got %v", batchLog.fields["verbose"])
+		if batchLog.fields["module"] != logging.ModuleParallel {
+			t.Errorf("Expected module %q, got %v", logging.ModuleParallel, batchLog.fields["module"])
+		}
+		if _, ok := batchLog.fields["parallel_id"].(string); !ok {
+			t.Errorf("Expected parallel_id field")
+		}
+
+		batchCompletedLog := findLogEntry(capturingLog.infos, "Parallel batch completed")
+		if batchCompletedLog == nil {
+			t.Fatal("Expected batch completed log entry")
+		}
+
+		// Minimal sanity checks (schema v1 additions)
+		if batchCompletedLog.fields["successes"] != 2 {
+			t.Errorf("Expected successes=2, got %v", batchCompletedLog.fields["successes"])
+		}
+		if batchCompletedLog.fields["failures"] != 0 {
+			t.Errorf("Expected failures=0, got %v", batchCompletedLog.fields["failures"])
+		}
+		if _, ok := batchCompletedLog.fields["latency_min_ms"].(int64); !ok {
+			// May be int depending on platform
+			if _, ok2 := batchCompletedLog.fields["latency_min_ms"].(int); !ok2 {
+				t.Errorf("Expected latency_min_ms field")
+			}
+		}
+		if batchCompletedLog.fields["error_count"] != 0 {
+			t.Errorf("Expected error_count=0, got %v", batchCompletedLog.fields["error_count"])
 		}
 
 		// Should have task logs at INFO level when verbose is enabled
 		infoTaskLogs := findLogEntriesByLevel(capturingLog.infos, "info", "Parallel task started")
-		if len(infoTaskLogs) < 1 {
-			t.Errorf("Expected at least 1 INFO task log, got %d", len(infoTaskLogs))
+		if len(infoTaskLogs) != 2 {
+			t.Errorf("Expected 2 INFO task started logs, got %d", len(infoTaskLogs))
+		}
+
+		infoCompletedLogs := findLogEntriesByLevel(capturingLog.infos, "info", "Parallel task completed")
+		if len(infoCompletedLogs) != 2 {
+			t.Errorf("Expected 2 INFO task completed logs, got %d", len(infoCompletedLogs))
+		}
+
+		// Validate fields on a task completed log (schema v1)
+		if len(infoCompletedLogs) > 0 {
+			entry := infoCompletedLogs[0]
+			expectedFields := []string{
+				"module",
+				"parallel_id",
+				"parallel_mode",
+				"task_index",
+				"task_total",
+				"worker_id",
+				"queue_wait_ms",
+				"duration_ms",
+				"prompt_tokens",
+				"completion_tokens",
+				"total_tokens",
+				"cost",
+				"adapter_used",
+				"parse_attempts",
+				"fallback_used",
+				"parse_success",
+			}
+			for _, f := range expectedFields {
+				if _, ok := entry.fields[f]; !ok {
+					t.Errorf("Task completed log: missing field %q", f)
+				}
+			}
+
+			if au, ok := entry.fields["adapter_used"].(string); !ok || au == "" {
+				t.Errorf("Task completed log: expected non-empty adapter_used string, got %T %v", entry.fields["adapter_used"], entry.fields["adapter_used"])
+			}
+
+			if pa, ok := entry.fields["parse_attempts"].(int); !ok || pa < 1 {
+				t.Errorf("Task completed log: expected parse_attempts>=1 int, got %T %v", entry.fields["parse_attempts"], entry.fields["parse_attempts"])
+			}
+		}
+
+		// Validate batch completed aggregation fields
+		for _, f := range []string{"prompt_tokens", "completion_tokens", "total_tokens", "cost", "latency_p50_ms"} {
+			if _, ok := batchCompletedLog.fields[f]; !ok {
+				t.Errorf("Batch completed log: missing field %q", f)
+			}
 		}
 
 		// Should NOT have task logs at DEBUG level when verbose is enabled
 		debugTaskLogs := findLogEntriesByLevel(capturingLog.debugs, "debug", "Parallel task started")
 		if len(debugTaskLogs) != 0 {
-			t.Errorf("Expected 0 DEBUG task logs when verbose, got %d", len(debugTaskLogs))
+			t.Errorf("Expected 0 DEBUG task started logs when verbose, got %d", len(debugTaskLogs))
+		}
+	})
+
+	t.Run("task failed log includes error.kind and duration", func(t *testing.T) {
+		failingLM := &mockLMWithName{
+			MockLM: &MockLM{
+				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+					// Fail when input contains "task2"
+					if len(messages) > 0 && strings.Contains(messages[len(messages)-1].Content, "task2") {
+						return nil, fmt.Errorf("boom")
+					}
+					return &core.GenerateResult{
+						Content: "[[ ## result ## ]]\nsuccess",
+						Usage:   core.Usage{TotalTokens: 5},
+					}, nil
+				},
+			},
+			modelName: "test-model",
+		}
+
+		predictor := NewPredict(sig, failingLM)
+		parallel := NewParallel(predictor).
+			WithMaxWorkers(2).
+			WithMaxFailures(1).
+			WithFailFast(false).
+			WithVerbose(true)
+
+		capturingLog.reset()
+
+		inputs := map[string]any{
+			"_batch": []map[string]any{
+				{"text": "task1"},
+				{"text": "task2"},
+			},
+		}
+
+		_, err := parallel.Forward(context.Background(), inputs)
+		if err != nil {
+			t.Fatalf("Forward failed: %v", err)
+		}
+
+		failedLogs := findLogEntriesByLevel(capturingLog.infos, "info", "Parallel task failed")
+		if len(failedLogs) != 1 {
+			t.Fatalf("Expected 1 task failed log, got %d", len(failedLogs))
+		}
+
+		failed := failedLogs[0]
+		if _, ok := failed.fields["duration_ms"]; !ok {
+			t.Errorf("Task failed log: missing duration_ms")
+		}
+		if kind, ok := failed.fields["error.kind"].(string); !ok || kind == "" {
+			t.Errorf("Task failed log: expected error.kind string, got %T %v", failed.fields["error.kind"], failed.fields["error.kind"])
+		} else if kind != "task_error" {
+			t.Errorf("Task failed log: expected error.kind=task_error, got %q", kind)
+		}
+		if msg, ok := failed.fields["error.message"].(string); !ok || msg == "" {
+			t.Errorf("Task failed log: expected error.message string, got %T %v", failed.fields["error.message"], failed.fields["error.message"])
 		}
 	})
 
