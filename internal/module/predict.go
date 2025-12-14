@@ -79,11 +79,139 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 		return nil, predErr
 	}
 
+	// Check if structured outputs are enabled
+	settings := core.GetSettings()
+	useStructuredMode := settings.StructuredOutput.Enabled
+
+	// If structured mode is enabled, use the structured output enforcement loop
+	if useStructuredMode {
+		return p.forwardStructured(ctx, inputs)
+	}
+
+	// Otherwise, use the legacy path
+	return p.forwardLegacy(ctx, inputs)
+}
+
+// forwardStructured executes prediction with structured output enforcement
+func (p *Predict) forwardStructured(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
+	settings := core.GetSettings()
+
+	// Select adapter based on LM capabilities
+	adapter := p.Adapter
+	if p.LM.SupportsJSON() && settings.StructuredOutput.Enabled {
+		// Use schema-first adapter for LMs that support JSON mode
+		adapter = core.NewSchemaFirstAdapter(true).WithReasoning(false)
+	}
+
+	// Build the new messages (without history) for History tracking
+	newMessages, err := p.Adapter.Format(p.Signature, inputs, p.Demos)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format messages: %w", err)
+	}
+
+	// Create a custom adapter wrapper that includes history
+	wrappedAdapter := &predictAdapter{
+		base:    adapter,
+		history: p.History,
+	}
+
+	// Call structured output enforcement loop
+	result, err := core.GenerateStructured(
+		ctx,
+		p.LM,
+		p.Signature,
+		inputs,
+		p.Demos,
+		core.GenerateStructuredOptions{
+			Adapter:        wrappedAdapter,
+			BaseOptions:    p.Options,
+			MaxAttempts:    settings.StructuredOutput.MaxAttempts,
+			Temperature:    settings.StructuredOutput.Temperature,
+			UseJSONFormat:  p.LM.SupportsJSON(),
+			StreamCallback: p.Options.StreamCallback,
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("structured output generation failed: %w", err)
+	}
+
+	// Build prediction from result
+	pred := core.NewPrediction(result.Outputs)
+	pred.WithUsage(result.Usage)
+	pred.WithModuleName(logging.ModulePredict)
+	pred.WithInputs(inputs)
+
+	// Add adapter metrics if available
+	if result.AdapterUsed != "" {
+		pred.WithAdapterMetrics(result.AdapterUsed, result.ParseAttempts, result.FallbackUsed)
+	}
+
+	// Update history if present (match legacy behavior)
+	if p.History != nil {
+		for _, msg := range newMessages {
+			if msg.Role == "user" {
+				p.History.Add(msg)
+			}
+		}
+		p.History.Add(core.Message{Role: "assistant", Content: result.Content})
+	}
+
+	// Add parse diagnostics if present
+	if result.Diagnostics != nil {
+		pred.WithParseDiagnostics(result.Diagnostics)
+	}
+
+	// If output didn't converge but we have parseable output, return with diagnostics
+	if !result.Converged && result.Diagnostics != nil {
+		// This is lenient completion - we have partial output with diagnostics
+		return pred, nil
+	}
+
+	// If output converged, return successfully
+	if result.Converged {
+		return pred, nil
+	}
+
+	// If no convergence and no diagnostics, return error
+	return nil, fmt.Errorf("structured output failed to converge and no parseable output available")
+}
+
+// predictAdapter wraps an adapter to inject history
+type predictAdapter struct {
+	base    core.Adapter
+	history *core.History
+}
+
+func (pa *predictAdapter) Format(sig *core.Signature, inputs map[string]any, demos []core.Example) ([]core.Message, error) {
+	messages, err := pa.base.Format(sig, inputs, demos)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepend history if available
+	if pa.history != nil && !pa.history.IsEmpty() {
+		historyMessages := pa.base.FormatHistory(pa.history)
+		messages = append(historyMessages, messages...)
+	}
+
+	return messages, nil
+}
+
+func (pa *predictAdapter) Parse(sig *core.Signature, content string) (map[string]any, error) {
+	return pa.base.Parse(sig, content)
+}
+
+func (pa *predictAdapter) FormatHistory(history *core.History) []core.Message {
+	return pa.base.FormatHistory(history)
+}
+
+// forwardLegacy executes the prediction using the legacy path (without structured output enforcement)
+func (p *Predict) forwardLegacy(ctx context.Context, inputs map[string]any) (*core.Prediction, error) {
 	// Use adapter to format messages with demos
 	newMessages, err := p.Adapter.Format(p.Signature, inputs, p.Demos)
 	if err != nil {
-		predErr = fmt.Errorf("failed to format messages: %w", err)
-		return nil, predErr
+		return nil, fmt.Errorf("failed to format messages: %w", err)
 	}
 
 	// Build final message list
@@ -118,38 +246,32 @@ func (p *Predict) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 
 	result, err := p.LM.Generate(ctx, messages, options)
 	if err != nil {
-		predErr = fmt.Errorf("LM generation failed: %w", err)
-		return nil, predErr
+		return nil, fmt.Errorf("LM generation failed: %w", err)
 	}
 
 	// Handle finish_reason: Predict doesn't support tool execution loops
 	if result.FinishReason == "tool_calls" {
-		predErr = fmt.Errorf("model requested tool execution (finish_reason=tool_calls) but Predict module doesn't support tool loops - use React module instead")
-		return nil, predErr
+		return nil, fmt.Errorf("model requested tool execution (finish_reason=tool_calls) but Predict module doesn't support tool loops - use React module instead")
 	}
 
 	// Handle finish_reason=length: Model hit max_tokens, output truncated/incomplete
 	if result.FinishReason == "length" {
-		predErr = fmt.Errorf("model hit max_tokens limit (finish_reason=length) - output truncated - increase MaxTokens in options")
-		return nil, predErr
+		return nil, fmt.Errorf("model hit max_tokens limit (finish_reason=length) - output truncated - increase MaxTokens in options")
 	}
 
 	// Check for empty content with finish_reason=stop (actual error)
 	if result.Content == "" && result.FinishReason == "stop" {
-		predErr = fmt.Errorf("model returned empty content despite finish_reason=stop (model error)")
-		return nil, predErr
+		return nil, fmt.Errorf("model returned empty content despite finish_reason=stop (model error)")
 	}
 
 	// Use adapter to parse output
 	outputs, err := p.Adapter.Parse(p.Signature, result.Content)
 	if err != nil {
-		predErr = fmt.Errorf("failed to parse output: %w", err)
-		return nil, predErr
+		return nil, fmt.Errorf("failed to parse output: %w", err)
 	}
 
 	if err := p.Signature.ValidateOutputs(outputs); err != nil {
-		predErr = fmt.Errorf("output validation failed: %w", err)
-		return nil, predErr
+		return nil, fmt.Errorf("output validation failed: %w", err)
 	}
 
 	// Update history if present

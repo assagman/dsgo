@@ -96,6 +96,30 @@ func WithLogger(logger logging.Logger) Option {
 	}
 }
 
+// WithStructuredOutputEnabled enables or disables structured output enforcement.
+func WithStructuredOutputEnabled(enabled bool) Option {
+	return func(s *Settings) {
+		s.StructuredOutput.Enabled = enabled
+	}
+}
+
+// WithStructuredOutputMaxAttempts sets the maximum number of attempts for structured output validation.
+// Values <= 0 are ignored.
+func WithStructuredOutputMaxAttempts(maxAttempts int) Option {
+	return func(s *Settings) {
+		if maxAttempts > 0 {
+			s.StructuredOutput.MaxAttempts = maxAttempts
+		}
+	}
+}
+
+// WithStructuredOutputTemperature sets the temperature override for structured output mode.
+func WithStructuredOutputTemperature(temperature float32) Option {
+	return func(s *Settings) {
+		s.StructuredOutput.Temperature = temperature
+	}
+}
+
 // WithCache enables caching with the specified capacity.
 // A cache with the given capacity will be created and auto-wired to all LM instances.
 // Uses the configured CacheTTL if set, otherwise no expiration.

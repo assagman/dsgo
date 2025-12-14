@@ -635,8 +635,9 @@ type InfiniteToolMockLM struct {
 }
 
 func (m *InfiniteToolMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
-	// If tools are disabled (final mode), return final response
-	if len(options.Tools) == 0 {
+	// If tools are disabled (final mode) or tool use is explicitly prevented, return final response.
+	// Note: For Bedrock compatibility, tools may still be present with ToolChoice="none".
+	if len(options.Tools) == 0 || options.ToolChoice == "none" {
 		return &dsgo.GenerateResult{
 			Content:      m.FinalResponse,
 			FinishReason: "stop",
@@ -1282,6 +1283,14 @@ type InfiniteLoopMockLM struct {
 }
 
 func (m *InfiniteLoopMockLM) Generate(ctx context.Context, messages []dsgo.Message, options *dsgo.GenerateOptions) (*dsgo.GenerateResult, error) {
+	// If tool choice is "none", we're in extraction mode - return valid JSON
+	if options != nil && options.ToolChoice == "none" {
+		return &dsgo.GenerateResult{
+			Content:      `{"answer": "Extracted answer from conversation", "reasoning": "Based on gathered information"}`,
+			FinishReason: "stop",
+			Usage:        dsgo.Usage{TotalTokens: 30, Cost: 0.0005},
+		}, nil
+	}
 	return &dsgo.GenerateResult{
 		Content:      "Need to search more",
 		ToolCalls:    []dsgo.ToolCall{m.ToolCall},

@@ -737,6 +737,86 @@ if completions := result.Completions; completions != nil {
 }
 ```
 
+### Structured Outputs (Automatic Validation & Retry)
+
+DSGo enables **structured output enforcement by default**. This means:
+
+- **Automatic validation**: Outputs are validated against your signature
+- **Automatic retry**: If validation fails, the LM is asked to fix the output (up to 3 attempts by default)
+- **Lenient completion**: If all retries exhaust, partial outputs are returned with diagnostics
+- **Schema-first formatting**: When your LM supports JSON mode, DSGo uses JSON schemas for better reliability
+
+#### Disable Structured Outputs
+
+To disable structured output enforcement (use legacy behavior):
+
+```go
+// Via environment variable
+os.Setenv("DSGO_STRUCTURED_OUTPUTS", "false")
+
+// Or programmatically
+dsgo.Configure(
+    dsgo.WithStructuredOutputEnabled(false),
+)
+```
+
+#### Tune Structured Outputs
+
+```go
+// Increase retry attempts
+dsgo.Configure(
+    dsgo.WithStructuredOutputMaxAttempts(5),
+)
+
+// Use slightly higher temperature for more variation during retries
+dsgo.Configure(
+    dsgo.WithStructuredOutputTemperature(0.1),
+)
+
+// Or all together
+dsgo.Configure(
+    dsgo.WithStructuredOutputEnabled(true),
+    dsgo.WithStructuredOutputMaxAttempts(3),
+    dsgo.WithStructuredOutputTemperature(0.0),
+)
+```
+
+#### Understanding Diagnostics
+
+When a module returns a partial output (validation failed after retries), check `Prediction.ParseDiagnostics`:
+
+```go
+result, err := predictor.Forward(ctx, inputs)
+if err != nil {
+    // Hard error - parsing completely failed
+    return err
+}
+
+// Check if output is partial (missing required fields)
+if result.ParseDiagnostics != nil && result.ParseDiagnostics.HasErrors() {
+    fmt.Printf("Partial output with %d missing fields\n", len(result.ParseDiagnostics.MissingFields))
+    for _, field := range result.ParseDiagnostics.MissingFields {
+        fmt.Printf("  - %s: nil\n", field)
+    }
+    
+    // You can still use the output, but some fields are nil
+    // The module tried its best and gave up gracefully
+}
+```
+
+#### Metadata
+
+When structured output enforcement is active, outputs include `__structured_meta` with:
+
+```go
+// Access metadata (for debugging)
+if meta, ok := result.Outputs["__structured_meta"].(map[string]any); ok {
+    fmt.Printf("Attempts: %v\n", meta["attempts"])
+    fmt.Printf("Converged: %v\n", meta["converged"])
+    fmt.Printf("Last error: %v\n", meta["last_error"])
+}
+```
+
 ---
 
 ## Next Steps

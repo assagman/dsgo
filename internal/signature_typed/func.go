@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/module"
@@ -178,6 +179,35 @@ func buildCombinedSignature(inputType, outputType reflect.Type) (*core.Signature
 	return sig, nil
 }
 
+func validateTypedPrediction(pred *core.Prediction) error {
+	if pred == nil || pred.ParseDiagnostics == nil || !pred.ParseDiagnostics.HasErrors() {
+		return nil
+	}
+	d := pred.ParseDiagnostics
+	if len(d.MissingFields) > 0 {
+		// Match core.Signature.ValidateOutputs error wording
+		sort.Strings(d.MissingFields)
+		return fmt.Errorf("missing required output field: %s", d.MissingFields[0])
+	}
+	if len(d.ClassErrors) > 0 {
+		keys := make([]string, 0, len(d.ClassErrors))
+		for k := range d.ClassErrors {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		return fmt.Errorf("output validation failed: %w", d.ClassErrors[keys[0]])
+	}
+	if len(d.TypeErrors) > 0 {
+		keys := make([]string, 0, len(d.TypeErrors))
+		for k := range d.TypeErrors {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		return fmt.Errorf("output validation failed: %w", d.TypeErrors[keys[0]])
+	}
+	return fmt.Errorf("output validation failed")
+}
+
 // Run executes the typed module with type-safe input and output
 func (f *Func[I, O]) Run(ctx context.Context, input I) (O, error) {
 	var zero O
@@ -192,6 +222,9 @@ func (f *Func[I, O]) Run(ctx context.Context, input I) (O, error) {
 	pred, err := f.module.Forward(ctx, inputMap)
 	if err != nil {
 		return zero, fmt.Errorf("module execution failed: %w", err)
+	}
+	if err := validateTypedPrediction(pred); err != nil {
+		return zero, err
 	}
 
 	// Convert output map to struct
@@ -217,6 +250,9 @@ func (f *Func[I, O]) RunWithPrediction(ctx context.Context, input I) (O, *core.P
 	pred, err := f.module.Forward(ctx, inputMap)
 	if err != nil {
 		return zero, nil, fmt.Errorf("module execution failed: %w", err)
+	}
+	if err := validateTypedPrediction(pred); err != nil {
+		return zero, pred, err
 	}
 
 	// Convert output map to struct

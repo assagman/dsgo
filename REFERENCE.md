@@ -20,6 +20,14 @@ Tables and quick lookups for DSGo.
 | `DSGO_CACHE_SIZE` | LRU cache size |
 | `DSGO_CACHE_TTL` | Cache TTL |
 
+### Structured Outputs
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `DSGO_STRUCTURED_OUTPUTS` | Enable structured output enforcement (`true`/`false`) | `true` |
+| `DSGO_STRUCTURED_MAX_ATTEMPTS` | Max validation retry attempts | `3` |
+| `DSGO_STRUCTURED_TEMPERATURE` | Temperature override for structured mode | `0.0` |
+
 ### Observability / debugging
 
 | Variable | Purpose |

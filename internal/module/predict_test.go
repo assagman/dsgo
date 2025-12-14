@@ -1019,6 +1019,7 @@ func (m *MockLMForFallback) Stream(ctx context.Context, messages []core.Message,
 // TestFallbackAdapter_Integration tests the fallback mechanism with a mock LM
 func TestFallbackAdapter_Integration(t *testing.T) {
 	t.Parallel()
+
 	sig := core.NewSignature("Analyze sentiment").
 		AddInput("text", core.FieldTypeString, "Text to analyze").
 		AddOutput("sentiment", core.FieldTypeString, "Sentiment classification").

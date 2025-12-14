@@ -181,7 +181,9 @@ func normalizeKey(s string) string {
 }
 
 // NormalizeOutputKeys normalizes output field names to match signature fields
-// This makes parsing resilient to casing variations (Answer vs answer) and formatting
+// This makes parsing resilient to casing variations (Answer vs answer) and formatting.
+// For single-output signatures, maps common synonyms (answer, result, response, final)
+// to the actual output field name.
 func NormalizeOutputKeys(sig *Signature, outputs map[string]any) map[string]any {
 	out := make(map[string]any, len(outputs))
 
@@ -198,6 +200,21 @@ func NormalizeOutputKeys(sig *Signature, outputs map[string]any) map[string]any 
 			// Only map synonym if it doesn't conflict with existing field
 			if _, exists := normToCanon[syn]; !exists {
 				normToCanon[syn] = "answer"
+			}
+		}
+	}
+
+	// For single-output signatures, map common synonyms to that single output field
+	// This handles cases where the model returns "answer" but the field is named "plan"
+	if len(sig.OutputFields) == 1 {
+		singleField := sig.OutputFields[0]
+		canonicalName := normalizeKey(singleField.Name)
+		commonSynonyms := []string{"answer", "result", "response", "final", "output"}
+		for _, syn := range commonSynonyms {
+			// Only add if this synonym doesn't already have a mapping AND
+			// it's not the canonical name itself
+			if _, exists := normToCanon[syn]; !exists && syn != canonicalName {
+				normToCanon[syn] = singleField.Name
 			}
 		}
 	}
@@ -1251,4 +1268,57 @@ func stripFieldMarkersPreserveJSON(s string) string {
 	s = strings.TrimSpace(s)
 
 	return s
+}
+
+// SchemaFirstAdapter implements Adapter using JSON-style formatting when structured outputs
+// are enabled, with fallback to robust parsing that works with marker-based responses.
+// This adapter bridges schema-first formatting (for LMs that support JSON mode) with
+// lenient parsing (for compatibility with all output formats).
+type SchemaFirstAdapter struct {
+	useJSONFormat    bool // Whether to use JSON-style formatting
+	IncludeReasoning bool // Whether to request reasoning field (for CoT)
+}
+
+// NewSchemaFirstAdapter creates a new schema-first adapter
+func NewSchemaFirstAdapter(useJSONFormat bool) *SchemaFirstAdapter {
+	return &SchemaFirstAdapter{
+		useJSONFormat:    useJSONFormat,
+		IncludeReasoning: false,
+	}
+}
+
+// WithReasoning enables reasoning field in output format
+func (a *SchemaFirstAdapter) WithReasoning(include bool) *SchemaFirstAdapter {
+	a.IncludeReasoning = include
+	return a
+}
+
+// Format builds prompt messages using JSON-style formatting if enabled, else Chat format
+func (a *SchemaFirstAdapter) Format(sig *Signature, inputs map[string]any, demos []Example) ([]Message, error) {
+	if a.useJSONFormat {
+		// Use JSON adapter for schema-first formatting
+		jsonAdapter := NewJSONAdapter().WithReasoning(a.IncludeReasoning)
+		return jsonAdapter.Format(sig, inputs, demos)
+	}
+	// Fall back to Chat adapter
+	chatAdapter := NewChatAdapter().WithReasoning(a.IncludeReasoning)
+	return chatAdapter.Format(sig, inputs, demos)
+}
+
+// Parse uses robust fallback parsing that works with any output format
+// This allows schema-first formatting to work with lenient parsing
+func (a *SchemaFirstAdapter) Parse(sig *Signature, content string) (map[string]any, error) {
+	// Use fallback adapter for robust parsing
+	fallback := NewFallbackAdapter()
+	return fallback.Parse(sig, content)
+}
+
+// FormatHistory formats conversation history using the appropriate adapter
+func (a *SchemaFirstAdapter) FormatHistory(history *History) []Message {
+	if a.useJSONFormat {
+		jsonAdapter := NewJSONAdapter()
+		return jsonAdapter.FormatHistory(history)
+	}
+	chatAdapter := NewChatAdapter()
+	return chatAdapter.FormatHistory(history)
 }

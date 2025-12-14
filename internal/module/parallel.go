@@ -578,11 +578,26 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 			if p.failFast || (p.maxFailures > 0 && failureCount > p.maxFailures) {
 				cancel()
 			}
-		} else {
-			perIdx[r.idx] = r.pred
-			latencies[r.idx] = r.dur
-			successes = append(successes, r.pred)
+			continue
 		}
+
+		// Treat partial/invalid outputs (ParseDiagnostics) as failures for parallel semantics.
+		if r.pred != nil && r.pred.ParseDiagnostics != nil && r.pred.ParseDiagnostics.HasErrors() {
+			failureCount++
+			errStr := core.BuildValidationDiagnosticsString(r.pred.ParseDiagnostics)
+			if errStr == "" {
+				errStr = "output validation failed"
+			}
+			errs = append(errs, fmt.Errorf("task %d: %s", r.idx, errStr))
+			if p.failFast || (p.maxFailures > 0 && failureCount > p.maxFailures) {
+				cancel()
+			}
+			continue
+		}
+
+		perIdx[r.idx] = r.pred
+		latencies[r.idx] = r.dur
+		successes = append(successes, r.pred)
 	}
 
 	// With fail-fast, any failure is an error (check before all-failed case)
