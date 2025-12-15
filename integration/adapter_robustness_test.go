@@ -658,8 +658,6 @@ func TestAdapter_Metadata_Tracking(t *testing.T) {
 	sig := dsgo.NewSignature("test").
 		AddOutput("answer", dsgo.FieldTypeString, "")
 
-	adapter := dsgo.NewFallbackAdapter()
-
 	tests := []struct {
 		name                     string
 		content                  string
@@ -687,6 +685,8 @@ func TestAdapter_Metadata_Tracking(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			// Each parallel subtest needs its own adapter to avoid race conditions
+			adapter := dsgo.NewFallbackAdapter()
 			outputs, err := adapter.Parse(sig, tt.content)
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
