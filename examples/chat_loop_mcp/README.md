@@ -42,7 +42,7 @@ Interactive CLI chat loop built with **DSGo** that demonstrates:
 Optional for MCP tools:
 
 - `EXA_API_KEY` – enables Exa MCP tools (search + web content)
-- `JINA_API_KEY` – enables Jina MCP tools (URL reading)
+- `TAVILY_API_KEY` – enables Tavily MCP tools (web search, URL reading)
 
 ---
 
@@ -75,8 +75,8 @@ If `EXAMPLES_DEFAULT_MODEL` is not set, the example defaults to `gpt-4o-mini`.
 # Optional: enables Exa MCP tools
 export EXA_API_KEY=exa_...
 
-# Optional: enables Jina MCP tools
-export JINA_API_KEY=jina_...
+# Optional: enables Tavily MCP tools
+export TAVILY_API_KEY=tavily_...
 ```
 
 If either key is missing, that provider's tools are simply disabled. The chat still works using the base model only.
@@ -108,7 +108,7 @@ With all providers configured:
 EXAMPLES_DEFAULT_MODEL="gpt-4o-mini" \
 OPENAI_API_KEY=sk-... \
 EXA_API_KEY=exa_... \
-JINA_API_KEY=jina_... \
+TAVILY_API_KEY=tavily_... \
 go run ./...
 ```
 
@@ -164,16 +164,29 @@ Any line that does **not** start with `/` is treated as a normal user message an
      - Input: `question` (string)
      - Optional outputs: `draft_answer` (string), `sources` (JSON)
    - `refineSig` (`"Chat-friendly answer refiner"`) defines:
-     - Inputs: `question`, `draft_answer`, optional `sources`
+     - Inputs: `question`, optional `draft_answer`, optional `sources`
+     - Optional input: `conversation_context` (string)
      - Output: `answer` (string, user-facing)
    - `react := dsgo.NewReAct(researchSig, lm, tools).WithHistory(history).WithMaxIterations(8)`
-   - `refine := dsgo.NewRefine(refineSig, lm)`
+   - `refine := dsgo.NewRefine(refineSig, lm).WithHistory(history).WithDemos(buildRefineDemos())`
    - `program := dsgo.NewProgram("mcp_chat_pipeline").AddModule(react).AddModule(refine)`
 
-4. **Conversation memory**
-   - In the loop, each successful turn appends user/assistant messages to `history` using `AddUserMessage` and `AddAssistantMessage`.
-   - ReAct uses `history` (via `WithHistory`) to prepend previous messages for multi-turn reasoning.
-   - `/history` reads from `history.GetLast(n)` and prints recent user/assistant turns.
+ 4. **Conversation memory**
+    - In the loop, each successful turn appends user/assistant messages to `history` using `AddUserMessage` and `AddAssistantMessage`.
+    - ReAct uses `history` (via `WithHistory`) to prepend previous messages for multi-turn reasoning.
+    - The example also passes a *snapshot* of recent user/assistant turns as an explicit `conversation_context` input.
+    - `/history` reads from `history.GetLast(n)` and prints recent user/assistant turns.
+
+    Note: Refine uses `WithHistory(history)` for context, and in this example it also includes a small set of few-shot examples via `WithDemos(...)`.
+
+    By default Refine does **not** mutate History.
+    If you want Refine to auto-append its prompts/responses, enable it explicitly with:
+
+    ```go
+    refiner := dsgo.NewRefine(refineSig, lm).
+        WithHistory(history).
+        WithHistoryTracking(true)
+    ```
 
 5. **Answer flow**
    - Each user message calls `program.Forward(ctx, {"question": line})`.
@@ -192,7 +205,7 @@ $ cd examples/chat_loop_mcp
 $ EXAMPLES_DEFAULT_MODEL="gpt-4o-mini" \
   OPENAI_API_KEY=sk-... \
   EXA_API_KEY=exa_... \
-  JINA_API_KEY=jina_... \
+  TAVILY_API_KEY=tavily_... \
   go run ./...
 
 DSGo MCP Chat Loop Example
@@ -224,7 +237,7 @@ sources:
 Exa tools:
   - search: Search the web using Exa.
   - browse: Fetch and summarize a specific result.
-Jina tools:
+Tavily tools:
   - read_url: Fetch and clean content from a URL.
 Total tools: 3
 
@@ -245,6 +258,6 @@ Exiting chat. Goodbye!
 
 ## Notes
 
-- If `EXA_API_KEY` or `JINA_API_KEY` is not set, the example prints a warning and continues in LM-only mode.
+- If `EXA_API_KEY` or `TAVILY_API_KEY` is not set, the example prints a warning and continues in LM-only mode.
 - If no LM API key (`OPENAI_API_KEY`/`OPENROUTER_API_KEY`) is set, the program exits with a clear error instead of panicking.
 - For deeper DSGo concepts, see the root `README.md`, `AGENTS.md`, and `llms.txt` files.

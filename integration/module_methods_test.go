@@ -364,13 +364,18 @@ func TestRefine_AllOptions(t *testing.T) {
 	sig := fixtures.RefineSig()
 
 	options := &dsgo.GenerateOptions{Temperature: 0.8}
+	history := &dsgo.History{}
+	demos := []dsgo.Example{
+		{Inputs: map[string]any{"topic": "demo"}, Outputs: map[string]any{"output": "demo output"}},
+	}
 
-	// Note: Refine doesn't have WithHistory method, only these configuration options:
 	refine := dsgo.NewRefine(sig, lm).
 		WithOptions(options).
 		WithAdapter(dsgo.NewJSONAdapter()).
 		WithMaxIterations(3).
-		WithRefinementField("feedback")
+		WithRefinementField("feedback").
+		WithHistory(history).
+		WithDemos(demos)
 
 	result, err := refine.Forward(ctx, map[string]any{"topic": "Test topic"})
 	if err != nil {
@@ -389,6 +394,60 @@ func TestRefine_AllOptions(t *testing.T) {
 }
 
 // TestBestOfN_AllOptions tests all BestOfN configuration options
+func TestRefine_WithHistory_ReadOnlyByDefault(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := ContextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	lm := NewMockLMWithResponse(`{"output": "ok"}`)
+	sig := fixtures.RefineSig()
+
+	history := &dsgo.History{}
+	history.AddUserMessage("previous")
+	history.AddAssistantMessage("previous response")
+	initialLen := history.Len()
+
+	refine := dsgo.NewRefine(sig, lm).WithHistory(history)
+	_, err := refine.Forward(ctx, map[string]any{"topic": "Test topic"})
+	if err != nil {
+		t.Fatalf("Refine.Forward failed: %v", err)
+	}
+
+	if history.Len() != initialLen {
+		t.Fatalf("expected history to be read-only by default: got len=%d want=%d", history.Len(), initialLen)
+	}
+}
+
+func TestRefine_WithHistoryTracking_AppendsToHistory(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := ContextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	lm := NewMockLMWithResponse(`{"output": "ok"}`)
+	sig := fixtures.RefineSig()
+
+	history := &dsgo.History{}
+	refine := dsgo.NewRefine(sig, lm).
+		WithHistory(history).
+		WithHistoryTracking(true)
+
+	_, err := refine.Forward(ctx, map[string]any{"topic": "Test topic"})
+	if err != nil {
+		t.Fatalf("Refine.Forward failed: %v", err)
+	}
+
+	if history.Len() != 2 {
+		t.Fatalf("expected 2 history messages after tracking, got %d", history.Len())
+	}
+	msgs := history.Get()
+	if msgs[0].Role != "user" {
+		t.Fatalf("expected first history message role=user, got %s", msgs[0].Role)
+	}
+	if msgs[1].Role != "assistant" {
+		t.Fatalf("expected second history message role=assistant, got %s", msgs[1].Role)
+	}
+}
+
 func TestBestOfN_AllOptions(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := ContextWithTimeout(15 * time.Second)

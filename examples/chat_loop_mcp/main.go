@@ -14,8 +14,8 @@ import (
 )
 
 type mcpTools struct {
-	Exa  []dsgo.Tool
-	Jina []dsgo.Tool
+	Exa    []dsgo.Tool
+	Tavily []dsgo.Tool
 }
 
 func main() {
@@ -51,7 +51,7 @@ func run(ctx context.Context) error {
 	// Shared conversation history for ReAct (multi-turn chat behavior).
 	history := dsgo.NewHistoryWithLimit(50)
 
-	// Initialize MCP tools from Exa and Jina (if configured).
+	// Initialize MCP tools from Exa and Tavily (if configured).
 	allTools, toolSets := initMCPTools(ctx)
 
 	// Build DSGo signatures and modules.
@@ -68,7 +68,9 @@ func run(ctx context.Context) error {
 	}
 
 	// Answer refiner: takes question + draft_answer (+ sources) and produces final answer.
-	refiner := dsgo.NewRefine(refineSig, lm)
+	refiner := dsgo.NewRefine(refineSig, lm).
+		WithHistory(history).
+		WithDemos(buildRefineDemos())
 
 	// Program pipeline: ReAct (research) -> Refine (polish).
 	program := dsgo.NewProgram("mcp_chat_pipeline").
@@ -84,8 +86,8 @@ func printBanner(modelName string, tools mcpTools) {
 	fmt.Println("DSGo MCP Chat Loop Example")
 	fmt.Printf("Model: %s\n", modelName)
 	fmt.Printf("Exa MCP tools enabled: %v\n", len(tools.Exa) > 0)
-	fmt.Printf("Jina MCP tools enabled: %v\n", len(tools.Jina) > 0)
-	total := len(tools.Exa) + len(tools.Jina)
+	fmt.Printf("Tavily MCP tools enabled: %v\n", len(tools.Tavily) > 0)
+	total := len(tools.Exa) + len(tools.Tavily)
 	fmt.Printf("Total MCP tools: %d\n", total)
 	if total == 0 {
 		fmt.Println("Note: No MCP tools are configured. The assistant will answer from the base model only.")
@@ -94,7 +96,7 @@ func printBanner(modelName string, tools mcpTools) {
 	fmt.Println("Commands: /help, /tools, /history, /exit")
 }
 
-// initMCPTools initializes Exa and Jina MCP clients (if their API keys are set) and
+// initMCPTools initializes Exa and Tavily MCP clients (if their API keys are set) and
 // returns the combined tool list plus per-provider slices for introspection.
 func initMCPTools(ctx context.Context) ([]dsgo.Tool, mcpTools) {
 	var (
@@ -123,22 +125,22 @@ func initMCPTools(ctx context.Context) ([]dsgo.Tool, mcpTools) {
 		}
 	}
 
-	// Jina MCP tools.
-	jinaKey := os.Getenv("JINA_API_KEY")
-	if strings.TrimSpace(jinaKey) == "" {
-		fmt.Fprintln(os.Stderr, "Jina MCP disabled: JINA_API_KEY not set.")
+	// Tavily MCP tools.
+	tavilyKey := os.Getenv("TAVILY_API_KEY")
+	if strings.TrimSpace(tavilyKey) == "" {
+		fmt.Fprintln(os.Stderr, "Tavily MCP disabled: TAVILY_API_KEY not set.")
 	} else {
-		client, err := dsgo.NewMCPJinaClient(jinaKey)
+		client, err := dsgo.NewMCPTavilyClient(tavilyKey)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to create Jina MCP client: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to create Tavily MCP client: %v\n", err)
 		} else if err := client.Initialize(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to initialize Jina MCP client: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to initialize Tavily MCP client: %v\n", err)
 		} else {
 			tools := client.GetTools()
 			if len(tools) == 0 {
-				fmt.Fprintln(os.Stderr, "Jina MCP client returned no tools.")
+				fmt.Fprintln(os.Stderr, "Tavily MCP client returned no tools.")
 			} else {
-				sets.Jina = tools
+				sets.Tavily = tools
 				allTools = append(allTools, tools...)
 			}
 		}
@@ -165,7 +167,22 @@ func buildRefineSignature() *dsgo.Signature {
 		AddInput("question", dsgo.FieldTypeString, "Original user question for this turn.").
 		AddOptionalInput("draft_answer", dsgo.FieldTypeString, "Raw research answer from the agent.").
 		AddOptionalInput("sources", dsgo.FieldTypeJSON, "Optional sources used for the answer.").
+		AddOptionalInput("conversation_context", dsgo.FieldTypeString, "Recent conversation history for context awareness.").
 		AddOutput("answer", dsgo.FieldTypeString, "Final user-facing answer in a conversational tone.")
+}
+
+func buildRefineDemos() []dsgo.Example {
+	return []dsgo.Example{
+		{
+			Inputs: map[string]any{
+				"question":     "What's the weather?",
+				"draft_answer": "Weather data unavailable.",
+			},
+			Outputs: map[string]any{
+				"answer": "I wasn't able to find current weather information. Could you specify a location, or would you like me to try a different approach?",
+			},
+		},
+	}
 }
 
 // chatLoop implements the interactive CLI chat loop and command handling.
@@ -193,9 +210,31 @@ func chatLoop(ctx context.Context, program dsgo.Module, history *dsgo.History, t
 			continue
 		}
 
-		// Normal user question.
+		// Add user message to history before processing so it's available during generation
+		if history != nil {
+			history.AddUserMessage(line)
+		}
+
+		// Normal user question with conversation context.
 		inputs := map[string]any{
 			"question": line,
+		}
+
+		// Add conversation context for the refiner
+		if history != nil && history.Len() > 1 {
+			// Get recent conversation history (excluding the message we just added)
+			recentMsgs := history.GetLast(10) // Get last 10 messages for context
+			if len(recentMsgs) > 1 {
+				// Build conversation context string
+				var contextBuilder strings.Builder
+				contextBuilder.WriteString("Recent conversation history:\n")
+				for _, msg := range recentMsgs[:len(recentMsgs)-1] { // Exclude the current user message
+					if msg.Role == "user" || msg.Role == "assistant" {
+						contextBuilder.WriteString(fmt.Sprintf("%s: %s\n", capitalizeRole(msg.Role), msg.Content))
+					}
+				}
+				inputs["conversation_context"] = contextBuilder.String()
+			}
 		}
 
 		// Per-turn timeout to keep chat responsive.
@@ -228,9 +267,8 @@ func chatLoop(ctx context.Context, program dsgo.Module, history *dsgo.History, t
 
 		fmt.Printf("assistant> %s\n", answer)
 
-		// Add a simple entry to history so future ReAct calls see prior turns.
+		// Add assistant response to history (user message was already added before processing)
 		if history != nil {
-			history.AddUserMessage(line)
 			history.AddAssistantMessage(answer)
 		}
 
@@ -299,7 +337,7 @@ func printHistory(history *dsgo.History, n int) {
 }
 
 func printTools(tools mcpTools) {
-	total := len(tools.Exa) + len(tools.Jina)
+	total := len(tools.Exa) + len(tools.Tavily)
 	if total == 0 {
 		fmt.Println("No MCP tools configured. External web research is disabled.")
 		return
@@ -314,13 +352,13 @@ func printTools(tools mcpTools) {
 		fmt.Println("Exa tools: (none)")
 	}
 
-	if len(tools.Jina) > 0 {
-		fmt.Println("Jina tools:")
-		for _, t := range tools.Jina {
+	if len(tools.Tavily) > 0 {
+		fmt.Println("Tavily tools:")
+		for _, t := range tools.Tavily {
 			fmt.Printf("  - %s: %s\n", t.Name, t.Description)
 		}
 	} else {
-		fmt.Println("Jina tools: (none)")
+		fmt.Println("Tavily tools: (none)")
 	}
 
 	fmt.Printf("Total tools: %d\n", total)
@@ -345,4 +383,17 @@ func printSources(pred *dsgo.Prediction) {
 
 	fmt.Println("sources:")
 	fmt.Println(string(b))
+}
+
+func capitalizeRole(role string) string {
+	switch role {
+	case "user":
+		return "User"
+	case "assistant":
+		return "Assistant"
+	case "system":
+		return "System"
+	default:
+		return role
+	}
 }
