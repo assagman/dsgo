@@ -60,7 +60,7 @@ type CombinerOutput struct {
 	PracticalExercises string `dsgo:"output,desc=Hands-on exercise ideas"`
 }
 
-// CurriculumAgent types
+// CurriculumAgent types - SIMPLIFIED: flat string outputs
 type CurriculumInput struct {
 	UnifiedKnowledge   string `dsgo:"input,desc=Synthesized knowledge base"`
 	LearningObjectives string `dsgo:"input,desc=Target learning objectives"`
@@ -77,86 +77,59 @@ type CurriculumOutput struct {
 	Resources  string `dsgo:"output,desc=Additional learning resources"`
 }
 
-// Data structures for curriculum generation
+// SIMPLIFIED flat data structures - no deep nesting
+
+// Module - flat structure with string content
 type Module struct {
-	ID                 string            `json:"id"`
-	Title              string            `json:"title"`
-	Duration           string            `json:"duration"`
-	Difficulty         string            `json:"difficulty"`
-	LearningObjectives []string          `json:"learningObjectives"`
-	Sections           []Section         `json:"sections"`
-	Quiz               Quiz              `json:"quiz"`
-	PracticalExercise  PracticalExercise `json:"practicalExercise"`
+	ID                 string   `json:"id"`
+	Title              string   `json:"title"`
+	Duration           string   `json:"duration"`
+	Difficulty         string   `json:"difficulty"`
+	LearningObjectives []string `json:"learningObjectives"`
+	Content            string   `json:"content"`   // Main content as markdown/text
+	KeyPoints          []string `json:"keyPoints"` // Key takeaways
+	Warnings           []string `json:"warnings"`  // Common mistakes
+	CodeExamples       string   `json:"codeExamples,omitempty"`
 }
 
-type Section struct {
-	Type      string   `json:"type"`
-	Title     string   `json:"title"`
-	Content   string   `json:"content"`
-	Diagram   string   `json:"diagram,omitempty"`
-	KeyPoints []string `json:"keyPoints,omitempty"`
-	Exercise  any      `json:"exercise,omitempty"`
-}
-
+// Quiz - flat structure
 type Quiz struct {
-	Questions []QuizQuestion `json:"questions"`
+	ModuleID  string   `json:"moduleId"`
+	Title     string   `json:"title"`
+	Questions []string `json:"questions"` // Simple string questions
 }
 
-type QuizQuestion struct {
-	Type        string              `json:"type"`
-	Question    string              `json:"question"`
-	Options     []string            `json:"options,omitempty"`
-	Correct     any                 `json:"correct"`
-	Explanation string              `json:"explanation"`
-	Hints       []string            `json:"hints,omitempty"`
-	Template    string              `json:"template,omitempty"`
-	Answer      string              `json:"answer,omitempty"`
-	Scenario    string              `json:"scenario,omitempty"`
-	Pairs       []map[string]string `json:"pairs,omitempty"`
-	LearnMore   string              `json:"learnMore,omitempty"`
+// Exercise - flat structure
+type Exercise struct {
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Instructions string `json:"instructions"`
+	StarterCode  string `json:"starterCode,omitempty"`
+	Solution     string `json:"solution,omitempty"`
+	Difficulty   string `json:"difficulty"`
 }
 
-type PracticalExercise struct {
-	Type            string         `json:"type"`
-	Title           string         `json:"title"`
-	Instructions    string         `json:"instructions"`
-	StarterCode     string         `json:"starterCode,omitempty"`
-	Solution        string         `json:"solution,omitempty"`
-	Hints           []string       `json:"hints,omitempty"`
-	Validation      string         `json:"validation,omitempty"`
-	Scenario        string         `json:"scenario,omitempty"`
-	Requirements    []string       `json:"requirements,omitempty"`
-	SolutionData    any            `json:"solutionData,omitempty"`
-	ScoringCriteria []string       `json:"scoringCriteria,omitempty"`
-	Parameters      map[string]any `json:"parameters,omitempty"`
-	Calculate       string         `json:"calculate,omitempty"`
-	TeachingPoints  []string       `json:"teachingPoints,omitempty"`
-	Explanation     string         `json:"explanation,omitempty"`
-}
-
+// Challenge - flat structure
 type Challenge struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Description  string   `json:"description"`
-	Type         string   `json:"type"`
-	Duration     string   `json:"duration"`
-	Difficulty   string   `json:"difficulty"`
-	Requirements []string `json:"requirements"`
-	Solution     any      `json:"solution"`
-	Scoring      []string `json:"scoring"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Difficulty  string   `json:"difficulty"`
+	Duration    string   `json:"duration"`
+	Goals       []string `json:"goals"`
 }
 
+// GlossaryEntry - simple key-value
 type GlossaryEntry struct {
 	Term       string `json:"term"`
 	Definition string `json:"definition"`
-	Category   string `json:"category"`
 }
 
+// Resource - simple link
 type Resource struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Type  string `json:"type"`
 }
 
 // Research pipeline data structures
@@ -169,36 +142,36 @@ type ResearchFindings struct {
 }
 
 type Curriculum struct {
-	Modules         []Module            `json:"modules"`
-	Quizzes         []Quiz              `json:"quizzes"`
-	Exercises       []PracticalExercise `json:"exercises"`
-	Challenges      []Challenge         `json:"challenges"`
-	Glossary        []GlossaryEntry     `json:"glossary"`
-	Resources       []Resource          `json:"resources"`
-	GeneratedAt     time.Time           `json:"generatedAt"`
-	ResearchSources []string            `json:"researchSources"`
-	Topic           string              `json:"topic"`
-	SkillLevel      string              `json:"skillLevel"`
-	EstimatedTime   string              `json:"estimatedTime"`
+	Modules         []Module        `json:"modules"`
+	Quizzes         []Quiz          `json:"quizzes"`
+	Exercises       []Exercise      `json:"exercises"`
+	Challenges      []Challenge     `json:"challenges"`
+	Glossary        []GlossaryEntry `json:"glossary"`
+	Resources       []Resource      `json:"resources"`
+	GeneratedAt     time.Time       `json:"generatedAt"`
+	ResearchSources []string        `json:"researchSources"`
+	Topic           string          `json:"topic"`
+	SkillLevel      string          `json:"skillLevel"`
+	EstimatedTime   string          `json:"estimatedTime"`
 }
 
 // Report configuration
 type ReportConfig struct {
-	Title            string              `json:"title"`
-	Topic            string              `json:"topic"`
-	SkillLevel       string              `json:"skillLevel"`
-	EstimatedTime    string              `json:"estimatedTime"`
-	Modules          []Module            `json:"modules"`
-	Quizzes          []Quiz              `json:"quizzes"`
-	Exercises        []PracticalExercise `json:"exercises"`
-	Challenges       []Challenge         `json:"challenges"`
-	Glossary         []GlossaryEntry     `json:"glossary"`
-	Resources        []Resource          `json:"resources"`
-	GeneratedAt      time.Time           `json:"generatedAt"`
-	ResearchSources  []string            `json:"researchSources"`
-	ReportTitle      string              `json:"reportTitle"`
-	ReportDate       string              `json:"reportDate"`
-	Author           string              `json:"author"`
-	ExecutiveSummary string              `json:"executiveSummary"`
-	KeyTakeaways     []string            `json:"keyTakeaways"`
+	Title            string          `json:"title"`
+	Topic            string          `json:"topic"`
+	SkillLevel       string          `json:"skillLevel"`
+	EstimatedTime    string          `json:"estimatedTime"`
+	Modules          []Module        `json:"modules"`
+	Quizzes          []Quiz          `json:"quizzes"`
+	Exercises        []Exercise      `json:"exercises"`
+	Challenges       []Challenge     `json:"challenges"`
+	Glossary         []GlossaryEntry `json:"glossary"`
+	Resources        []Resource      `json:"resources"`
+	GeneratedAt      time.Time       `json:"generatedAt"`
+	ResearchSources  []string        `json:"researchSources"`
+	ReportTitle      string          `json:"reportTitle"`
+	ReportDate       string          `json:"reportDate"`
+	Author           string          `json:"author"`
+	ExecutiveSummary string          `json:"executiveSummary"`
+	KeyTakeaways     []string        `json:"keyTakeaways"`
 }

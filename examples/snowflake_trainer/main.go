@@ -539,10 +539,10 @@ func generateCurriculum(ctx context.Context, lm dsgo.LM, research *types.Researc
 		return nil, fmt.Errorf("curriculum agent failed: %w", err)
 	}
 
-	// Parse JSON outputs
+	// Parse JSON outputs with simplified flat types
 	var modules []types.Module
 	var quizzes []types.Quiz
-	var exercises []types.PracticalExercise
+	var exercises []types.Exercise
 	var challenges []types.Challenge
 	var glossary []types.GlossaryEntry
 	var resources []types.Resource
@@ -568,7 +568,6 @@ func generateCurriculum(ctx context.Context, lm dsgo.LM, research *types.Researc
 				glossary = append(glossary, types.GlossaryEntry{
 					Term:       term,
 					Definition: def,
-					Category:   "General",
 				})
 			}
 		}
@@ -580,10 +579,9 @@ func generateCurriculum(ctx context.Context, lm dsgo.LM, research *types.Researc
 		if err2 := parseJSONField(result, "resources", &urls); err2 == nil {
 			for _, u := range urls {
 				resources = append(resources, types.Resource{
-					Title:       "Resource",
-					URL:         u,
-					Type:        "Link",
-					Description: "Reference link",
+					Title: "Resource",
+					URL:   u,
+					Type:  "Link",
 				})
 			}
 		}
