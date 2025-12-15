@@ -113,7 +113,8 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 	if o.Cache != nil {
 		cacheKey := core.GenerateCacheKey(o.Model, messages, options)
 		if cached, ok := o.Cache.Get(cacheKey); ok {
-			return cached, nil
+			// Mark as cache hit and clear usage (no API call was made)
+			return core.MarkCacheHit(cached), nil
 		}
 	}
 

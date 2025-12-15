@@ -825,8 +825,13 @@ func TestOpenAI_Generate_CacheHit(t *testing.T) {
 	if result.Content != "cached response" {
 		t.Errorf("expected cached content, got %s", result.Content)
 	}
-	if result.Usage.PromptTokens != 5 {
-		t.Errorf("expected 5 prompt tokens, got %d", result.Usage.PromptTokens)
+	// Cache hits should have CacheHit=true and Usage cleared (DSPy pattern)
+	if !result.CacheHit {
+		t.Errorf("expected CacheHit=true, got false")
+	}
+	// Usage should be cleared for cache hits since no API call was made
+	if result.Usage.PromptTokens != 0 {
+		t.Errorf("expected 0 prompt tokens for cache hit, got %d", result.Usage.PromptTokens)
 	}
 }
 

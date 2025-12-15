@@ -19,7 +19,7 @@ func main() {
 		return
 	}
 
-	// Create LM
+	// Create LM (caching is enabled by default - memory + disk)
 	lm, err := dsgo.NewLM(context.Background(), "openrouter/google/gemini-2.5-flash")
 	if err != nil {
 		log.Fatalf("Failed to create LM: %v", err)

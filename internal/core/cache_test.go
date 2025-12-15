@@ -1464,3 +1464,139 @@ func TestGenerateCacheKey_ProviderParams(t *testing.T) {
 		t.Error("Cache key should not be empty with empty ProviderParams")
 	}
 }
+
+// TestGenerateCacheKey_IgnoredArgs tests that sensitive fields are ignored in cache key
+func TestGenerateCacheKey_IgnoredArgs(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	// Options with api_key in ProviderParams
+	options1 := DefaultGenerateOptions()
+	options1.ProviderParams = map[string]any{
+		"api_key":  "secret-key-123",
+		"api_base": "https://api.example.com",
+		"model":    "gpt-4",
+	}
+
+	// Options without sensitive fields
+	options2 := DefaultGenerateOptions()
+	options2.ProviderParams = map[string]any{
+		"model": "gpt-4",
+	}
+
+	key1 := GenerateCacheKey("gpt-4", messages, options1)
+	key2 := GenerateCacheKey("gpt-4", messages, options2)
+
+	// Keys should be the same because api_key and api_base are ignored
+	if key1 != key2 {
+		t.Error("Expected same key when ignoring api_key and api_base")
+	}
+}
+
+// TestGenerateCacheKeyWithIgnored tests custom ignored fields
+func TestGenerateCacheKeyWithIgnored(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "test"}}
+
+	options1 := DefaultGenerateOptions()
+	options1.ProviderParams = map[string]any{
+		"custom_field": "value1",
+		"model":        "gpt-4",
+	}
+
+	options2 := DefaultGenerateOptions()
+	options2.ProviderParams = map[string]any{
+		"custom_field": "value2",
+		"model":        "gpt-4",
+	}
+
+	// With custom_field NOT ignored, keys should differ
+	key1 := GenerateCacheKeyWithIgnored("gpt-4", messages, options1, nil)
+	key2 := GenerateCacheKeyWithIgnored("gpt-4", messages, options2, nil)
+	if key1 == key2 {
+		t.Error("Expected different keys when custom_field is not ignored")
+	}
+
+	// With custom_field ignored, keys should match
+	ignored := []string{"custom_field"}
+	key3 := GenerateCacheKeyWithIgnored("gpt-4", messages, options1, ignored)
+	key4 := GenerateCacheKeyWithIgnored("gpt-4", messages, options2, ignored)
+	if key3 != key4 {
+		t.Error("Expected same key when custom_field is ignored")
+	}
+}
+
+// TestDefaultIgnoredCacheKeyArgs tests the default ignored fields list
+func TestDefaultIgnoredCacheKeyArgs(t *testing.T) {
+	expected := []string{"api_key", "api_base", "base_url", "apiKey", "apiBase", "baseUrl"}
+	if len(DefaultIgnoredCacheKeyArgs) != len(expected) {
+		t.Errorf("Expected %d default ignored args, got %d", len(expected), len(DefaultIgnoredCacheKeyArgs))
+	}
+
+	for i, arg := range expected {
+		if DefaultIgnoredCacheKeyArgs[i] != arg {
+			t.Errorf("Expected '%s' at index %d, got '%s'", arg, i, DefaultIgnoredCacheKeyArgs[i])
+		}
+	}
+}
+
+// TestMarkCacheHit tests the cache hit marking function
+func TestMarkCacheHit(t *testing.T) {
+	result := &GenerateResult{
+		Content: "test response",
+		Usage: Usage{
+			PromptTokens:     100,
+			CompletionTokens: 50,
+			TotalTokens:      150,
+		},
+		CacheHit: false,
+	}
+
+	marked := MarkCacheHit(result)
+
+	if !marked.CacheHit {
+		t.Error("Expected CacheHit to be true")
+	}
+
+	// Usage should be cleared (no API call was made)
+	if marked.Usage.TotalTokens != 0 {
+		t.Errorf("Expected Usage to be cleared, got %d total tokens", marked.Usage.TotalTokens)
+	}
+}
+
+// TestMarkCacheHit_Nil tests MarkCacheHit with nil input
+func TestMarkCacheHit_Nil(t *testing.T) {
+	result := MarkCacheHit(nil)
+	if result != nil {
+		t.Error("Expected nil result for nil input")
+	}
+}
+
+// TestGenerateResult_CacheHit tests CacheHit field in GenerateResult
+func TestGenerateResult_CacheHit(t *testing.T) {
+	result := &GenerateResult{
+		Content:  "test",
+		CacheHit: false,
+	}
+
+	if result.CacheHit {
+		t.Error("Initial CacheHit should be false")
+	}
+
+	result.CacheHit = true
+	if !result.CacheHit {
+		t.Error("CacheHit should be true after setting")
+	}
+}
+
+// TestDeepCopyResult_CacheHit tests that CacheHit is preserved in deep copy
+func TestDeepCopyResult_CacheHit(t *testing.T) {
+	original := &GenerateResult{
+		Content:  "test",
+		CacheHit: true,
+	}
+
+	copied := deepCopyResult(original)
+
+	if !copied.CacheHit {
+		t.Error("CacheHit should be preserved in deep copy")
+	}
+}

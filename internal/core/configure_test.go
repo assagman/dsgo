@@ -339,8 +339,8 @@ func TestWithCacheTTL_UpdatesTTL(t *testing.T) {
 	}
 }
 
-// TestWithCacheTTL_WithoutExistingCache tests setting TTL without an existing cache
-func TestWithCacheTTL_WithoutExistingCache(t *testing.T) {
+// TestWithCacheTTL_WithDefaultCache tests setting TTL with the default cache
+func TestWithCacheTTL_WithDefaultCache(t *testing.T) {
 	ResetConfig()
 	defer ResetConfig()
 
@@ -351,9 +351,9 @@ func TestWithCacheTTL_WithoutExistingCache(t *testing.T) {
 	if settings.CacheTTL != ttl {
 		t.Errorf("expected TTL to be set to %v, got %v", ttl, settings.CacheTTL)
 	}
-	// Cache should not be created if only TTL is set
-	if settings.DefaultCache != nil {
-		t.Error("expected cache to not be created when only TTL is set")
+	// Cache is created by default now (DSPy parity)
+	if settings.DefaultCache == nil {
+		t.Error("expected default cache to exist")
 	}
 }
 

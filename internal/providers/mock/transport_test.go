@@ -9,6 +9,11 @@ import (
 )
 
 func TestMockHTTP_Generate_WithScriptedTransport_NoBaseURL(t *testing.T) {
+	// Disable caching to ensure mock transport is used
+	t.Setenv("DSGO_CACHE", "false")
+	core.ResetConfig()
+	t.Cleanup(core.ResetConfig)
+
 	st := NewScriptedTransport(HTTPResponseStep{Body: `{
 		"choices": [{
 			"index": 0,
@@ -54,6 +59,11 @@ func TestMockHTTP_Generate_WithScriptedTransport_NoBaseURL(t *testing.T) {
 }
 
 func TestMockHTTP_Stream_WithScriptedTransport_NoBaseURL(t *testing.T) {
+	// Disable caching to ensure mock transport is used
+	t.Setenv("DSGO_CACHE", "false")
+	core.ResetConfig()
+	t.Cleanup(core.ResetConfig)
+
 	st := NewScriptedTransport(HTTPResponseStep{Header: map[string][]string{"Content-Type": {"text/event-stream"}}, Body: "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":\"\"}]}\n\n" +
 		"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\" world\"},\"finish_reason\":\"\"}]}\n\n" +
 		"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}\n\n" +

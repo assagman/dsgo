@@ -417,6 +417,11 @@ func getMaxFilesFromEnv() int {
 func main() {
 	ctx := context.Background()
 
+	// Note: Caching is enabled by default in dsgo with project-specific directories.
+	// Each project gets its own cache folder at ~/.dsgo_cache/proj_<hash>/
+	// This benefits retry loops (same file content = cache hit) and re-runs.
+	// To disable: DSGO_CACHE=false or dsgo.Configure(dsgo.WithCache(0))
+
 	// Initialize LM
 	lm, err := dsgo.NewLM(ctx, ScanModel)
 	if err != nil {

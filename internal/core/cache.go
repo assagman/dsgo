@@ -91,6 +91,17 @@ func NewLMCacheWithTTL(capacity int, ttl time.Duration) *LMCache {
 	}
 }
 
+// MarkCacheHit marks a result as served from cache and clears usage stats (following DSPy pattern).
+// This should be called on results returned from cache to accurately reflect that no API call was made.
+func MarkCacheHit(result *GenerateResult) *GenerateResult {
+	if result == nil {
+		return nil
+	}
+	result.CacheHit = true
+	result.Usage = Usage{} // Clear usage since no API call was made
+	return result
+}
+
 // Get retrieves a cached result by key
 // Returns a deep copy to prevent mutation of cached data
 func (c *LMCache) Get(key string) (*GenerateResult, bool) {
@@ -252,6 +263,17 @@ func (c *LMCache) Stats() CacheStats {
 	}
 }
 
+// DefaultIgnoredCacheKeyArgs are fields that are ignored when generating cache keys.
+// These match DSPy's default ignored fields for cache key generation.
+var DefaultIgnoredCacheKeyArgs = []string{
+	"api_key",
+	"api_base",
+	"base_url",
+	"apiKey",
+	"apiBase",
+	"baseUrl",
+}
+
 // GenerateCacheKey creates a deterministic cache key from LM request parameters
 //
 // Cache key components (all affect cache key generation):
@@ -262,11 +284,20 @@ func (c *LMCache) Stats() CacheStats {
 //   - Stop sequences (canonicalized/sorted)
 //   - Tools and ToolChoice (function calling)
 //   - FrequencyPenalty, PresencePenalty (repetition controls)
-//   - ProviderParams (provider-specific parameters)
+//   - ProviderParams (provider-specific parameters, excluding ignored fields)
 //
 // Maps (ResponseSchema, Tool.Parameters, ProviderParams) are canonicalized to ensure
 // deterministic key generation regardless of insertion order.
+//
+// By default, sensitive fields like api_key, api_base, base_url are ignored
+// (following DSPy's pattern) to ensure cache hits across different API configurations.
 func GenerateCacheKey(lmName string, messages []Message, options *GenerateOptions) string {
+	return GenerateCacheKeyWithIgnored(lmName, messages, options, DefaultIgnoredCacheKeyArgs)
+}
+
+// GenerateCacheKeyWithIgnored creates a cache key while ignoring specified fields.
+// This allows customization of which fields are excluded from the cache key.
+func GenerateCacheKeyWithIgnored(lmName string, messages []Message, options *GenerateOptions, ignoredArgs []string) string {
 	// Build a deterministic representation
 	keyData := struct {
 		LMName           string
@@ -322,11 +353,14 @@ func GenerateCacheKey(lmName string, messages []Message, options *GenerateOption
 		}
 	}
 
-	// Canonicalize ProviderParams map
+	// Canonicalize ProviderParams map (excluding ignored args)
 	if options.ProviderParams != nil {
-		canonical, err := canonicalizeMap(options.ProviderParams)
-		if err == nil {
-			keyData.ProviderParams = canonical
+		filteredParams := filterIgnoredArgs(options.ProviderParams, ignoredArgs)
+		if len(filteredParams) > 0 {
+			canonical, err := canonicalizeMap(filteredParams)
+			if err == nil {
+				keyData.ProviderParams = canonical
+			}
 		}
 	}
 
@@ -347,6 +381,26 @@ type canonicalTool struct {
 	Name        string
 	Description string
 	Parameters  []ToolParameter // Tool parameters (already deterministic)
+}
+
+// filterIgnoredArgs removes ignored keys from a map
+func filterIgnoredArgs(m map[string]any, ignoredArgs []string) map[string]any {
+	if m == nil || len(ignoredArgs) == 0 {
+		return m
+	}
+
+	ignored := make(map[string]bool, len(ignoredArgs))
+	for _, arg := range ignoredArgs {
+		ignored[arg] = true
+	}
+
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		if !ignored[k] {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 // canonicalizeMap converts a map to a deterministic JSON string
@@ -398,6 +452,7 @@ func deepCopyResult(r *GenerateResult) *GenerateResult {
 		Content:      r.Content,
 		FinishReason: r.FinishReason,
 		Usage:        r.Usage, // Usage is a value type, automatically copied
+		CacheHit:     r.CacheHit,
 	}
 
 	// Deep copy ToolCalls slice

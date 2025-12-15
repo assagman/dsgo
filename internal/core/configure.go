@@ -143,6 +143,57 @@ func WithCacheTTL(ttl time.Duration) Option {
 	}
 }
 
+// WithDiskCache enables disk caching with the specified directory.
+// If dir is empty, uses ~/.dsgo_cache as default.
+// This creates a two-tier cache (memory + disk) following DSPy's pattern.
+func WithDiskCache(dir string) Option {
+	return func(s *Settings) {
+		s.CacheConfig.EnableDisk = true
+		s.CacheConfig.DiskDir = dir
+	}
+}
+
+// WithDiskCacheSizeLimit sets the maximum size of disk cache in bytes.
+// Default is 30GB (matching DSPy).
+func WithDiskCacheSizeLimit(limit int64) Option {
+	return func(s *Settings) {
+		s.CacheConfig.DiskSizeLimit = limit
+	}
+}
+
+// WithMemoryCache sets the memory cache capacity.
+// Default is 1000 entries.
+func WithMemoryCache(capacity int) Option {
+	return func(s *Settings) {
+		s.CacheConfig.EnableMemory = true
+		s.CacheConfig.MemoryCapacity = capacity
+	}
+}
+
+// WithTieredCache creates a two-tier cache (memory + disk) with the given options.
+// This is the recommended way to configure caching for production use.
+// Memory cache provides fast access, disk cache provides persistence across restarts.
+func WithTieredCache(opts *TieredCacheOptions) Option {
+	return func(s *Settings) {
+		if opts == nil {
+			opts = DefaultTieredCacheOptions()
+		}
+
+		s.CacheConfig.EnableMemory = opts.EnableMemory
+		s.CacheConfig.MemoryCapacity = opts.MemoryCapacity
+		s.CacheConfig.EnableDisk = opts.EnableDisk
+		s.CacheConfig.DiskDir = opts.DiskDir
+		s.CacheConfig.DiskSizeLimit = opts.DiskSizeLimit
+		s.CacheConfig.DiskShards = opts.DiskShards
+
+		// Create the tiered cache
+		cache, err := NewTieredCache(opts)
+		if err == nil {
+			s.DefaultCache = cache
+		}
+	}
+}
+
 // ResetConfig resets all settings to their default values.
 func ResetConfig() {
 	globalSettings.Reset()
