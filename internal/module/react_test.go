@@ -232,7 +232,7 @@ func TestReAct_RunExtract_Success(t *testing.T) {
 	}
 	inputs := map[string]any{"question": "test"}
 
-	pred, err := react.runExtract(context.Background(), messages, inputs)
+	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
 	if err != nil {
 		t.Fatalf("runExtract() error = %v", err)
 	}
@@ -267,7 +267,7 @@ func TestReAct_RunExtract_FallbackToDirectJSON(t *testing.T) {
 	messages := []core.Message{{Role: "user", Content: "test"}}
 	inputs := map[string]any{"question": "test"}
 
-	pred, err := react.runExtract(context.Background(), messages, inputs)
+	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
 	if err != nil {
 		t.Fatalf("runExtract() error = %v", err)
 	}
@@ -298,7 +298,7 @@ func TestReAct_RunExtract_FallbackToTextExtraction(t *testing.T) {
 	messages := []core.Message{{Role: "user", Content: "test"}}
 	inputs := map[string]any{"question": "test"}
 
-	pred, err := react.runExtract(context.Background(), messages, inputs)
+	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
 	// Should succeed using extractTextOutputs as last resort
 	if err != nil {
 		t.Fatalf("runExtract() should succeed with text extraction, got error: %v", err)
@@ -327,7 +327,7 @@ func TestReAct_RunExtract_GenerationError(t *testing.T) {
 	messages := []core.Message{{Role: "user", Content: "test"}}
 	inputs := map[string]any{"question": "test"}
 
-	_, err := react.runExtract(context.Background(), messages, inputs)
+	_, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
 	if err == nil {
 		t.Fatal("runExtract() should fail when generation fails")
 	}
@@ -359,7 +359,7 @@ func TestReAct_RunExtract_CompleteFailure(t *testing.T) {
 	inputs := map[string]any{"question": "test"}
 
 	// Even with invalid JSON, extractTextOutputs will extract something
-	pred, err := react.runExtract(context.Background(), messages, inputs)
+	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
 	if err != nil {
 		t.Fatalf("runExtract() should succeed with text extraction fallback, got error: %v", err)
 	}
@@ -390,7 +390,7 @@ func TestReAct_RunExtract_WithReasoningField(t *testing.T) {
 	messages := []core.Message{{Role: "user", Content: "test"}}
 	inputs := map[string]any{"question": "test"}
 
-	pred, err := react.runExtract(context.Background(), messages, inputs)
+	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
 	if err != nil {
 		t.Fatalf("runExtract() error = %v", err)
 	}
@@ -1619,5 +1619,176 @@ func TestReAct_WithMethods(t *testing.T) {
 	}
 	if len(react.Demos) != 1 {
 		t.Error("WithDemos should set demos")
+	}
+}
+
+// TestReAct_UsageAccumulation tests that usage (tokens, cost, latency) accumulates correctly across multiple iterations
+func TestReAct_UsageAccumulation(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	callCount := 0
+	lm := &MockLM{
+		SupportsToolsVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			if callCount == 1 {
+				// First iteration with tool call
+				return &core.GenerateResult{
+					Content: "Let me search",
+					ToolCalls: []core.ToolCall{
+						{ID: "1", Name: "search", Arguments: map[string]interface{}{"query": "test"}},
+					},
+					Usage: core.Usage{
+						PromptTokens:     100,
+						CompletionTokens: 50,
+						TotalTokens:      150,
+						Cost:             0.001,
+						Latency:          500 * 1_000_000, // 500ms in nanoseconds
+					},
+				}, nil
+			}
+			// Second iteration with final answer
+			return &core.GenerateResult{
+				Content: `{"answer": "final answer"}`,
+				Usage: core.Usage{
+					PromptTokens:     200,
+					CompletionTokens: 100,
+					TotalTokens:      300,
+					Cost:             0.002,
+					Latency:          600 * 1_000_000, // 600ms in nanoseconds
+				},
+			}, nil
+		},
+	}
+
+	searchTool := core.NewTool("search", "Search for info", func(ctx context.Context, args map[string]any) (any, error) {
+		return "search result", nil
+	})
+
+	react := NewReAct(sig, lm, []core.Tool{*searchTool})
+	pred, err := react.Forward(context.Background(), map[string]interface{}{
+		"question": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	// Verify usage accumulation across 2 iterations
+	expectedPromptTokens := 100 + 200    // First + second iteration
+	expectedCompletionTokens := 50 + 100 // First + second iteration
+	expectedTotalTokens := 150 + 300     // First + second iteration
+	expectedCost := 0.001 + 0.002        // First + second iteration
+	expectedLatency := 500 + 600         // Sum of latencies (in milliseconds)
+
+	if pred.Usage.PromptTokens != expectedPromptTokens {
+		t.Errorf("PromptTokens: expected %d, got %d", expectedPromptTokens, pred.Usage.PromptTokens)
+	}
+	if pred.Usage.CompletionTokens != expectedCompletionTokens {
+		t.Errorf("CompletionTokens: expected %d, got %d", expectedCompletionTokens, pred.Usage.CompletionTokens)
+	}
+	if pred.Usage.TotalTokens != expectedTotalTokens {
+		t.Errorf("TotalTokens: expected %d, got %d", expectedTotalTokens, pred.Usage.TotalTokens)
+	}
+	if pred.Usage.Cost != expectedCost {
+		t.Errorf("Cost: expected %.6f, got %.6f", expectedCost, pred.Usage.Cost)
+	}
+	expectedLatencyNs := int64(expectedLatency) * 1_000_000
+	if pred.Usage.Latency != expectedLatencyNs {
+		t.Errorf("Latency: expected %d ns (%.2fms), got %d ns (%.2fms)",
+			expectedLatencyNs, float64(expectedLatencyNs)/1_000_000,
+			pred.Usage.Latency, float64(pred.Usage.Latency)/1_000_000)
+	}
+}
+
+// TestReAct_ToolsSliceNotMutated tests that the caller's tools slice is not mutated by NewReAct
+func TestReAct_ToolsSliceNotMutated(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{}
+
+	// Create tools slice with specific capacity to detect append mutation
+	originalTools := make([]core.Tool, 1, 10) // capacity > len to allow in-place append
+	searchTool := core.NewTool("search", "Search for info", func(ctx context.Context, args map[string]any) (any, error) {
+		return "result", nil
+	})
+	originalTools[0] = *searchTool
+
+	// Capture original length
+	originalLen := len(originalTools)
+
+	// Create ReAct which auto-injects finish tool
+	_ = NewReAct(sig, lm, originalTools)
+
+	// Verify caller's slice was NOT modified
+	if len(originalTools) != originalLen {
+		t.Errorf("Caller's tools slice was mutated: expected len %d, got %d", originalLen, len(originalTools))
+	}
+
+	// Verify finish tool was NOT appended to caller's slice
+	for _, tool := range originalTools {
+		if strings.ToLower(tool.Name) == "finish" {
+			t.Error("Finish tool should not appear in caller's original tools slice")
+		}
+	}
+}
+
+// TestReAct_NonToolLM_NoToolsPassedInFinalMode tests that tools are not passed to LMs that don't support them in final mode
+func TestReAct_NonToolLM_NoToolsPassedInFinalMode(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Answer question").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	var finalModeOptions *core.GenerateOptions
+	callCount := 0
+	lm := &MockLM{
+		SupportsToolsVal: false, // LM does NOT support tools
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			if callCount == 1 {
+				// First call: return something that doesn't parse well to trigger iteration
+				return &core.GenerateResult{
+					Content: "I need to think about this...",
+				}, nil
+			}
+			if callCount == 2 {
+				// Second call: still no good answer, will trigger final mode
+				return &core.GenerateResult{
+					Content: "Still thinking...",
+				}, nil
+			}
+			// Third call onward: final mode - capture options here
+			finalModeOptions = options
+			return &core.GenerateResult{
+				Content: `{"answer": "final answer"}`,
+			}, nil
+		},
+	}
+
+	searchTool := core.NewTool("search", "Search for info", func(ctx context.Context, args map[string]any) (any, error) {
+		return "result", nil
+	})
+
+	react := NewReAct(sig, lm, []core.Tool{*searchTool}).WithMaxIterations(4)
+	_, err := react.Forward(context.Background(), map[string]any{"question": "test"})
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	// Verify final mode options: tools should NOT be passed since LM doesn't support them
+	if finalModeOptions != nil {
+		if len(finalModeOptions.Tools) > 0 {
+			t.Errorf("Tools should not be passed to non-tool LM in final mode, got %d tools", len(finalModeOptions.Tools))
+		}
+		if finalModeOptions.ToolChoice == "none" {
+			t.Errorf("ToolChoice should not be 'none' for non-tool LM, got %q", finalModeOptions.ToolChoice)
+		}
 	}
 }

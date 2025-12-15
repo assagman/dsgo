@@ -32,11 +32,29 @@ type ReAct struct {
 }
 
 // NewReAct creates a new ReAct module
+//
+// Panics if signature or lm is nil to fail fast on invalid configuration.
+// ReAct instances are not safe for concurrent use. For parallel execution,
+// call Clone() per concurrent worker and configure each clone before use.
 func NewReAct(signature *core.Signature, lm core.LM, tools []core.Tool) *ReAct {
+	if signature == nil {
+		panic("NewReAct: signature cannot be nil")
+	}
+	if lm == nil {
+		panic("NewReAct: LM cannot be nil")
+	}
+	if tools == nil {
+		tools = []core.Tool{}
+	}
+
+	// Clone tools slice to avoid mutating caller's backing array when appending finish tool
+	clonedTools := make([]core.Tool, len(tools))
+	copy(clonedTools, tools)
+
 	r := &ReAct{
 		Signature:     signature,
 		LM:            lm,
-		Tools:         tools,
+		Tools:         clonedTools,
 		Options:       core.DefaultGenerateOptions(),
 		Adapter:       core.NewFallbackAdapter(),
 		MaxIterations: MaxReActIterations,
@@ -53,8 +71,13 @@ func NewReAct(signature *core.Signature, lm core.LM, tools []core.Tool) *ReAct {
 }
 
 // WithOptions sets custom generation options
+// If nil is passed, defaults are used
 func (r *ReAct) WithOptions(options *core.GenerateOptions) *ReAct {
-	r.Options = options
+	if options == nil {
+		r.Options = core.DefaultGenerateOptions()
+	} else {
+		r.Options = options
+	}
 	return r
 }
 
@@ -141,8 +164,20 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 	var lastObservation string
 	var finalMode bool
 
+	// Track total usage across all iterations for accurate billing/monitoring
+	totalUsage := core.Usage{}
+
+	// Track whether history has been updated to avoid duplicate entries
+	historyUpdated := false
+
 	// ReAct loop: Thought -> Action -> Observation
 	for i := 0; i < r.MaxIterations; i++ {
+		// Check for context cancellation before each iteration
+		if err := ctx.Err(); err != nil {
+			predErr = fmt.Errorf("context canceled before iteration %d: %w", i+1, err)
+			return nil, predErr
+		}
+
 		if r.Verbose {
 			fmt.Printf("\n=== ReAct Iteration %d ===\n", i+1)
 		}
@@ -166,8 +201,14 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 		// for providers that require tool definitions when conversation has tool history
 		// (e.g., Amazon Bedrock requires toolConfig when toolUse/toolResult blocks exist)
 		if finalMode {
-			options.Tools = r.Tools // Keep tools available for provider validation
-			options.ToolChoice = "none"
+			// Only pass tools if LM supports them to avoid confusing non-tool LMs
+			if r.LM.SupportsTools() && r.hasRealTools() {
+				options.Tools = r.Tools
+				options.ToolChoice = "none"
+			} else {
+				options.Tools = nil
+				options.ToolChoice = ""
+			}
 
 			// Inject user message to prompt for final answer
 			finalPrompt := r.buildFinalAnswerPrompt()
@@ -218,6 +259,14 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 			return nil, predErr
 		}
 
+		// Accumulate usage across iterations for accurate total tracking
+		totalUsage.PromptTokens += result.Usage.PromptTokens
+		totalUsage.CompletionTokens += result.Usage.CompletionTokens
+		totalUsage.TotalTokens += result.Usage.TotalTokens
+		totalUsage.Cost += result.Usage.Cost
+		// For sequential iterations, sum the latencies
+		totalUsage.Latency += result.Usage.Latency
+
 		// Implicit Finish: model chose direct answer over tools.
 		// When using native tool calling APIs, no tool calls = intentional direct answer.
 		// This is architecturally correct for LangChain/LlamaIndex-style native tool calling.
@@ -235,7 +284,9 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 			if err != nil {
 				// Safeguard: guide model to use tools if parse fails early.
 				// In early iterations, nudge the model to use tools instead of accepting malformed output.
-				if !finalMode && i < r.MaxIterations-2 {
+				// Only do this if the LM actually supports tools and we have real tools available.
+				hasRealTools := r.hasRealTools()
+				if !finalMode && i < r.MaxIterations-2 && hasRealTools && r.LM.SupportsTools() {
 					if r.Verbose {
 						fmt.Println("⚠️  Parsing failed and tools available - requesting tool use")
 					}
@@ -256,7 +307,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 						fmt.Println("⚠️  Final answer parsing failed - running extraction")
 					}
 					var res *core.Prediction
-					res, predErr = r.runExtract(ctx, messages, inputs)
+					res, predErr = r.runExtract(ctx, messages, inputs, newMessages, totalUsage, historyUpdated)
 					return res, predErr
 				}
 
@@ -274,7 +325,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 						fmt.Println("⚠️  All parsing failed - running extraction")
 					}
 					var res *core.Prediction
-					res, predErr = r.runExtract(ctx, messages, inputs)
+					res, predErr = r.runExtract(ctx, messages, inputs, newMessages, totalUsage, historyUpdated)
 					return res, predErr
 				}
 			}
@@ -285,14 +336,14 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 			// Apply output normalization
 			outputs = core.NormalizeOutputKeys(r.Signature, outputs)
 
-			// Use partial validation to allow missing optional fields
+			// Validate outputs; if validation fails, fall back to extraction
 			if err := r.Signature.ValidateOutputs(outputs); err != nil {
 				// Validation failed - try extraction as fallback
 				if r.Verbose {
 					fmt.Printf("⚠️  Output validation failed: %v - running extraction\n", err)
 				}
 				var res *core.Prediction
-				res, predErr = r.runExtract(ctx, messages, inputs)
+				res, predErr = r.runExtract(ctx, messages, inputs, newMessages, totalUsage, historyUpdated)
 				return res, predErr
 			}
 
@@ -309,7 +360,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				}
 			}
 
-			// Update history if present
+			// Update history if present (only here since we return immediately after)
 			if r.History != nil {
 				// Add only the new user message(s) (not from history)
 				for _, msg := range newMessages {
@@ -325,10 +376,10 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				})
 			}
 
-			// Build Prediction object
+			// Build Prediction object with accumulated usage from all iterations
 			prediction := core.NewPrediction(outputs).
 				WithRationale(rationale).
-				WithUsage(result.Usage).
+				WithUsage(totalUsage).
 				WithModuleName(logging.ModuleReAct).
 				WithInputs(inputs)
 
@@ -368,6 +419,10 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				outputs := make(map[string]any)
 				maps.Copy(outputs, toolCall.Arguments)
 
+				// Apply type coercion and normalization for consistency with direct answer path
+				outputs = coerceBasicTypes(r.Signature, outputs)
+				outputs = core.NormalizeOutputKeys(r.Signature, outputs)
+
 				// Validate outputs match signature
 				if err := r.Signature.ValidateOutputs(outputs); err != nil {
 					// If finish tool args don't match signature, continue and let model try again
@@ -384,9 +439,23 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 					continue
 				}
 
-				// Build prediction and return
+				// Update history with final answer for multi-turn consistency (only here since we return immediately after)
+				if r.History != nil {
+					for _, msg := range newMessages {
+						if msg.Role == "user" {
+							r.History.Add(msg)
+						}
+					}
+					contentBytes, _ := json.Marshal(outputs)
+					r.History.Add(core.Message{
+						Role:    "assistant",
+						Content: string(contentBytes),
+					})
+				}
+
+				// Build prediction and return with accumulated usage
 				prediction := core.NewPrediction(outputs).
-					WithUsage(result.Usage).
+					WithUsage(totalUsage).
 					WithModuleName(logging.ModuleReAct).
 					WithInputs(inputs)
 
@@ -408,9 +477,15 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				continue
 			}
 
-			result, err := tool.Execute(ctx, toolCall.Arguments)
+			toolResult, err := tool.Execute(ctx, toolCall.Arguments)
 			if err != nil {
-				observation := fmt.Sprintf("Error executing tool: %v", err)
+				observation := fmt.Sprintf("Error executing tool '%s': %v", toolCall.Name, err)
+				logging.GetLogger().Warn(ctx, "Tool execution failed", map[string]any{
+					"tool":      toolCall.Name,
+					"tool_id":   toolCall.ID,
+					"error":     err.Error(),
+					"iteration": i + 1,
+				})
 				messages = append(messages, core.Message{
 					Role:    "tool",
 					Content: observation,
@@ -423,7 +498,7 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 				continue
 			}
 
-			observation := fmt.Sprintf("%v", result)
+			observation := fmt.Sprintf("%v", toolResult)
 			messages = append(messages, core.Message{
 				Role:    "tool",
 				Content: observation,
@@ -449,12 +524,18 @@ func (r *ReAct) Forward(ctx context.Context, inputs map[string]any) (*core.Predi
 		lastObservation = currentObservation
 	}
 
+	// Check context before extraction
+	if err := ctx.Err(); err != nil {
+		predErr = fmt.Errorf("context canceled before extraction: %w", err)
+		return nil, predErr
+	}
+
 	// Max iterations exceeded - run extraction to salvage an answer (P1)
 	if r.Verbose {
 		fmt.Printf("\n⚠️  Exceeded maximum iterations (%d) - running extraction\n", r.MaxIterations)
 	}
 	var res *core.Prediction
-	res, predErr = r.runExtract(ctx, messages, inputs)
+	res, predErr = r.runExtract(ctx, messages, inputs, newMessages, totalUsage, historyUpdated)
 	return res, predErr
 }
 
@@ -518,6 +599,16 @@ func (r *ReAct) findTool(name string) *core.Tool {
 		}
 	}
 	return nil
+}
+
+// hasRealTools returns true if there are tools beyond the auto-injected "finish" tool
+func (r *ReAct) hasRealTools() bool {
+	for _, t := range r.Tools {
+		if strings.ToLower(t.Name) != "finish" {
+			return true
+		}
+	}
+	return false
 }
 
 // extractTextOutputs attempts to extract output fields from raw text when structured parsing fails
@@ -751,7 +842,12 @@ func coerceBasicTypes(signature *core.Signature, outputs map[string]any) map[str
 //
 // This phase uses structured output enforcement (when enabled) to ensure
 // the extraction converges to valid outputs, with bounded retries.
-func (r *ReAct) runExtract(ctx context.Context, messages []core.Message, inputs map[string]any) (*core.Prediction, error) {
+//
+// Parameters:
+// - newMessages: the original user messages (for history update)
+// - priorUsage: accumulated usage from prior iterations (to be merged with extraction usage)
+// - historyUpdated: indicates if history has already been updated (to avoid duplicates)
+func (r *ReAct) runExtract(ctx context.Context, messages []core.Message, inputs map[string]any, newMessages []core.Message, priorUsage core.Usage, historyUpdated bool) (*core.Prediction, error) {
 	if r.Verbose {
 		fmt.Println("\n=== Running Post-Loop Extraction (with reasoning) ===")
 	}
@@ -761,14 +857,14 @@ func (r *ReAct) runExtract(ctx context.Context, messages []core.Message, inputs 
 	useStructuredMode := settings.StructuredOutput.Enabled
 
 	if useStructuredMode {
-		return r.runExtractStructured(ctx, messages, inputs)
+		return r.runExtractStructured(ctx, messages, inputs, newMessages, priorUsage, historyUpdated)
 	}
 
-	return r.runExtractLegacy(ctx, messages, inputs)
+	return r.runExtractLegacy(ctx, messages, inputs, newMessages, priorUsage, historyUpdated)
 }
 
 // runExtractStructured performs extraction with structured output enforcement
-func (r *ReAct) runExtractStructured(ctx context.Context, messages []core.Message, inputs map[string]any) (*core.Prediction, error) {
+func (r *ReAct) runExtractStructured(ctx context.Context, messages []core.Message, inputs map[string]any, newMessages []core.Message, priorUsage core.Usage, historyUpdated bool) (*core.Prediction, error) {
 	settings := core.GetSettings()
 
 	// Build extraction prompt
@@ -834,10 +930,37 @@ func (r *ReAct) runExtractStructured(ctx context.Context, messages []core.Messag
 		}
 	}
 
+	// Merge extraction usage with prior accumulated usage
+	totalUsage := core.Usage{
+		PromptTokens:     priorUsage.PromptTokens + result.Usage.PromptTokens,
+		CompletionTokens: priorUsage.CompletionTokens + result.Usage.CompletionTokens,
+		TotalTokens:      priorUsage.TotalTokens + result.Usage.TotalTokens,
+		Cost:             priorUsage.Cost + result.Usage.Cost,
+		Latency:          priorUsage.Latency,
+	}
+	if result.Usage.Latency > totalUsage.Latency {
+		totalUsage.Latency = result.Usage.Latency
+	}
+
+	// Update history with final answer for multi-turn consistency
+	// Only update if not already done in Forward (to avoid duplicates)
+	if r.History != nil && !historyUpdated {
+		for _, msg := range newMessages {
+			if msg.Role == "user" {
+				r.History.Add(msg)
+			}
+		}
+		contentBytes, _ := json.Marshal(outputs)
+		r.History.Add(core.Message{
+			Role:    "assistant",
+			Content: string(contentBytes),
+		})
+	}
+
 	// Build prediction with diagnostics and rationale
 	pred := core.NewPrediction(outputs).
 		WithRationale(rationale).
-		WithUsage(result.Usage).
+		WithUsage(totalUsage).
 		WithModuleName(logging.ModuleReAct).
 		WithInputs(inputs)
 
@@ -875,7 +998,7 @@ func (rea *reactExtractAdapter) FormatHistory(history *core.History) []core.Mess
 }
 
 // runExtractLegacy performs extraction using the legacy path (without structured output enforcement)
-func (r *ReAct) runExtractLegacy(ctx context.Context, messages []core.Message, inputs map[string]any) (*core.Prediction, error) {
+func (r *ReAct) runExtractLegacy(ctx context.Context, messages []core.Message, inputs map[string]any, newMessages []core.Message, priorUsage core.Usage, historyUpdated bool) (*core.Prediction, error) {
 	// Build extraction prompt
 	extractPrompt := r.buildExtractionPrompt()
 
@@ -891,8 +1014,14 @@ func (r *ReAct) runExtractLegacy(ctx context.Context, messages []core.Message, i
 	// Keep tools available for providers that require tool definitions when
 	// conversation has tool history (e.g., Amazon Bedrock)
 	options := r.Options.Copy()
-	options.Tools = r.Tools
-	options.ToolChoice = "none"
+	// Only pass tools if LM supports them to avoid confusing non-tool LMs
+	if r.LM.SupportsTools() && r.hasRealTools() {
+		options.Tools = r.Tools
+		options.ToolChoice = "none"
+	} else {
+		options.Tools = nil
+		options.ToolChoice = ""
+	}
 
 	if r.LM.SupportsJSON() {
 		options.ResponseFormat = "json"
@@ -965,9 +1094,36 @@ func (r *ReAct) runExtractLegacy(ctx context.Context, messages []core.Message, i
 	// Extract adapter metadata
 	adapterUsed, parseAttempts, fallbackUsed := core.ExtractAdapterMetadata(outputs)
 
-	// Build prediction with diagnostics and rationale
+	// Merge extraction usage with prior accumulated usage
+	totalUsage := core.Usage{
+		PromptTokens:     priorUsage.PromptTokens + result.Usage.PromptTokens,
+		CompletionTokens: priorUsage.CompletionTokens + result.Usage.CompletionTokens,
+		TotalTokens:      priorUsage.TotalTokens + result.Usage.TotalTokens,
+		Cost:             priorUsage.Cost + result.Usage.Cost,
+		Latency:          priorUsage.Latency,
+	}
+	if result.Usage.Latency > totalUsage.Latency {
+		totalUsage.Latency = result.Usage.Latency
+	}
+
+	// Update history with final answer for multi-turn consistency
+	// Only update if not already done in Forward (to avoid duplicates)
+	if r.History != nil && !historyUpdated {
+		for _, msg := range newMessages {
+			if msg.Role == "user" {
+				r.History.Add(msg)
+			}
+		}
+		contentBytes, _ := json.Marshal(outputs)
+		r.History.Add(core.Message{
+			Role:    "assistant",
+			Content: string(contentBytes),
+		})
+	}
+
+	// Build prediction with diagnostics, rationale, and merged usage
 	pred := core.NewPrediction(outputs).
-		WithUsage(result.Usage).
+		WithUsage(totalUsage).
 		WithModuleName(logging.ModuleReAct).
 		WithInputs(inputs).
 		WithAdapterMetrics(adapterUsed, parseAttempts, fallbackUsed).
