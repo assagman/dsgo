@@ -8,7 +8,8 @@ The `logging` package provides:
 - **Request ID Generation**: Auto-generated 16-character hex IDs using `crypto/rand`
 - **Request ID Propagation**: Context-based tracking through the entire call chain
 - **Structured Logging**: Key-value pairs for easy parsing
-- **Configurable Levels**: DEBUG, INFO, WARN, ERROR
+- **Configurable Levels**: DEBUG, INFO, WARN, ERROR, FATAL
+- **Colored Console Output**: ANSI colors in text mode (auto on TTY)
 - **Zero Dependencies**: Uses only Go standard library
 
 ## Installation
@@ -34,6 +35,27 @@ func main() {
     // Your DSGo code here...
 }
 ```
+
+### Color Output (Text Logs)
+
+When `Format` is `text`, log levels can be colorized:
+
+- DEBUG: Cyan
+- INFO: Green
+- WARN: Yellow
+- ERROR/FATAL: Red
+
+Control via environment variable `DSGO_LOG_COLOR`:
+
+- `auto` (default): enable colors when stdout is a TTY and TERM is not "dumb"
+- `always`: force ANSI color codes
+- `never`: disable ANSI color codes
+
+Auto behavior: Colors are enabled when all conditions are met:
+1. Format is "text" (not "json")
+2. Color mode is "auto"
+3. stdout is a terminal (TTY)
+4. TERM environment variable is not "dumb"
 
 ### Use Auto-Generated Request IDs
 

@@ -20,10 +20,25 @@ const correlationIDKey contextKey = "correlation_id"
 // exitFunc allows overriding os.Exit in tests.
 var exitFunc = os.Exit
 
+const (
+	colorModeAuto   = "auto"
+	colorModeAlways = "always"
+	colorModeNever  = "never"
+)
+
+const (
+	ansiReset  = "\x1b[0m"
+	ansiRed    = "\x1b[31m" // ERROR/FATAL
+	ansiYellow = "\x1b[33m" // WARN
+	ansiGreen  = "\x1b[32m" // INFO
+	ansiCyan   = "\x1b[36m" // DEBUG
+)
+
 // Config represents logging configuration
 type Config struct {
 	Level                 Level
 	Format                string // "text" or "json"
+	Color                 string // "auto", "always", "never" (text format only)
 	ModuleLevels          map[string]Level
 	Prefix                string
 	BufferSize            int
@@ -53,6 +68,11 @@ func LoadConfigFromEnv() *Config {
 		if formatStr == "json" || formatStr == "text" {
 			config.Format = formatStr
 		}
+	}
+
+	// Parse DSGO_LOG_COLOR
+	if colorStr := os.Getenv("DSGO_LOG_COLOR"); colorStr != "" {
+		config.Color = parseColorMode(colorStr)
 	}
 
 	// DSGO_LOG_BUFFER_SIZE
@@ -168,6 +188,113 @@ func parseLevel(levelStr string) Level {
 	}
 }
 
+func parseColorMode(colorStr string) string {
+	switch strings.ToLower(strings.TrimSpace(colorStr)) {
+	case colorModeAlways:
+		return colorModeAlways
+	case colorModeNever:
+		return colorModeNever
+	case "":
+		return colorModeAuto
+	default:
+		// Treat unknown values as auto to be forgiving.
+		return colorModeAuto
+	}
+}
+
+func isTerminal(f *os.File) bool {
+	if f == nil {
+		return false
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
+func shouldEnableColor(format string, colorMode string) bool {
+	if format != "text" {
+		return false
+	}
+	mode := parseColorMode(colorMode)
+	if mode == colorModeNever {
+		return false
+	}
+	if mode == colorModeAlways {
+		return true
+	}
+	// auto
+	if strings.EqualFold(os.Getenv("TERM"), "dumb") {
+		return false
+	}
+	return isTerminal(os.Stdout)
+}
+
+func levelString(level Level) string {
+	switch level {
+	case LevelDebug:
+		return "DEBUG"
+	case LevelInfo:
+		return "INFO"
+	case LevelWarn:
+		return "WARN"
+	case LevelError:
+		return "ERROR"
+	case LevelFatal:
+		return "FATAL"
+	default:
+		return ""
+	}
+}
+
+func levelColor(level Level) string {
+	switch level {
+	case LevelDebug:
+		return ansiCyan
+	case LevelInfo:
+		return ansiGreen
+	case LevelWarn:
+		return ansiYellow
+	case LevelError, LevelFatal:
+		return ansiRed
+	default:
+		return ""
+	}
+}
+
+func formatTextLine(level Level, msg string, moduleName string, fields map[string]any, colorEnabled bool, timestamp time.Time) string {
+	levelStr := levelString(level)
+	msgStr := msg
+	if colorEnabled {
+		color := levelColor(level)
+		if color != "" {
+			levelStr = color + levelStr + ansiReset
+			msgStr = color + msg + ansiReset
+		}
+	}
+
+	// Use UTC timestamp with ISO-8601 format and milliseconds
+	ts := timestamp.UTC().Format("2006-01-02T15:04:05.000Z07:00")
+
+	// Build log message
+	var logMsg string
+	if moduleName != "" {
+		logMsg = fmt.Sprintf("%s [%s] [%s] %s", ts, moduleName, levelStr, msgStr)
+	} else {
+		logMsg = fmt.Sprintf("%s %s %s", ts, levelStr, msgStr)
+	}
+
+	// Add fields
+	if len(fields) > 0 {
+		logMsg += " |"
+		for k, v := range fields {
+			logMsg += fmt.Sprintf(" %s=%v", k, v)
+		}
+	}
+	return logMsg
+}
+
 // parseModuleLevels parses comma-separated module level assignments
 func parseModuleLevels(moduleLevelsStr string) map[string]Level {
 	moduleLevels := make(map[string]Level)
@@ -219,6 +346,8 @@ type Logger interface {
 type DefaultLogger struct {
 	level        Level
 	format       string // "text" or "json"
+	colorMode    string
+	colorEnabled bool
 	moduleLevels map[string]Level
 	prefix       string
 	config       *Config
@@ -252,6 +381,8 @@ func NewDefaultLoggerWithConfig(config *Config) *DefaultLogger {
 	l := &DefaultLogger{
 		level:        config.Level,
 		format:       config.Format,
+		colorMode:    parseColorMode(config.Color),
+		colorEnabled: shouldEnableColor(config.Format, config.Color),
 		moduleLevels: config.ModuleLevels,
 		prefix:       config.Prefix,
 		config:       config,
@@ -319,56 +450,11 @@ func (l *DefaultLogger) syncLog(ctx context.Context, level Level, msg string, fi
 }
 
 func (l *DefaultLogger) logText(level Level, msg string, moduleName string, fields map[string]any) {
-	levelStr := ""
-	switch level {
-	case LevelDebug:
-		levelStr = "DEBUG"
-	case LevelInfo:
-		levelStr = "INFO"
-	case LevelWarn:
-		levelStr = "WARN"
-	case LevelError:
-		levelStr = "ERROR"
-	case LevelFatal:
-		levelStr = "FATAL"
-	}
-
-	// Use UTC timestamp with ISO-8601 format and milliseconds
-	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00")
-
-	// Build log message
-	var logMsg string
-	if moduleName != "" {
-		logMsg = fmt.Sprintf("%s [%s] [%s] %s", timestamp, moduleName, levelStr, msg)
-	} else {
-		logMsg = fmt.Sprintf("%s %s %s", timestamp, levelStr, msg)
-	}
-
-	// Add fields
-	if len(fields) > 0 {
-		logMsg += " |"
-		for k, v := range fields {
-			logMsg += fmt.Sprintf(" %s=%v", k, v)
-		}
-	}
-
-	fmt.Println(logMsg)
+	fmt.Println(formatTextLine(level, msg, moduleName, fields, l.colorEnabled, time.Now()))
 }
 
 func (l *DefaultLogger) logJSON(level Level, msg string, moduleName string, fields map[string]any) {
-	levelStr := ""
-	switch level {
-	case LevelDebug:
-		levelStr = "DEBUG"
-	case LevelInfo:
-		levelStr = "INFO"
-	case LevelWarn:
-		levelStr = "WARN"
-	case LevelError:
-		levelStr = "ERROR"
-	case LevelFatal:
-		levelStr = "FATAL"
-	}
+	levelStr := levelString(level)
 
 	// Create log entry
 	entry := map[string]any{
@@ -565,6 +651,8 @@ func (l *DefaultLogger) GetStats() map[string]any {
 		"warn_logged":     atomic.LoadInt64(&l.warnLogged),
 		"error_logged":    atomic.LoadInt64(&l.errorLogged),
 		"fatal_logged":    atomic.LoadInt64(&l.fatalLogged),
+		"color_mode":      l.colorMode,
+		"color_enabled":   l.colorEnabled,
 	}
 }
 
@@ -617,6 +705,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		Level:                 LevelWarn,
 		Format:                "text",
+		Color:                 colorModeAuto,
 		ModuleLevels:          make(map[string]Level),
 		Prefix:                "[DSGo]",
 		BufferSize:            1000,
