@@ -324,7 +324,7 @@ func TestLMFactory_WithoutCollector(t *testing.T) {
 	// Configure without collector
 	ResetConfig()
 
-	// Create LM - should NOT be wrapped
+	// Create LM - should still work without collector
 	lm, err := NewLM(ctx, "test-provider/test-model")
 	if err != nil {
 		t.Fatalf("Failed to create LM: %v", err)

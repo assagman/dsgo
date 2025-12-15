@@ -3,10 +3,12 @@ package core
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/assagman/dsgo/internal/cost"
 	"github.com/assagman/dsgo/internal/ids"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // lmWrapper wraps an LM to add observability (cost, latency, history collection)
@@ -17,6 +19,8 @@ type lmWrapper struct {
 	sessionID  string
 	provider   string // Store provider name to avoid guessing
 }
+
+var missingPricingWarned sync.Map
 
 // newLMWrapper creates a new LM wrapper with observability features
 func newLMWrapper(lm LM, collector Collector) LM {
@@ -61,7 +65,7 @@ func (w *lmWrapper) Generate(ctx context.Context, messages []Message, options *G
 	latency := time.Since(startTime).Milliseconds()
 
 	// Build history entry
-	entry := w.buildHistoryEntry(entryID, startTime, messages, options, result, latency, err)
+	entry := w.buildHistoryEntry(ctx, entryID, startTime, messages, options, result, latency, err)
 
 	// Collect history (best effort - don't fail the call if collection fails)
 	if w.collector != nil {
@@ -168,18 +172,7 @@ func (w *lmWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 		}
 
 		// Build and collect history entry
-		entry := w.buildHistoryEntry(entryID, startTime, messages, options, result, latency, streamErr)
-
-		// Update cost in entry if we have usage data
-		if result != nil && result.Usage.TotalTokens > 0 {
-			modelName := w.lm.Name()
-			calculatedCost := w.calculator.Calculate(
-				modelName,
-				result.Usage.PromptTokens,
-				result.Usage.CompletionTokens,
-			)
-			entry.Usage.Cost = calculatedCost
-		}
+		entry := w.buildHistoryEntry(ctx, entryID, startTime, messages, options, result, latency, streamErr)
 
 		// Collect history (best effort)
 		if w.collector != nil {
@@ -188,6 +181,31 @@ func (w *lmWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 	}()
 
 	return outChunkChan, outErrChan
+}
+
+func (w *lmWrapper) calculateCost(ctx context.Context, provider, modelName string, promptTokens, completionTokens int) float64 {
+	if promptTokens == 0 && completionTokens == 0 {
+		return 0
+	}
+
+	calculatedCost, ok := w.calculator.CalculateIfKnown(provider, modelName, promptTokens, completionTokens)
+	if ok {
+		return calculatedCost
+	}
+
+	// Use provider/model as the warning key to avoid duplicate warnings per provider
+	warnKey := provider + "/" + modelName
+	if _, loaded := missingPricingWarned.LoadOrStore(warnKey, struct{}{}); !loaded {
+		logging.GetLogger().Warn(ctx, "No pricing information for model", map[string]any{
+			"module":            "cost",
+			"provider":          provider,
+			"model":             modelName,
+			"prompt_tokens":     promptTokens,
+			"completion_tokens": completionTokens,
+		})
+	}
+
+	return 0
 }
 
 // Name returns the underlying LM's name
@@ -210,8 +228,13 @@ func (w *lmWrapper) IsOpenAI() bool {
 	return w.lm.IsOpenAI()
 }
 
+func (w *lmWrapper) Unwrap() LM {
+	return w.lm
+}
+
 // buildHistoryEntry constructs a complete HistoryEntry
 func (w *lmWrapper) buildHistoryEntry(
+	ctx context.Context,
 	entryID string,
 	startTime time.Time,
 	messages []Message,
@@ -244,14 +267,10 @@ func (w *lmWrapper) buildHistoryEntry(
 		entry.Usage = result.Usage
 		entry.Usage.Latency = latency
 
-		// Calculate cost
+		// Calculate cost (best-effort)
+		provider := w.getProvider()
 		modelName := w.lm.Name()
-		calculatedCost := w.calculator.Calculate(
-			modelName,
-			result.Usage.PromptTokens,
-			result.Usage.CompletionTokens,
-		)
-		entry.Usage.Cost = calculatedCost
+		entry.Usage.Cost = w.calculateCost(ctx, provider, modelName, result.Usage.PromptTokens, result.Usage.CompletionTokens)
 
 		// Wire provider-specific metadata
 		if result.Metadata != nil {
@@ -303,9 +322,14 @@ func (w *lmWrapper) buildRequestMeta(messages []Message, options *GenerateOption
 	return meta
 }
 
-// getProvider returns the provider name, preferring the explicitly set provider
+// getProvider returns the provider name, preferring the explicitly set provider.
+// This is critical for accurate cost calculation, as provider/model matching requires
+// the correct provider prefix. In normal usage, core.NewLM() always sets w.provider
+// when creating the wrapper, so extractProviderFromModel() is a fallback for:
+// - Test mocks that use newLMWrapper() without explicit provider
+// - Custom LM implementations that don't go through core.NewLM()
 func (w *lmWrapper) getProvider() string {
-	// Use explicitly set provider if available
+	// Use explicitly set provider if available (set by core.NewLM)
 	if w.provider != "" {
 		return w.provider
 	}
@@ -317,6 +341,7 @@ func (w *lmWrapper) getProvider() string {
 	}
 
 	// Fall back to extracting from model name
+	// WARNING: This is a best-effort heuristic and may fail for custom LMs
 	return w.extractProviderFromModel()
 }
 

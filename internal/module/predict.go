@@ -392,30 +392,51 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 		markerFilter := core.NewStreamingMarkerFilter()
 		var finalUsage core.Usage
 
-		// Forward chunks and accumulate content
-		for chunk := range chunkChan {
-			// Strip field markers from chunk content for clean user-facing output
-			// Markers are internal DSGo artifacts and should not leak through public API
-			// Set DSGO_DEBUG_MARKERS=1 to see raw output with markers (for debugging)
-			cleanChunk := chunk
-			if os.Getenv("DSGO_DEBUG_MARKERS") != "1" {
-				cleanChunk.Content = markerFilter.ProcessChunk(chunk.Content)
-			}
+		chunkClosed := false
+		errClosed := false
 
-			// Forward clean chunk to caller
-			outputChunks <- cleanChunk
+		for !chunkClosed || !errClosed {
+			select {
+			case chunk, ok := <-chunkChan:
+				if !ok {
+					chunkClosed = true
+					continue
+				}
 
-			// Call user callback if provided (with clean chunk)
-			if options.StreamCallback != nil {
-				options.StreamCallback(cleanChunk)
-			}
+				// Strip field markers from chunk content for clean user-facing output
+				// Markers are internal DSGo artifacts and should not leak through public API
+				// Set DSGO_DEBUG_MARKERS=1 to see raw output with markers (for debugging)
+				cleanChunk := chunk
+				if os.Getenv("DSGO_DEBUG_MARKERS") != "1" {
+					cleanChunk.Content = markerFilter.ProcessChunk(chunk.Content)
+				}
 
-			// Accumulate original content with streaming buffer (for parsing)
-			streamBuffer.Write(chunk.Content)
+				// Forward clean chunk to caller
+				outputChunks <- cleanChunk
 
-			// Capture final metadata
-			if chunk.Usage.TotalTokens > 0 {
-				finalUsage = chunk.Usage
+				// Call user callback if provided (with clean chunk)
+				if options.StreamCallback != nil {
+					options.StreamCallback(cleanChunk)
+				}
+
+				// Accumulate original content with streaming buffer (for parsing)
+				streamBuffer.Write(chunk.Content)
+
+				// Capture final metadata
+				if chunk.Usage.TotalTokens > 0 {
+					finalUsage = chunk.Usage
+				}
+
+			case err, ok := <-errChan:
+				if !ok {
+					errClosed = true
+					continue
+				}
+				if err != nil {
+					streamErr = fmt.Errorf("LM streaming failed: %w", err)
+					errorChan <- streamErr
+					return
+				}
 			}
 		}
 
@@ -429,17 +450,6 @@ func (p *Predict) Stream(ctx context.Context, inputs map[string]any) (*StreamRes
 					options.StreamCallback(flushChunk)
 				}
 			}
-		}
-
-		// Check for streaming errors
-		select {
-		case err := <-errChan:
-			if err != nil {
-				streamErr = fmt.Errorf("LM streaming failed: %w", err)
-				errorChan <- streamErr
-				return
-			}
-		default:
 		}
 
 		// Finalize streaming buffer (applies recovery fixes)
