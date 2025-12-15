@@ -103,3 +103,20 @@ func main() {
 	fmt.Printf("Cost: $%.6f, Tokens: %d\n", pred.Usage.Cost, pred.Usage.TotalTokens)
 }
 ```
+
+## Environment Variables
+
+DSGo supports several environment variables for configuration:
+
+```bash
+# API Keys
+OPENAI_API_KEY=sk-...              # OpenAI API key
+OPENROUTER_API_KEY=sk-or-...       # OpenRouter API key
+
+# Logging
+DSGO_LOG=pretty                    # Logging: none, pretty, events
+DSGO_LOG_COLOR=auto                # Color: auto, always, never
+# Auto behavior: Colors enabled when stdout is a TTY and TERM is not "dumb"
+```
+
+See [`AGENTS.md`](AGENTS.md) for a complete list of environment variables.

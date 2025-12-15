@@ -361,6 +361,7 @@ DSGO_CACHE_SIZE=1000
 
 # Debugging
 DSGO_LOG=pretty              # none, pretty, events
+DSGO_LOG_COLOR=auto          # Color: auto, always, never
 DSGO_DEBUG_PARSE=1           # Show parse attempts
 ```
 
