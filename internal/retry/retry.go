@@ -21,13 +21,6 @@ const (
 	DefaultJitterFactor   = 0.1
 )
 
-var (
-	MaxRetries     = DefaultMaxRetries
-	InitialBackoff = DefaultInitialBackoff
-	MaxBackoff     = DefaultMaxBackoff
-	JitterFactor   = DefaultJitterFactor
-)
-
 type Options struct {
 	MaxRetries     int
 	InitialBackoff time.Duration
@@ -56,6 +49,15 @@ func (o *Options) Copy() *Options {
 	}
 }
 
+func NewOptions(maxRetries int, initialBackoff, maxBackoff time.Duration, jitterFactor float64) *Options {
+	return &Options{
+		MaxRetries:     maxRetries,
+		InitialBackoff: initialBackoff,
+		MaxBackoff:     maxBackoff,
+		JitterFactor:   jitterFactor,
+	}
+}
+
 func IsRetryable(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests || // 429
 		statusCode == http.StatusInternalServerError || // 500
@@ -73,6 +75,8 @@ func WithExponentialBackoff(ctx context.Context, fn HTTPFunc) (*http.Response, e
 func WithExponentialBackoffOpts(ctx context.Context, fn HTTPFunc, opts *Options) (*http.Response, error) {
 	if opts == nil {
 		opts = DefaultOptions()
+	} else {
+		opts = opts.Copy()
 	}
 
 	var lastErr error
@@ -149,8 +153,17 @@ func calculateBackoffWithOpts(attempt int, opts *Options) time.Duration {
 		backoff = float64(opts.MaxBackoff)
 	}
 
-	jitter := backoff * opts.JitterFactor * (2*rand.Float64() - 1)
-	backoff += jitter
+	if opts.JitterFactor != 0 {
+		jitter := backoff * opts.JitterFactor * (2*rand.Float64() - 1)
+		backoff += jitter
+	}
+
+	if backoff < 0 {
+		backoff = 0
+	}
+	if backoff > float64(opts.MaxBackoff) {
+		backoff = float64(opts.MaxBackoff)
+	}
 
 	return time.Duration(backoff)
 }
@@ -182,7 +195,10 @@ func isQuotaExhausted(resp *http.Response) bool {
 		return false
 	}
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	originalBody := resp.Body
+	bodyBytes, err := io.ReadAll(originalBody)
+	_ = originalBody.Close()
+
 	if err != nil {
 		return false
 	}

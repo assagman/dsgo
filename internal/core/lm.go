@@ -195,20 +195,6 @@ func (o *GenerateOptions) Copy() *GenerateOptions {
 	return copied
 }
 
-// ToRetryOptions converts RetryConfig to retry.Options for use by providers.
-// Returns nil if config is nil (providers will use defaults).
-func (c *RetryConfig) ToRetryOptions() map[string]any {
-	if c == nil {
-		return nil
-	}
-	return map[string]any{
-		"max_retries":     c.MaxRetries,
-		"initial_backoff": c.InitialBackoff,
-		"max_backoff":     c.MaxBackoff,
-		"jitter_factor":   c.JitterFactor,
-	}
-}
-
 // Helper functions for environment variable parsing
 func getEnv(key string) string {
 	return os.Getenv(key)

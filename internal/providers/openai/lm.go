@@ -94,17 +94,11 @@ func (o *openAI) SetCache(cache core.Cache) {
 	o.Cache = cache
 }
 
-// retryOptionsFromConfig converts core.RetryConfig to retry.Options
 func retryOptionsFromConfig(cfg *core.RetryConfig) *retry.Options {
 	if cfg == nil {
 		return nil
 	}
-	return &retry.Options{
-		MaxRetries:     cfg.MaxRetries,
-		InitialBackoff: cfg.InitialBackoff,
-		MaxBackoff:     cfg.MaxBackoff,
-		JitterFactor:   cfg.JitterFactor,
-	}
+	return retry.NewOptions(cfg.MaxRetries, cfg.InitialBackoff, cfg.MaxBackoff, cfg.JitterFactor)
 }
 
 // Generate generates a response from OpenAI
