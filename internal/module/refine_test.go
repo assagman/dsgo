@@ -145,6 +145,136 @@ func TestRefine_WithRefinementField(t *testing.T) {
 	}
 }
 
+func TestRefine_WithHistory_ReadOnlyByDefault(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	history := core.NewHistory()
+	history.AddUserMessage("previous")
+	history.AddAssistantMessage("previous response")
+	initialLen := history.Len()
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			// Ensure history messages are prepended to prompt.
+			if len(messages) < initialLen+1 {
+				return nil, errors.New("expected history to be prepended")
+			}
+			if messages[0].Role != "user" || messages[0].Content != "previous" {
+				return nil, errors.New("expected first message to be history user message")
+			}
+			if messages[1].Role != "assistant" || messages[1].Content != "previous response" {
+				return nil, errors.New("expected second message to be history assistant message")
+			}
+			return &core.GenerateResult{Content: `{"answer":"ok"}`}, nil
+		},
+	}
+
+	refine := NewRefine(sig, lm).WithHistory(history)
+	_, err := refine.Forward(context.Background(), map[string]any{"question": "test"})
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if history.Len() != initialLen {
+		t.Errorf("expected history to be read-only by default: got len=%d want=%d", history.Len(), initialLen)
+	}
+}
+
+func TestRefine_WithHistoryTracking_AppendsToHistory(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	history := core.NewHistory()
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{Content: `{"answer":"ok"}`}, nil
+		},
+	}
+
+	refine := NewRefine(sig, lm).
+		WithHistory(history).
+		WithHistoryTracking(true)
+
+	_, err := refine.Forward(context.Background(), map[string]any{"question": "test"})
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	msgs := history.Get()
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 history messages, got %d", len(msgs))
+	}
+	if msgs[0].Role != "user" {
+		t.Errorf("expected first history message role=user, got %s", msgs[0].Role)
+	}
+	if msgs[1].Role != "assistant" {
+		t.Errorf("expected second history message role=assistant, got %s", msgs[1].Role)
+	}
+}
+
+func TestRefine_WithDemos_IncludesDemoMessagesInPrompt(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddInput("question", core.FieldTypeString, "Question").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	demos := []core.Example{
+		{Inputs: map[string]any{"question": "2+2"}, Outputs: map[string]any{"answer": "4"}},
+	}
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			// One demo => 2 messages (user+assistant) + main prompt user => 3.
+			if len(messages) != 3 {
+				return nil, errors.New("expected demo messages to be included")
+			}
+			if messages[0].Role != "user" || !strings.Contains(messages[0].Content, "Example") {
+				return nil, errors.New("expected first message to be demo user message")
+			}
+			if messages[1].Role != "assistant" || !strings.Contains(messages[1].Content, "[[ ## answer ## ]]") {
+				return nil, errors.New("expected second message to be demo assistant message")
+			}
+			if messages[2].Role != "user" || !strings.Contains(messages[2].Content, "--- Inputs ---") {
+				return nil, errors.New("expected third message to be main prompt user message")
+			}
+			return &core.GenerateResult{Content: "[[ ## answer ## ]]\nok"}, nil
+		},
+	}
+
+	refine := NewRefine(sig, lm).
+		WithAdapter(core.NewChatAdapter()).
+		WithDemos(demos)
+
+	_, err := refine.Forward(context.Background(), map[string]any{"question": "test"})
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+}
+
+func TestRefine_Clone_PreservesHistoryTrackingFlag(t *testing.T) {
+	t.Parallel()
+	refine := NewRefine(core.NewSignature("Test"), &MockLM{}).
+		WithHistoryTracking(true)
+
+	clonedModule := refine.Clone()
+	cloned, ok := clonedModule.(*Refine)
+	if !ok {
+		t.Fatalf("expected *Refine clone, got %T", clonedModule)
+	}
+	if !cloned.TrackHistory {
+		t.Error("expected clone to preserve TrackHistory=true")
+	}
+}
+
 func TestRefine_GetSignature(t *testing.T) {
 	t.Parallel()
 	sig := core.NewSignature("Test")
