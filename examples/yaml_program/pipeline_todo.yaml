@@ -1,0 +1,153 @@
+# DSGo YAML Pipeline: Task -> Web research -> Codebase analysis -> TODO list
+#
+# Input: task
+# Flow:
+#   task -> web_research -> codebase_analysis -> todo
+#
+# Requires:
+#   - TAVILY_API_KEY for web search/extraction (MCP)
+#
+# Run:
+#   export TAVILY_API_KEY=your-key
+#   go run . pipeline_todo.yaml
+
+name: pipeline_todo
+description: Generates a repo-aware numbered TODO list from a task
+
+model:
+  name: openrouter/z-ai/glm-4.6
+  temperature: 0.4
+  max_tokens: 8192
+
+dsgo:
+  timeouts:
+    pipeline: 45m
+    lm_http: 15m
+    mcp_http: 10m
+
+mcp:
+  tavily:
+    type: tavily
+
+tools:
+  # Tavily tools
+  web_search:
+    type: mcp
+    source: tavily
+    name: tavily_search
+
+  web_extract:
+    type: mcp
+    source: tavily
+    name: tavily_extract
+
+  # Filesystem tools
+  list_files:
+    type: filesystem
+    name: list_files
+
+  read_file:
+    type: filesystem
+    name: read_file
+
+  search_files:
+    type: filesystem
+    name: search_files
+
+signatures:
+  web_research:
+    description: Research the task on the web and collect practical sources and pitfalls
+    inputs:
+      - name: task
+        type: string
+        description: Task to perform in a codebase
+    outputs:
+      - name: research_notes
+        type: string
+        description: Practical notes (best practices, pitfalls, relevant APIs), tailored to the task
+      - name: sources
+        type: string
+        description: 5-12 URLs with a 1-line relevance note each
+
+  codebase_analysis:
+    description: Analyze the current repository to locate files and implementation approach
+    inputs:
+      - name: task
+        type: string
+        description: Task to perform in this repository
+      - name: research_notes
+        type: string
+        description: Web research notes to guide analysis
+        optional: true
+    outputs:
+      - name: codebase_notes
+        type: string
+        description: Repo-specific findings (entry points, constraints, suggested approach)
+      - name: files_examined
+        type: string
+        description: Files/dirs examined (paths)
+
+  write_todo:
+    description: Produce a flat, actionable TODO list for implementing the task
+    inputs:
+      - name: task
+        type: string
+        description: The original task
+      - name: research_notes
+        type: string
+        description: Web research notes
+        optional: true
+      - name: codebase_notes
+        type: string
+        description: Repo analysis notes
+    outputs:
+      - name: todo
+        type: string
+        description: |
+          Output ONLY a numbered TODO list.
+          One item per line, in order, starting with "1.".
+          No headings, no grouping, no blank lines.
+          Make items actionable and repo-specific.
+          Mention file paths and commands when appropriate.
+
+modules:
+  researcher:
+    type: ReAct
+    signature: web_research
+    options:
+      temperature: 0.4
+      max_tokens: 4096
+      max_iterations: 10
+      verbose: true
+      tools:
+        - web_search
+        - web_extract
+
+  analyzer:
+    type: ReAct
+    signature: codebase_analysis
+    options:
+      temperature: 0.3
+      max_tokens: 4096
+      max_iterations: 12
+      verbose: true
+      tools:
+        - list_files
+        - search_files
+        - read_file
+
+  todo_writer:
+    type: ChainOfThought
+    signature: write_todo
+    options:
+      temperature: 0.2
+      max_tokens: 2048
+
+pipeline:
+  - module: researcher
+  - module: analyzer
+  - module: todo_writer
+
+inputs:
+  task: |
+    ChainOfThought module review

@@ -1,0 +1,170 @@
+# DSGo YAML Pipeline: Deep Researcher
+# Multi-stage research workflow:
+#   topic -> research -> initialResearchResults -> deepSearchTopics -> deepResearchResults -> article
+#
+# Requires:
+#   - TAVILY_API_KEY for web search/extraction (MCP)
+#
+# Run:
+#   export TAVILY_API_KEY=your-key
+#   go run . pipeline_deep_researcher.yaml
+
+name: deep_researcher_pipeline
+description: Topic-driven deep research that ends in a clear article
+
+settings:
+  temperature: 0.6
+  max_tokens: 10240
+
+mcp:
+  tavily:
+    type: tavily
+
+tools:
+  web_search:
+    type: mcp
+    source: tavily
+    name: tavily_search
+
+  web_extract:
+    type: mcp
+    source: tavily
+    name: tavily_extract
+
+signatures:
+  initial_research:
+    description: Do broad research and capture initial findings
+    inputs:
+      - name: topic
+        type: string
+        description: The topic to research
+    outputs:
+      - name: research
+        type: string
+        description: High-level research summary (2-5 paragraphs)
+      - name: initialResearchResults
+        type: string
+        description: Structured research notes (definitions, key facts, debates, timelines)
+      - name: sources
+        type: string
+        description: Sources consulted (URLs + 1-line relevance note)
+
+  deep_search_planning:
+    description: Generate deep-level follow-up search topics and queries
+    inputs:
+      - name: topic
+        type: string
+        description: The topic being researched
+      - name: initialResearchResults
+        type: string
+        description: Initial research notes from the previous stage
+      - name: research
+        type: string
+        description: High-level summary from the previous stage
+    outputs:
+      - name: deepSearchTopics
+        type: string
+        description: 8-15 targeted deep-dive search queries grouped by theme
+
+  deep_research:
+    description: Perform deeper research using the planned deepSearchTopics
+    inputs:
+      - name: topic
+        type: string
+        description: The topic being researched
+      - name: deepSearchTopics
+        type: string
+        description: Deep search queries to investigate
+      - name: initialResearchResults
+        type: string
+        description: Initial research notes for continuity
+        optional: true
+    outputs:
+      - name: deepResearchResults
+        type: string
+        description: Deeper findings with citations, contrasts, and edge cases
+      - name: deepSources
+        type: string
+        description: Additional sources consulted (URLs + 1-line relevance note)
+
+  write_article:
+    description: Write a clear article from research notes and deep research
+    inputs:
+      - name: topic
+        type: string
+        description: The topic of the article
+      - name: research
+        type: string
+        description: Initial summary
+      - name: initialResearchResults
+        type: string
+        description: Initial research notes
+      - name: deepResearchResults
+        type: string
+        description: Deep research notes
+      - name: deepSearchTopics
+        type: string
+        description: Deep search topics used (for transparency)
+        optional: true
+      - name: sources
+        type: string
+        description: Sources from initial research
+        optional: true
+      - name: deepSources
+        type: string
+        description: Sources from deep research
+        optional: true
+    outputs:
+      - name: article
+        type: string
+        description: A clear, well-structured article with headings and citations
+      - name: bibliography
+        type: string
+        description: Deduplicated bibliography with URLs
+
+modules:
+  researcher:
+    type: ReAct
+    signature: initial_research
+    options:
+      temperature: 0.4
+      max_tokens: 4096
+      max_iterations: 10
+      tools:
+        - web_search
+        - web_extract
+
+  deep_topic_planner:
+    type: ChainOfThought
+    signature: deep_search_planning
+    options:
+      temperature: 0.4
+      max_tokens: 1536
+
+  deep_researcher:
+    type: ReAct
+    signature: deep_research
+    options:
+      temperature: 0.4
+      max_tokens: 6144
+      max_iterations: 12
+      tools:
+        - web_search
+        - web_extract
+
+  article_writer:
+    type: ChainOfThought
+    signature: write_article
+    options:
+      temperature: 0.5
+      max_tokens: 8192
+
+pipeline:
+  - module: researcher
+  - module: deep_topic_planner
+  - module: deep_researcher
+  - module: article_writer
+
+inputs:
+  topic: |
+    Practical implications of sodium-ion batteries for grid-scale energy storage

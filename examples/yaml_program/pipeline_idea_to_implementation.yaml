@@ -1,0 +1,157 @@
+# DSGo YAML Pipeline: Idea to Implementation
+# This pipeline takes a high-level idea and progressively breaks it down
+# into tasks, plans, subtasks, and implementation details.
+
+name: idea_to_implementation
+description: Progressive breakdown of ideas into actionable implementations
+
+# Global settings for the pipeline
+settings:
+  temperature: 0.7
+  max_tokens: 10240
+
+# Define reusable signatures
+signatures:
+  idea_to_task:
+    description: Convert a high-level idea into a concrete task definition
+    inputs:
+      - name: idea
+        type: string
+        description: High-level idea or concept to implement
+      - name: context
+        type: string
+        description: Additional context about the project or domain
+        optional: true
+    outputs:
+      - name: task
+        type: string
+        description: Clear, actionable task definition with specific goals
+      - name: success_criteria
+        type: string
+        description: Measurable criteria for task completion
+      - name: scope
+        type: string
+        description: What's in scope and what's out of scope
+
+  task_to_plan:
+    description: Create a strategic plan from a task definition
+    inputs:
+      - name: task
+        type: string
+        description: The task definition to plan for
+      - name: success_criteria
+        type: string
+        description: Success criteria from previous stage
+      - name: scope
+        type: string
+        description: Scope boundaries from previous stage
+    outputs:
+      - name: plan
+        type: string
+        description: Strategic plan with approach and methodology
+      - name: phases
+        type: string
+        description: High-level phases or stages
+      - name: dependencies
+        type: string
+        description: Key dependencies and prerequisites
+      - name: risks
+        type: string
+        description: Potential risks and mitigation strategies
+
+  plan_to_subtasks:
+    description: Break down a plan into specific subtasks
+    inputs:
+      - name: plan
+        type: string
+        description: The strategic plan
+      - name: phases
+        type: string
+        description: High-level phases from the plan
+      - name: dependencies
+        type: string
+        description: Dependencies to consider
+    outputs:
+      - name: subtasks
+        type: string
+        description: List of concrete subtasks with priorities
+      - name: sequence
+        type: string
+        description: Recommended execution sequence
+      - name: effort_estimate
+        type: string
+        description: Rough effort estimates for each subtask
+
+  subtasks_to_implementation:
+    description: Generate detailed implementation guidance for subtasks
+    inputs:
+      - name: subtasks
+        type: string
+        description: List of subtasks to implement
+      - name: sequence
+        type: string
+        description: Recommended execution sequence
+      - name: effort_estimate
+        type: string
+        description: Effort estimates
+      - name: task
+        type: string
+        description: Original task definition for context
+    outputs:
+      - name: implementation
+        type: string
+        description: Detailed implementation steps and code structure
+      - name: technical_approach
+        type: string
+        description: Technical approach and architecture decisions
+      - name: testing_strategy
+        type: string
+        description: Testing approach and validation methods
+      - name: next_steps
+        type: string
+        description: Immediate next steps to begin implementation
+
+# Define modules that use the signatures
+modules:
+  idea_analyzer:
+    type: ChainOfThought
+    signature: idea_to_task
+    options:
+      temperature: 0.6
+      max_tokens: 2048
+
+  task_planner:
+    type: ChainOfThought
+    signature: task_to_plan
+    options:
+      temperature: 0.7
+      max_tokens: 3072
+
+  subtask_breaker:
+    type: ChainOfThought
+    signature: plan_to_subtasks
+    options:
+      temperature: 0.5
+      max_tokens: 3072
+
+  implementation_guide:
+    type: ChainOfThought
+    signature: subtasks_to_implementation
+    options:
+      temperature: 0.6
+      max_tokens: 4096
+
+# Define the pipeline as a sequence of modules
+pipeline:
+  - module: idea_analyzer
+  - module: task_planner
+  - module: subtask_breaker
+  - module: implementation_guide
+
+# Pipeline inputs
+inputs:
+  idea: |
+    Build a hello world http rest api in golang.
+  
+  context: |
+    experimentation

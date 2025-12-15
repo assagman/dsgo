@@ -1,0 +1,91 @@
+# DSGo YAML Pipeline Definition with ReAct and Tools
+# This file demonstrates the ReAct module with filesystem tools
+# for code analysis tasks.
+
+name: code_analysis_pipeline
+description: A pipeline that analyzes codebase using ReAct with filesystem tools
+
+# Global settings for the pipeline
+settings:
+  temperature: 0.7
+  max_tokens: 10240
+
+# Define filesystem tools (built-in)
+tools:
+  list_files:
+    type: filesystem
+    name: list_files
+  
+  read_file:
+    type: filesystem
+    name: read_file
+  
+  search_files:
+    type: filesystem
+    name: search_files
+
+# Define reusable signatures
+signatures:
+  code_exploration:
+    description: Explore and understand a codebase structure
+    inputs:
+      - name: question
+        type: string
+        description: The question about the codebase to answer
+    outputs:
+      - name: answer
+        type: string
+        description: Detailed answer based on codebase exploration
+      - name: files_examined
+        type: string
+        description: List of files that were examined
+
+  code_review:
+    description: Review code quality and suggest improvements
+    inputs:
+      - name: filepath
+        type: string
+        description: Path to the file to review
+      - name: focus_areas
+        type: string
+        description: Specific areas to focus the review on
+    outputs:
+      - name: issues
+        type: string
+        description: List of identified issues
+      - name: suggestions
+        type: string
+        description: Improvement suggestions
+      - name: quality_score
+        type: int
+        description: Overall quality score from 1-10
+
+# Define modules that use the signatures
+modules:
+  code_explorer:
+    type: ReAct
+    signature: code_exploration
+    options:
+      temperature: 0.5
+      max_iterations: 8
+      tools:
+        - list_files
+        - read_file
+        - search_files
+
+  code_reviewer:
+    type: ReAct
+    signature: code_review
+    options:
+      temperature: 0.3
+      max_iterations: 5
+      tools:
+        - read_file
+
+# Define the pipeline as a sequence of modules
+pipeline:
+  - module: code_explorer
+
+# Pipeline inputs
+inputs:
+  question: "What Go files are in this project? List them with their directory structure."
