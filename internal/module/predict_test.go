@@ -519,9 +519,9 @@ func TestPredict_Stream_Success(t *testing.T) {
 
 	mockLM := &mockStreamingLM{
 		chunks: []core.Chunk{
-			{Content: "answer: ", FinishReason: ""},
+			{Content: `{"answer": "`, FinishReason: ""},
 			{Content: "Hello ", FinishReason: ""},
-			{Content: "World", FinishReason: ""},
+			{Content: `World"}`, FinishReason: ""},
 			{Content: "", FinishReason: "stop", Usage: core.Usage{TotalTokens: 10}},
 		},
 	}
@@ -1029,17 +1029,17 @@ func TestFallbackAdapter_Integration(t *testing.T) {
 		name           string
 		responseFormat string
 		expectSuccess  bool
-		expectAdapter  int // 0=ChatAdapter, 1=JSONAdapter
+		expectAdapter  int // 0=JSONAdapter, 1=ChatAdapter (JSON is now first in fallback chain)
 	}{
 		{
-			name:           "ChatAdapter succeeds",
-			responseFormat: "chat",
+			name:           "JSONAdapter succeeds",
+			responseFormat: "json",
 			expectSuccess:  true,
 			expectAdapter:  0,
 		},
 		{
-			name:           "Fallback to JSONAdapter",
-			responseFormat: "json",
+			name:           "Fallback to ChatAdapter",
+			responseFormat: "chat",
 			expectSuccess:  true,
 			expectAdapter:  1,
 		},

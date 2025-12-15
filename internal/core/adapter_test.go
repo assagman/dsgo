@@ -1224,28 +1224,28 @@ The capital of France is Paris`,
 func TestFallbackAdapter_DefaultChain(t *testing.T) {
 	adapter := NewFallbackAdapter()
 
-	// Default should be ChatAdapter → JSONAdapter
+	// Default should be JSONAdapter → ChatAdapter (JSON first since most LLMs support structured output)
 	if len(adapter.adapters) != 2 {
 		t.Errorf("Expected 2 adapters in default chain, got %d", len(adapter.adapters))
 	}
 
 	// Verify types
-	if _, ok := adapter.adapters[0].(*ChatAdapter); !ok {
-		t.Errorf("Expected first adapter to be ChatAdapter, got %T", adapter.adapters[0])
+	if _, ok := adapter.adapters[0].(*JSONAdapter); !ok {
+		t.Errorf("Expected first adapter to be JSONAdapter, got %T", adapter.adapters[0])
 	}
-	if _, ok := adapter.adapters[1].(*JSONAdapter); !ok {
-		t.Errorf("Expected second adapter to be JSONAdapter, got %T", adapter.adapters[1])
+	if _, ok := adapter.adapters[1].(*ChatAdapter); !ok {
+		t.Errorf("Expected second adapter to be ChatAdapter, got %T", adapter.adapters[1])
 	}
 }
 
-// TestFallbackAdapter_ParseChatSuccess tests successful parsing with ChatAdapter
-func TestFallbackAdapter_ParseChatSuccess(t *testing.T) {
+// TestFallbackAdapter_ParseJSONSuccess tests successful parsing with JSONAdapter (now first in chain)
+func TestFallbackAdapter_ParseJSONSuccess(t *testing.T) {
 	adapter := NewFallbackAdapter()
 	sig := NewSignature("test").
 		AddOutput("answer", FieldTypeString, "")
 
-	// Response with field markers (ChatAdapter format)
-	content := "[[ ## answer ## ]]\n42"
+	// Response in JSON format (JSONAdapter is now first in chain)
+	content := `{"answer": "42"}`
 
 	outputs, err := adapter.Parse(sig, content)
 	if err != nil {
@@ -1256,7 +1256,7 @@ func TestFallbackAdapter_ParseChatSuccess(t *testing.T) {
 		t.Errorf("Expected answer='42', got %v", outputs["answer"])
 	}
 
-	// Should have used first adapter (ChatAdapter)
+	// Should have used first adapter (JSONAdapter)
 	if adapter.GetLastUsedAdapter() != 0 {
 		t.Errorf("Expected adapter 0 to be used, got %d", adapter.GetLastUsedAdapter())
 	}
@@ -1270,14 +1270,15 @@ func TestFallbackAdapter_ParseChatSuccess(t *testing.T) {
 	}
 }
 
-// TestFallbackAdapter_ParseFallbackToJSON tests fallback to JSONAdapter
-func TestFallbackAdapter_ParseFallbackToJSON(t *testing.T) {
+// TestFallbackAdapter_ParseFallbackToChat tests fallback to ChatAdapter
+func TestFallbackAdapter_ParseFallbackToChat(t *testing.T) {
 	adapter := NewFallbackAdapter()
 	sig := NewSignature("test").
-		AddOutput("answer", FieldTypeString, "")
+		AddOutput("answer", FieldTypeString, "").
+		AddOutput("reason", FieldTypeString, "") // Multiple fields so JSONAdapter can't use plain text fallback
 
-	// Response in JSON format (no field markers, ChatAdapter will fail)
-	content := `{"answer": "42"}`
+	// Response with field markers (ChatAdapter format) - JSONAdapter will fail on this
+	content := "[[ ## answer ## ]]\n42\n\n[[ ## reason ## ]]\nbecause"
 
 	outputs, err := adapter.Parse(sig, content)
 	if err != nil {
@@ -1288,7 +1289,7 @@ func TestFallbackAdapter_ParseFallbackToJSON(t *testing.T) {
 		t.Errorf("Expected answer='42', got %v", outputs["answer"])
 	}
 
-	// Should have used second adapter (JSONAdapter)
+	// Should have used second adapter (ChatAdapter)
 	if adapter.GetLastUsedAdapter() != 1 {
 		t.Errorf("Expected adapter 1 to be used, got %d", adapter.GetLastUsedAdapter())
 	}
@@ -1419,10 +1420,10 @@ func TestFallbackAdapter_Format(t *testing.T) {
 		t.Fatalf("Format failed: %v", err)
 	}
 
-	// Should use ChatAdapter (first in chain), which uses field markers
+	// Should use JSONAdapter (first in chain), which requests JSON output
 	content := messages[0].Content
-	if !strings.Contains(content, "[[ ## answer ## ]]") {
-		t.Errorf("Expected ChatAdapter field markers, got: %s", content)
+	if !strings.Contains(content, "JSON") {
+		t.Errorf("Expected JSONAdapter format requesting JSON, got: %s", content)
 	}
 }
 
@@ -1549,8 +1550,10 @@ func TestFallbackAdapter_Format_WithDemos(t *testing.T) {
 // TestFallbackAdapter_Parse_AdapterMetadata tests adapter metadata tracking
 func TestFallbackAdapter_Parse_AdapterMetadata(t *testing.T) {
 	adapter := NewFallbackAdapter()
+	// Use multi-field signature so JSONAdapter can't use plain text fallback
 	sig := NewSignature("test").
-		AddOutput("answer", FieldTypeString, "")
+		AddOutput("answer", FieldTypeString, "").
+		AddOutput("reason", FieldTypeString, "")
 
 	tests := []struct {
 		name             string
@@ -1560,15 +1563,15 @@ func TestFallbackAdapter_Parse_AdapterMetadata(t *testing.T) {
 		wantAdapterIndex int
 	}{
 		{
-			name:             "First adapter success (ChatAdapter)",
-			content:          "[[ ## answer ## ]]\ntest",
+			name:             "First adapter success (JSONAdapter)",
+			content:          `{"answer": "test", "reason": "because"}`,
 			wantAttempts:     1,
 			wantFallbackUsed: false,
 			wantAdapterIndex: 0,
 		},
 		{
-			name:             "Second adapter success (JSONAdapter)",
-			content:          `{"answer": "test"}`,
+			name:             "Second adapter success (ChatAdapter)",
+			content:          "[[ ## answer ## ]]\ntest\n\n[[ ## reason ## ]]\nbecause",
 			wantAttempts:     2,
 			wantFallbackUsed: true,
 			wantAdapterIndex: 1,

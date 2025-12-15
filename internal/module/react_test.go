@@ -1074,8 +1074,9 @@ func TestReAct_Forward_AdapterMetrics(t *testing.T) {
 	lm := &MockLM{
 		SupportsJSONVal: true,
 		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			// JSON format succeeds on first try (JSONAdapter is now first in fallback chain)
 			return &core.GenerateResult{
-				Content: `{"answer": "test", "__adapter_used": "JSONAdapter", "__parse_attempts": 2, "__fallback_used": true}`,
+				Content: `{"answer": "test"}`,
 			}, nil
 		},
 	}
@@ -1093,12 +1094,13 @@ func TestReAct_Forward_AdapterMetrics(t *testing.T) {
 		t.Error("Expected adapter metadata to be extracted")
 	}
 
-	if outputs.ParseAttempts != 2 {
-		t.Errorf("Expected 2 parse attempts, got %d", outputs.ParseAttempts)
+	// JSON format should succeed on first attempt (no fallback needed)
+	if outputs.ParseAttempts != 1 {
+		t.Errorf("Expected 1 parse attempt, got %d", outputs.ParseAttempts)
 	}
 
-	if !outputs.FallbackUsed {
-		t.Error("Expected fallback_used to be true")
+	if outputs.FallbackUsed {
+		t.Error("Expected fallback_used to be false for JSON format")
 	}
 }
 

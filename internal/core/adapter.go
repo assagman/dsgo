@@ -917,12 +917,12 @@ type FallbackAdapter struct {
 }
 
 // NewFallbackAdapter creates a new fallback adapter with the default chain
-// Default chain: ChatAdapter → JSONAdapter
+// Default chain: JSONAdapter → ChatAdapter (JSON first since most LLMs support structured output)
 func NewFallbackAdapter() *FallbackAdapter {
 	return &FallbackAdapter{
 		adapters: []Adapter{
-			NewChatAdapter(),
 			NewJSONAdapter(),
+			NewChatAdapter(),
 		},
 		lastUsedAdapter: -1,
 	}
@@ -931,10 +931,10 @@ func NewFallbackAdapter() *FallbackAdapter {
 // NewFallbackAdapterWithChain creates a fallback adapter with custom adapters
 func NewFallbackAdapterWithChain(adapters ...Adapter) *FallbackAdapter {
 	if len(adapters) == 0 {
-		// Default to ChatAdapter → JSONAdapter
+		// Default to JSONAdapter → ChatAdapter (JSON first since most LLMs support structured output)
 		adapters = []Adapter{
-			NewChatAdapter(),
 			NewJSONAdapter(),
+			NewChatAdapter(),
 		}
 	}
 	return &FallbackAdapter{
