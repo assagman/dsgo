@@ -1,23 +1,34 @@
 package openrouter
 
 import (
-	"bufio"
-	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/jsonutil"
 	"github.com/assagman/dsgo/internal/logging"
-	"github.com/assagman/dsgo/internal/retry"
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/shared"
 )
+
+// Tool call ID constraints across providers:
+// - OpenAI: max 40 characters
+// - Azure: max 64 characters
+// - Amazon Bedrock: max 64 characters, pattern [a-zA-Z0-9_-]+
+// - Anthropic: pattern ^[a-zA-Z0-9_-]+$
+// We use the most restrictive: max 40 chars, alphanumeric + underscore + hyphen only
+const maxToolCallIDLength = 40
+
+var toolCallIDPattern = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
 func init() {
 	core.RegisterLM("openrouter", func(model string) core.LM {
@@ -29,24 +40,21 @@ const (
 	defaultBaseURL = "https://openrouter.ai/api/v1"
 )
 
-// openRouter implements the LM interface for OpenRouter models
+// openRouter implements the LM interface for OpenRouter models using the official OpenAI SDK
 type openRouter struct {
 	APIKey   string
 	Model    string
 	BaseURL  string
-	Client   *http.Client
+	Client   openai.Client
 	SiteName string
 	SiteURL  string
 	Cache    core.Cache
 }
 
-// newOpenRouter creates a new OpenRouter LM
+// newOpenRouter creates a new OpenRouter LM using the official OpenAI SDK
 func newOpenRouter(model string) *openRouter {
 	apiKey := os.Getenv("OPENROUTER_API_KEY")
 
-	// Default timeout 300s (5 min) for LLM responses which can be slow with large outputs.
-	// Override via DSGO_HTTP_TIMEOUT_MS if needed.
-	// Note: This timeout includes body reading, so it must be long enough for streaming.
 	timeout := 300 * time.Second
 	if v := os.Getenv("DSGO_HTTP_TIMEOUT_MS"); v != "" {
 		if d, err := time.ParseDuration(v + "ms"); err == nil && d > 0 {
@@ -54,13 +62,31 @@ func newOpenRouter(model string) *openRouter {
 		}
 	}
 
+	siteName := os.Getenv("OPENROUTER_SITE_NAME")
+	siteURL := os.Getenv("OPENROUTER_SITE_URL")
+
+	opts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithBaseURL(defaultBaseURL),
+		option.WithRequestTimeout(timeout),
+	}
+
+	if siteName != "" {
+		opts = append(opts, option.WithHeader("X-Title", siteName))
+	}
+	if siteURL != "" {
+		opts = append(opts, option.WithHeader("HTTP-Referer", siteURL))
+	}
+
+	client := openai.NewClient(opts...)
+
 	return &openRouter{
 		APIKey:   apiKey,
 		Model:    model,
 		BaseURL:  defaultBaseURL,
-		Client:   &http.Client{Timeout: timeout},
-		SiteName: os.Getenv("OPENROUTER_SITE_NAME"),
-		SiteURL:  os.Getenv("OPENROUTER_SITE_URL"),
+		Client:   client,
+		SiteName: siteName,
+		SiteURL:  siteURL,
 	}
 }
 
@@ -89,24 +115,15 @@ func (o *openRouter) SetCache(cache core.Cache) {
 	o.Cache = cache
 }
 
-func retryOptionsFromConfig(cfg *core.RetryConfig) *retry.Options {
-	if cfg == nil {
-		return nil
-	}
-	return retry.NewOptions(cfg.MaxRetries, cfg.InitialBackoff, cfg.MaxBackoff, cfg.JitterFactor)
-}
-
-// Generate generates a response from OpenRouter
+// Generate generates a response from OpenRouter using the official OpenAI SDK
 func (o *openRouter) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
 
-	// Calculate prompt length for logging
 	promptLength := 0
 	for _, msg := range messages {
 		promptLength += len(msg.Content)
 	}
 
-	// Log API request start
 	logging.LogAPIRequest(ctx, "provider.OpenRouter", o.Model, promptLength)
 
 	if options == nil {
@@ -115,7 +132,6 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 
 	cacheModelName := "openrouter/" + o.Model
 
-	// Check cache if available
 	if o.Cache != nil {
 		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		if cached, ok := o.Cache.Get(cacheKey); ok {
@@ -124,131 +140,58 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 		}
 	}
 
-	reqBody := o.buildRequest(messages, options)
+	params := o.buildParams(messages, options)
 
-	bodyBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	var rawResp *http.Response
+	reqOpts := []option.RequestOption{option.WithResponseInto(&rawResp)}
+	if o.BaseURL != "" {
+		reqOpts = append(reqOpts, option.WithBaseURL(o.BaseURL))
+	}
+	if options.RetryConfig != nil {
+		reqOpts = append(reqOpts, option.WithMaxRetries(options.RetryConfig.MaxRetries))
 	}
 
-	var retryOpts *retry.Options
-	if options != nil {
-		retryOpts = retryOptionsFromConfig(options.RetryConfig)
-	}
-
-	resp, err := retry.WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+o.APIKey)
-		if o.SiteName != "" {
-			req.Header.Set("X-Title", o.SiteName)
-		}
-		if o.SiteURL != "" {
-			req.Header.Set("HTTP-Referer", o.SiteURL)
-		}
-		return o.Client.Do(req)
-	}, retryOpts)
+	chatCompletion, err := o.Client.Chat.Completions.New(ctx, params, reqOpts...)
 	if err != nil {
 		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
+
+		// Check for JSON mode unsupported - fallback gracefully
+		errStr := err.Error()
+		if options != nil && options.ResponseFormat == "json" {
+			if strings.Contains(errStr, "json_schema") || strings.Contains(errStr, "response_format") {
+				if options.ResponseSchema != nil {
+					fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support json_schema, falling back to json_object\n", o.Model)
+					fallbackOpts := *options
+					fallbackOpts.ResponseSchema = nil
+					return o.Generate(ctx, messages, &fallbackOpts)
+				}
+				if strings.Contains(errStr, "json_object") || strings.Contains(errStr, "response format") {
+					fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support JSON mode, using adapter-based parsing\n", o.Model)
+					fallbackOpts := *options
+					fallbackOpts.ResponseFormat = ""
+					fallbackOpts.ResponseSchema = nil
+					return o.Generate(ctx, messages, &fallbackOpts)
+				}
+			}
+		}
+
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-
-		// Check for 405/400 with json format unsupported - automatic fallback
-		if (resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusBadRequest) &&
-			options != nil && options.ResponseFormat == "json" {
-			bodyStr := string(body)
-
-			// Fallback from json_schema to json_object
-			if options.ResponseSchema != nil && (strings.Contains(bodyStr, "json_schema") || strings.Contains(bodyStr, "response_format")) {
-				fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support json_schema, falling back to json_object\n", o.Model)
-				fallbackOpts := *options
-				fallbackOpts.ResponseSchema = nil
-				return o.Generate(ctx, messages, &fallbackOpts)
-			}
-
-			// Fallback from json_object to plain text (adapter-based parsing)
-			// Matches both "response format" and "response_format"
-			if strings.Contains(bodyStr, "json_object") ||
-				strings.Contains(bodyStr, "response format") ||
-				strings.Contains(bodyStr, "response_format") {
-				fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support JSON mode, using adapter-based parsing\n", o.Model)
-				fallbackOpts := *options
-				fallbackOpts.ResponseFormat = ""
-				fallbackOpts.ResponseSchema = nil
-				return o.Generate(ctx, messages, &fallbackOpts)
-			}
-		}
-
-		// Verbose HTTP error logging for debugging
-		fmt.Fprintf(os.Stderr, "\n=== HTTP ERROR DEBUG ===\n")
-		fmt.Fprintf(os.Stderr, "Status: %d %s\n", resp.StatusCode, resp.Status)
-		fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
-		fmt.Fprintf(os.Stderr, "URL: %s\n", o.BaseURL+"/chat/completions")
-		fmt.Fprintf(os.Stderr, "\nResponse Headers:\n")
-		for k, v := range resp.Header {
-			fmt.Fprintf(os.Stderr, "  %s: %s\n", k, strings.Join(v, ", "))
-		}
-		fmt.Fprintf(os.Stderr, "\nResponse Body:\n%s\n", string(body))
-		fmt.Fprintf(os.Stderr, "=======================\n\n")
-
-		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
-		return nil, err
-	}
-
-	// Read response body for logging and decoding
-	bodyBytes, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, readErr)
-		return nil, fmt.Errorf("failed to read response body: %w", readErr)
-	}
-
-	// Save raw request/response exchange if debug enabled
-	if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
-		if err := saveRawExchange(o.Model, reqBody, resp.StatusCode, resp.Header, bodyBytes, nil); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save raw exchange: %v\n", err)
-		}
-	}
-
-	var apiResp openRouterResponse
-	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
-		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
-
-		if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
-			// Save failed response for debugging
-			if err := saveRawExchange(o.Model+"_DECODE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
-			}
-		}
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	result, err := o.parseResponse(&apiResp)
+	result, err := o.parseResponse(chatCompletion)
 	if err != nil {
 		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
-
-		if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
-			// Save raw response on parse error
-			if err := saveRawExchange(o.Model+"_PARSE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
-			}
-		}
 		return nil, err
 	}
 
-	// Extract metadata from response headers
-	result.Metadata = o.extractMetadata(resp.Header)
+	if rawResp != nil {
+		if metadata := o.extractMetadata(rawResp.Header); len(metadata) > 0 {
+			result.Metadata = metadata
+		}
+	}
 
-	// Log API response
 	duration := time.Since(startTime)
-	logging.LogAPIResponse(ctx, "provider.OpenRouter", o.Model, resp.StatusCode, duration, logging.Usage{
+	logging.LogAPIResponse(ctx, "provider.OpenRouter", o.Model, 200, duration, logging.Usage{
 		PromptTokens:     result.Usage.PromptTokens,
 		CompletionTokens: result.Usage.CompletionTokens,
 		TotalTokens:      result.Usage.TotalTokens,
@@ -256,7 +199,6 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 		Latency:          result.Usage.Latency,
 	})
 
-	// Store in cache if available
 	if o.Cache != nil {
 		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		o.Cache.Set(cacheKey, result)
@@ -265,88 +207,90 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 	return result, nil
 }
 
-func (o *openRouter) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
-	req := map[string]any{
-		"model":    o.Model,
-		"messages": o.convertMessages(messages),
+func (o *openRouter) buildParams(messages []core.Message, options *core.GenerateOptions) openai.ChatCompletionNewParams {
+	params := openai.ChatCompletionNewParams{
+		Model:    o.Model,
+		Messages: o.convertMessages(messages),
 	}
 
 	if options == nil {
-		return req
+		return params
 	}
 
 	if options.Temperature > 0 {
-		req["temperature"] = options.Temperature
+		params.Temperature = openai.Float(options.Temperature)
 	}
+
 	if options.MaxTokens > 0 {
-		req["max_tokens"] = options.MaxTokens
+		params.MaxTokens = openai.Int(int64(options.MaxTokens))
 	}
+
 	if options.TopP > 0 && options.TopP != 1.0 {
-		req["top_p"] = options.TopP
+		params.TopP = openai.Float(options.TopP)
 	}
+
 	if len(options.Stop) > 0 {
-		req["stop"] = options.Stop
+		params.Stop = openai.ChatCompletionNewParamsStopUnion{
+			OfStringArray: options.Stop,
+		}
 	}
+
 	if options.ResponseFormat == "json" {
 		if options.ResponseSchema != nil {
-			// Full structured output with JSON schema
-			// OpenAI format: { type: "json_schema", json_schema: { name, schema, strict } }
-			req["response_format"] = map[string]any{
-				"type": "json_schema",
-				"json_schema": map[string]any{
-					"name":   "response",
-					"schema": options.ResponseSchema,
-					"strict": true,
+			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
+					JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
+						Name:   "response",
+						Schema: options.ResponseSchema,
+						Strict: openai.Bool(true),
+					},
 				},
 			}
 		} else {
-			// Basic JSON mode without schema
-			req["response_format"] = map[string]string{"type": "json_object"}
+			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
+			}
 		}
 	}
+
 	if options.FrequencyPenalty != 0 {
-		req["frequency_penalty"] = options.FrequencyPenalty
+		params.FrequencyPenalty = openai.Float(options.FrequencyPenalty)
 	}
+
 	if options.PresencePenalty != 0 {
-		req["presence_penalty"] = options.PresencePenalty
+		params.PresencePenalty = openai.Float(options.PresencePenalty)
 	}
 
 	// Detect provider-specific models that don't support tool_choice: "none"
 	isAmazonModel := strings.Contains(o.Model, "amazon/") || strings.Contains(o.Model, "bedrock")
 	isZAIModel := strings.Contains(o.Model, "z-ai/")
 
-	// Add tools if supported
 	if len(options.Tools) > 0 {
-		// Sanitize tools for OpenRouter to ensure all parameter types are valid
 		sanitizedTools := sanitizeToolsForOpenRouter(options.Tools)
-
-		tools := make([]map[string]any, 0, len(sanitizedTools))
+		tools := make([]openai.ChatCompletionToolUnionParam, 0, len(sanitizedTools))
 		for _, tool := range sanitizedTools {
 			tools = append(tools, o.convertTool(&tool))
 		}
-		req["tools"] = tools
+		params.Tools = tools
 
 		if options.ToolChoice != "" && options.ToolChoice != "auto" {
 			if options.ToolChoice == "none" {
-				// Some providers don't support tool_choice: "none"
-				// - Amazon Bedrock: only supports "auto", "any", or specific tool
-				// - Z.AI: only supports "auto"
-				// For these, we skip setting "none" and handle it below
 				if !isAmazonModel && !isZAIModel {
-					req["tool_choice"] = "none"
+					params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+						OfAuto: openai.String("none"),
+					}
 				}
 			} else {
-				req["tool_choice"] = map[string]any{
-					"type": "function",
-					"function": map[string]string{
-						"name": options.ToolChoice,
+				params.ToolChoice = openai.ToolChoiceOptionFunctionToolChoice(
+					openai.ChatCompletionNamedToolChoiceFunctionParam{
+						Name: options.ToolChoice,
 					},
-				}
+				)
 			}
 		}
 	}
 
-	// Check if conversation contains tool-related messages
+	// Handle Amazon Bedrock and Z.AI specific requirements
 	hasToolContent := false
 	if isAmazonModel || isZAIModel {
 		for _, msg := range messages {
@@ -357,87 +301,65 @@ func (o *openRouter) buildRequest(messages []core.Message, options *core.Generat
 		}
 	}
 
-	// Handle Amazon Bedrock specific requirements
-	if isAmazonModel && hasToolContent {
-		// Amazon Bedrock requires toolConfig when conversation contains toolUse/toolResult blocks
-		// CRITICAL: Bedrock does NOT support toolChoice: "none" - only "auto", "any", or specific tool
-		// When caller requests "none" (final answer mode), we must:
-		// 1. Still provide tools in the request (for validation)
-		// 2. Force toolChoice to "auto" (Bedrock limitation)
-		// 3. Rely on the prompt to discourage tool usage
-		req["tool_config"] = map[string]any{
-			"toolChoice": map[string]any{
-				"auto": map[string]any{},
-			},
-		}
-		// Override any "none" tool_choice to "auto" for Bedrock compatibility
-		req["tool_choice"] = "auto"
-	}
-
-	// Handle Z.AI specific requirements (only supports tool_choice: "auto")
-	if isZAIModel && len(options.Tools) > 0 {
-		// Z.AI models only support tool_choice: "auto"
-		// Force to "auto" regardless of what was requested
-		req["tool_choice"] = "auto"
-	}
-
-	// Merge ProviderParams with request, respecting DSGo-managed keys
-	if len(options.ProviderParams) > 0 {
-		for key, value := range options.ProviderParams {
-			// Don't override DSGo-managed keys to maintain consistency
-			switch key {
-			case "model", "messages", "temperature", "max_tokens", "top_p", "stop",
-				"response_format", "frequency_penalty", "presence_penalty", "tools", "tool_choice":
-				// Skip DSGo-managed keys - DSGo values take precedence
-				continue
-			default:
-				// Merge provider-specific parameter
-				req[key] = value
-			}
+	if (isAmazonModel && hasToolContent) || (isZAIModel && len(options.Tools) > 0) {
+		params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+			OfAuto: openai.String("auto"),
 		}
 	}
 
-	return req
+	return params
 }
 
-func (o *openRouter) convertMessages(messages []core.Message) []map[string]any {
-	converted := make([]map[string]any, 0, len(messages))
+func (o *openRouter) convertMessages(messages []core.Message) []openai.ChatCompletionMessageParamUnion {
+	converted := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
+
 	for _, msg := range messages {
-		m := map[string]any{
-			"role": msg.Role,
-		}
-
-		// Handle tool responses
-		if msg.Role == "tool" {
-			m["content"] = msg.Content
-			if msg.ToolID != "" {
-				m["tool_call_id"] = msg.ToolID
-			}
-		} else if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
-			// Assistant message with tool calls
-			if msg.Content != "" {
-				m["content"] = msg.Content
-			}
-			toolCalls := make([]map[string]any, 0, len(msg.ToolCalls))
-			for _, tc := range msg.ToolCalls {
-				argsBytes, _ := json.Marshal(tc.Arguments)
-				toolCalls = append(toolCalls, map[string]any{
-					"id":   tc.ID,
-					"type": "function",
-					"function": map[string]any{
-						"name":      tc.Name,
-						"arguments": string(argsBytes),
-					},
+		switch msg.Role {
+		case "system":
+			converted = append(converted, openai.SystemMessage(msg.Content))
+		case "user":
+			converted = append(converted, openai.UserMessage(msg.Content))
+		case "assistant":
+			if len(msg.ToolCalls) > 0 {
+				toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(msg.ToolCalls))
+				for _, tc := range msg.ToolCalls {
+					argsBytes, _ := json.Marshal(tc.Arguments)
+					// Sanitize tool call ID to meet provider constraints
+					sanitizedID := sanitizeToolCallID(tc.ID)
+					toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{
+						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
+							ID:   sanitizedID,
+							Type: "function",
+							Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
+								Name:      tc.Name,
+								Arguments: string(argsBytes),
+							},
+						},
+					})
+				}
+				assistantMsg := &openai.ChatCompletionAssistantMessageParam{
+					ToolCalls: toolCalls,
+				}
+				// Only set content if non-empty - Amazon Bedrock rejects empty text fields
+				if msg.Content != "" {
+					assistantMsg.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(msg.Content)}
+				}
+				converted = append(converted, openai.ChatCompletionMessageParamUnion{
+					OfAssistant: assistantMsg,
 				})
+			} else {
+				converted = append(converted, openai.AssistantMessage(msg.Content))
 			}
-			m["tool_calls"] = toolCalls
-		} else {
-			// Regular message
-			m["content"] = msg.Content
+		case "tool":
+			// Sanitize tool call ID to meet provider constraints
+			sanitizedToolID := sanitizeToolCallID(msg.ToolID)
+			// Note: ToolMessage signature is (content, toolCallID) - not (toolCallID, content)
+			converted = append(converted, openai.ToolMessage(msg.Content, sanitizedToolID))
+		default:
+			converted = append(converted, openai.UserMessage(msg.Content))
 		}
-
-		converted = append(converted, m)
 	}
+
 	return converted
 }
 
@@ -457,32 +379,27 @@ func mapParamTypeToJSONType(t string) string {
 	case "array", "list":
 		return "array"
 	default:
-		// safest possible default
 		return "string"
 	}
 }
 
-// sanitizeToolsForOpenRouter ensures all tool parameter types are valid before sending to OpenRouter
+// sanitizeToolsForOpenRouter ensures all tool parameter types are valid before sending
 func sanitizeToolsForOpenRouter(tools []core.Tool) []core.Tool {
 	sanitized := make([]core.Tool, len(tools))
 	for i, t := range tools {
 		sanitizedParams := make([]core.ToolParameter, len(t.Parameters))
 		for j, p := range t.Parameters {
-			// Ensure parameter type is not empty
 			paramType := strings.TrimSpace(p.Type)
 			if paramType == "" {
 				paramType = "string"
 			}
-			// Use the same mapping helper to normalize the type
 			normalizedType := mapParamTypeToJSONType(paramType)
 
-			// Create a copy of the parameter with the sanitized type
 			sanitizedParam := p
 			sanitizedParam.Type = normalizedType
 			sanitizedParams[j] = sanitizedParam
 		}
 
-		// Create a copy of the tool with sanitized parameters
 		sanitizedTool := t
 		sanitizedTool.Parameters = sanitizedParams
 		sanitized[i] = sanitizedTool
@@ -490,12 +407,11 @@ func sanitizeToolsForOpenRouter(tools []core.Tool) []core.Tool {
 	return sanitized
 }
 
-func (o *openRouter) convertTool(tool *core.Tool) map[string]any {
+func (o *openRouter) convertTool(tool *core.Tool) openai.ChatCompletionToolUnionParam {
 	properties := make(map[string]any)
 	required := []string{}
 
 	for _, param := range tool.Parameters {
-		// Compute jsonType using the mapping function
 		jsonType := mapParamTypeToJSONType(param.Type)
 
 		prop := map[string]any{
@@ -504,13 +420,10 @@ func (o *openRouter) convertTool(tool *core.Tool) map[string]any {
 		}
 
 		if jsonType == "array" && param.ElementType != "" {
-			// Map param.ElementType through the same helper to get itemType
 			itemType := mapParamTypeToJSONType(param.ElementType)
 			prop["items"] = map[string]any{"type": itemType}
 		}
 
-		// If jsonType == "object" and param.Enum is non-empty, ignore Enum (enum+object is invalid)
-		// Only set enum for string types
 		if len(param.Enum) > 0 && jsonType == "string" {
 			prop["enum"] = param.Enum
 		}
@@ -522,29 +435,23 @@ func (o *openRouter) convertTool(tool *core.Tool) map[string]any {
 		}
 	}
 
-	return map[string]any{
-		"type": "function",
-		"function": map[string]any{
-			"name":        tool.Name,
-			"description": tool.Description,
-			"parameters": map[string]any{
-				"type":       "object",
-				"properties": properties,
-				"required":   required,
-			},
+	return openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
+		Name:        tool.Name,
+		Description: openai.String(tool.Description),
+		Parameters: shared.FunctionParameters{
+			"type":       "object",
+			"properties": properties,
+			"required":   required,
 		},
-	}
+	})
 }
 
-func (o *openRouter) parseResponse(resp *openRouterResponse) (*core.GenerateResult, error) {
+func (o *openRouter) parseResponse(resp *openai.ChatCompletion) (*core.GenerateResult, error) {
 	if len(resp.Choices) == 0 {
-		// VERBOSE DEBUG for no choices error
 		if debugEnv := os.Getenv("DSGO_DEBUG_PARSE"); debugEnv == "1" || debugEnv == "true" {
-			respJSON, _ := json.MarshalIndent(resp, "", "  ")
 			fmt.Fprintf(os.Stderr, "\n=== NO CHOICES ERROR DEBUG ===\n")
 			fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
 			fmt.Fprintf(os.Stderr, "Response ID: %s\n", resp.ID)
-			fmt.Fprintf(os.Stderr, "Full Response:\n%s\n", string(respJSON))
 			fmt.Fprintf(os.Stderr, "==============================\n\n")
 		}
 		return nil, fmt.Errorf("no choices in response")
@@ -553,24 +460,25 @@ func (o *openRouter) parseResponse(resp *openRouterResponse) (*core.GenerateResu
 	choice := resp.Choices[0]
 	result := &core.GenerateResult{
 		Content:      choice.Message.Content,
-		FinishReason: choice.FinishReason,
+		FinishReason: string(choice.FinishReason),
 		Usage: core.Usage{
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: resp.Usage.CompletionTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
+			PromptTokens:     int(resp.Usage.PromptTokens),
+			CompletionTokens: int(resp.Usage.CompletionTokens),
+			TotalTokens:      int(resp.Usage.TotalTokens),
 		},
 	}
 
-	// Parse tool calls if present
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]core.ToolCall, 0, len(choice.Message.ToolCalls))
 		for _, tc := range choice.Message.ToolCalls {
-			args, err := parseToolArguments(o.Model, resp.ID, choice.FinishReason, tc)
+			args, err := parseToolArguments(o.Model, resp.ID, string(choice.FinishReason), tc)
 			if err != nil {
 				return nil, err
 			}
+			// Sanitize tool call ID to meet provider constraints
+			sanitizedID := sanitizeToolCallID(tc.ID)
 			result.ToolCalls = append(result.ToolCalls, core.ToolCall{
-				ID:        tc.ID,
+				ID:        sanitizedID,
 				Name:      tc.Function.Name,
 				Arguments: args,
 			})
@@ -612,197 +520,14 @@ func (o *openRouter) extractMetadata(headers http.Header) map[string]any {
 	return metadata
 }
 
-// Stream generates a streaming response from OpenRouter
-func (o *openRouter) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
-	chunkChan := make(chan core.Chunk)
-	errChan := make(chan error, 1)
-
-	go func() {
-		defer close(chunkChan)
-		defer close(errChan)
-
-		if options == nil {
-			options = core.DefaultGenerateOptions()
-		}
-
-		reqBody := o.buildRequest(messages, options)
-		reqBody["stream"] = true
-
-		bodyBytes, err := json.Marshal(reqBody)
-		if err != nil {
-			errChan <- fmt.Errorf("failed to marshal request: %w", err)
-			return
-		}
-
-		var retryOpts *retry.Options
-		if options != nil {
-			retryOpts = retryOptionsFromConfig(options.RetryConfig)
-		}
-
-		resp, err := retry.WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
-			req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
-			if err != nil {
-				return nil, err
-			}
-
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+o.APIKey)
-			if o.SiteName != "" {
-				req.Header.Set("X-Title", o.SiteName)
-			}
-			if o.SiteURL != "" {
-				req.Header.Set("HTTP-Referer", o.SiteURL)
-			}
-
-			return o.Client.Do(req)
-		}, retryOpts)
-		if err != nil {
-			errChan <- fmt.Errorf("request failed: %w", err)
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-
-			// Verbose HTTP error logging for streaming
-			fmt.Fprintf(os.Stderr, "\n=== HTTP STREAMING ERROR DEBUG ===\n")
-			fmt.Fprintf(os.Stderr, "Status: %d %s\n", resp.StatusCode, resp.Status)
-			fmt.Fprintf(os.Stderr, "Model: %s\n", o.Model)
-			fmt.Fprintf(os.Stderr, "URL: %s\n", o.BaseURL+"/chat/completions")
-			fmt.Fprintf(os.Stderr, "\nResponse Headers:\n")
-			for k, v := range resp.Header {
-				fmt.Fprintf(os.Stderr, "  %s: %s\n", k, strings.Join(v, ", "))
-			}
-			fmt.Fprintf(os.Stderr, "\nResponse Body:\n%s\n", string(body))
-			fmt.Fprintf(os.Stderr, "==================================\n\n")
-
-			errChan <- fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-			return
-		}
-
-		// Read SSE stream
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-
-			// Skip empty lines
-			if line == "" {
-				continue
-			}
-
-			// Parse SSE format: "data: {json}"
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-
-			data := strings.TrimPrefix(line, "data: ")
-
-			// Check for stream end
-			if data == "[DONE]" {
-				break
-			}
-
-			// Parse JSON chunk
-			var streamResp openRouterStreamResponse
-			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				errChan <- fmt.Errorf("failed to parse stream chunk: %w", err)
-				return
-			}
-
-			// Extract chunk data
-			if len(streamResp.Choices) > 0 {
-				choice := streamResp.Choices[0]
-				chunk := core.Chunk{
-					Content:      choice.Delta.Content,
-					FinishReason: choice.FinishReason,
-				}
-
-				// Add usage if present (typically in last chunk)
-				if streamResp.Usage != nil {
-					chunk.Usage = core.Usage{
-						PromptTokens:     streamResp.Usage.PromptTokens,
-						CompletionTokens: streamResp.Usage.CompletionTokens,
-						TotalTokens:      streamResp.Usage.TotalTokens,
-					}
-				}
-
-				chunkChan <- chunk
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			errChan <- fmt.Errorf("stream reading error: %w", err)
-			return
-		}
-	}()
-
-	return chunkChan, errChan
-}
-
-// OpenRouter API response structures
-type openRouterResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index        int               `json:"index"`
-		Message      openRouterMessage `json:"message"`
-		FinishReason string            `json:"finish_reason"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-type openRouterMessage struct {
-	Role      string               `json:"role"`
-	Content   string               `json:"content"`
-	ToolCalls []openRouterToolCall `json:"tool_calls,omitempty"`
-}
-
-type openRouterToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
-}
-
-type openRouterStreamResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index int `json:"index"`
-		Delta struct {
-			Content string `json:"content"`
-			Role    string `json:"role,omitempty"`
-		} `json:"delta"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage,omitempty"`
-}
-
 // parseToolArguments attempts to parse tool call arguments with multiple fallback strategies
-func parseToolArguments(model, responseID, finishReason string, tc openRouterToolCall) (map[string]any, error) {
+func parseToolArguments(model, responseID, finishReason string, tc openai.ChatCompletionMessageToolCallUnion) (map[string]any, error) {
 	raw := tc.Function.Arguments
 
-	// Handle empty arguments (some models return empty string for zero-param tools)
 	if strings.TrimSpace(raw) == "" {
 		return map[string]any{}, nil
 	}
 
-	// Try primary parse with JSON repair
 	repaired := jsonutil.RepairJSON(raw)
 	var args map[string]any
 
@@ -810,7 +535,6 @@ func parseToolArguments(model, responseID, finishReason string, tc openRouterToo
 		return args, nil
 	}
 
-	// Fallback 1: Try nested JSON string unescape (double-encoded args)
 	var inner string
 	if json.Unmarshal([]byte(repaired), &inner) == nil && strings.Contains(inner, "{") {
 		innerRepaired := jsonutil.RepairJSON(inner)
@@ -819,14 +543,12 @@ func parseToolArguments(model, responseID, finishReason string, tc openRouterToo
 		}
 	}
 
-	// Fallback 2: Extract largest valid object substring
 	if jsonStr, err := jsonutil.ExtractJSON(repaired); err == nil {
 		if err := json.Unmarshal([]byte(jsonStr), &args); err == nil {
 			return args, nil
 		}
 	}
 
-	// Fallback 3: Balance delimiters for truncated JSON
 	if strings.Contains(repaired, "{") || strings.Contains(repaired, "[") {
 		balanced := balanceDelimiters(repaired)
 		if err := json.Unmarshal([]byte(balanced), &args); err == nil {
@@ -834,17 +556,11 @@ func parseToolArguments(model, responseID, finishReason string, tc openRouterToo
 		}
 	}
 
-	// Final attempt: Log detailed debug info if enabled
 	if debugEnabled() {
 		fmt.Fprintf(os.Stderr, "\n=== TOOL ARGS PARSE ERROR DEBUG ===\n")
 		fmt.Fprintf(os.Stderr, "Model: %s\nResponse ID: %s\nFinish Reason: %s\n", model, responseID, finishReason)
 		fmt.Fprintf(os.Stderr, "Tool Call ID: %s  Name: %s\n", tc.ID, tc.Function.Name)
 		fmt.Fprintf(os.Stderr, "Raw args length: %d\n", len(raw))
-		fmt.Fprintf(os.Stderr, "Braces: {=%d }=%d  Brackets: [=%d ]=%d\n",
-			strings.Count(raw, "{"), strings.Count(raw, "}"),
-			strings.Count(raw, "["), strings.Count(raw, "]"))
-		fmt.Fprintf(os.Stderr, "Raw preview: %s\n", preview(raw, 200))
-		fmt.Fprintf(os.Stderr, "Repaired preview: %s\n", preview(repaired, 200))
 		fmt.Fprintf(os.Stderr, "===================================\n\n")
 	}
 
@@ -852,16 +568,13 @@ func parseToolArguments(model, responseID, finishReason string, tc openRouterToo
 		model, tc.Function.Name, finishReason)
 }
 
-// balanceDelimiters attempts to balance unmatched braces and brackets
 func balanceDelimiters(s string) string {
-	// Balance curly braces
 	openCurly := strings.Count(s, "{")
 	closeCurly := strings.Count(s, "}")
 	if closeCurly < openCurly {
 		s += strings.Repeat("}", openCurly-closeCurly)
 	}
 
-	// Balance square brackets
 	openSquare := strings.Count(s, "[")
 	closeSquare := strings.Count(s, "]")
 	if closeSquare < openSquare {
@@ -871,87 +584,91 @@ func balanceDelimiters(s string) string {
 	return s
 }
 
-// preview returns a preview of a string with head and tail
-func preview(s string, n int) string {
-	if len(s) <= n*2 {
-		return s
-	}
-	return s[:n] + " ... " + s[len(s)-n:]
-}
-
-// debugEnabled checks if debug mode is enabled via environment variable
 func debugEnabled() bool {
 	d := os.Getenv("DSGO_DEBUG_PARSE")
 	return d == "1" || strings.ToLower(d) == "true"
 }
 
-// saveRawExchange saves complete request/response exchange to a file for debugging
-func saveRawExchange(model string, request map[string]any, statusCode int, headers http.Header, responseBody []byte, saveErr error) error {
-	// Only write artifacts when explicitly enabled.
-	debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
-	if debugEnv != "1" && strings.ToLower(debugEnv) != "true" {
-		return nil
+// sanitizeToolCallID ensures a tool call ID meets all provider constraints.
+// It handles IDs that are too long or contain invalid characters by creating
+// a deterministic hash-based ID that preserves uniqueness.
+func sanitizeToolCallID(id string) string {
+	// Check if ID is already valid
+	if len(id) <= maxToolCallIDLength && !toolCallIDPattern.MatchString(id) {
+		return id
 	}
 
-	// Determine output directory - prefer DSGO_ARTIFACT_DIR, fallback to dsgo_artifacts
-	baseDir := os.Getenv("DSGO_ARTIFACT_DIR")
-	if baseDir == "" {
-		baseDir = "dsgo_artifacts"
-	}
-	rawDir := filepath.Join(baseDir, "raw")
-	if err := os.MkdirAll(rawDir, 0755); err != nil {
-		return err
+	// Replace invalid characters first
+	sanitized := toolCallIDPattern.ReplaceAllString(id, "_")
+
+	// If still too long, create a hash-based ID
+	if len(sanitized) > maxToolCallIDLength {
+		// Use SHA-256 to create a deterministic short ID
+		// Keep a prefix for readability, append hash for uniqueness
+		hash := sha256.Sum256([]byte(id))
+		hashStr := hex.EncodeToString(hash[:])[:16] // Use first 16 chars of hash
+
+		// Calculate max prefix length: maxLength - hash length - separator
+		maxPrefixLen := maxToolCallIDLength - len(hashStr) - 1
+		if maxPrefixLen < 0 {
+			maxPrefixLen = 0
+		}
+
+		prefix := sanitized
+		if len(prefix) > maxPrefixLen {
+			prefix = prefix[:maxPrefixLen]
+		}
+
+		if prefix == "" {
+			sanitized = hashStr
+		} else {
+			sanitized = prefix + "_" + hashStr
+		}
 	}
 
-	// Parse response body as JSON if possible
-	var responseJSON any
-	var responseText string
-	if err := json.Unmarshal(responseBody, &responseJSON); err != nil {
-		responseText = string(responseBody)
-	}
+	return sanitized
+}
 
-	// Build complete exchange record
-	exchange := map[string]any{
-		"timestamp": time.Now().Format(time.RFC3339Nano),
-		"provider":  "openrouter",
-		"model":     model,
-		"example":   os.Getenv("DSGO_EXAMPLE"),
-		"request":   request,
-		"http": map[string]any{
-			"status":  statusCode,
-			"headers": headers,
-		},
-	}
+// Stream generates a streaming response from OpenRouter using the official OpenAI SDK
+func (o *openRouter) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
+	chunkChan := make(chan core.Chunk)
+	errChan := make(chan error, 1)
 
-	if responseJSON != nil {
-		exchange["response"] = responseJSON
-	} else {
-		exchange["response_text"] = responseText
-	}
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
 
-	if saveErr != nil {
-		exchange["error"] = saveErr.Error()
-	}
+		params := o.buildParams(messages, options)
 
-	// Create filename with timestamp and model
-	timestamp := time.Now().Format("20060102_150405.000000")
-	safeModel := strings.ReplaceAll(model, "/", "_")
-	safeModel = strings.ReplaceAll(safeModel, ":", "_")
-	filename := filepath.Join(rawDir, fmt.Sprintf("%s_openrouter_%s.json", timestamp, safeModel))
+		stream := o.Client.Chat.Completions.NewStreaming(ctx, params)
 
-	// Marshal with 2-space indentation
-	exchangeJSON, err := json.MarshalIndent(exchange, "", "  ")
-	if err != nil {
-		return err
-	}
+		for stream.Next() {
+			chunk := stream.Current()
 
-	// Write to file
-	if err := os.WriteFile(filename, exchangeJSON, 0644); err != nil {
-		return err
-	}
+			if len(chunk.Choices) > 0 {
+				choice := chunk.Choices[0]
+				coreChunk := core.Chunk{
+					Content:      choice.Delta.Content,
+					FinishReason: string(choice.FinishReason),
+				}
 
-	if os.Getenv("DSGO_ARTIFACT_DIR") != "" {
-		fmt.Fprintf(os.Stderr, "📝 Raw exchange saved to: %s\n", filename)
-	}
-	return nil
+				if chunk.Usage.TotalTokens > 0 {
+					coreChunk.Usage = core.Usage{
+						PromptTokens:     int(chunk.Usage.PromptTokens),
+						CompletionTokens: int(chunk.Usage.CompletionTokens),
+						TotalTokens:      int(chunk.Usage.TotalTokens),
+					}
+				}
+
+				chunkChan <- coreChunk
+			}
+		}
+
+		if err := stream.Err(); err != nil {
+			errChan <- fmt.Errorf("stream error: %w", err)
+			return
+		}
+	}()
+
+	return chunkChan, errChan
 }
