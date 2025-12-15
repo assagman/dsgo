@@ -65,7 +65,7 @@ func TestIntegration_TypedPredict_E2E_StringInStringOut(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	lm := NewMockLMWithResponse("[[ ## Answer ## ]]\nhello")
+	lm := NewMockLMWithResponse(`{"Answer": "hello"}`)
 	fn, err := dsgo.NewTypedPredict[tpStringIn, tpStringOut](lm)
 	if err != nil {
 		t.Fatalf("NewTypedPredict() error = %v", err)
@@ -80,7 +80,7 @@ func TestIntegration_TypedPredict_E2E_StringInStringOut(t *testing.T) {
 	}
 
 	AssertPredictionValid(t, pred, []string{"Answer"})
-	AssertAdapterUsed(t, pred, "adapter.ChatAdapter")
+	AssertAdapterUsed(t, pred, "adapter.JSONAdapter")
 	AssertFallbackUsed(t, pred, false)
 }
 
@@ -110,7 +110,7 @@ func TestIntegration_TypedPredict_E2E_ClassOutput_ValidEnumValue(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	lm := NewMockLMWithResponse("[[ ## Sentiment ## ]]\npositive")
+	lm := NewMockLMWithResponse(`{"Sentiment": "positive"}`)
 	fn, err := dsgo.NewTypedPredict[tpClassIn, tpClassOut](lm)
 	if err != nil {
 		t.Fatalf("NewTypedPredict() error = %v", err)
@@ -124,7 +124,7 @@ func TestIntegration_TypedPredict_E2E_ClassOutput_ValidEnumValue(t *testing.T) {
 		t.Fatalf("Sentiment = %q, want %q", out.Sentiment, "positive")
 	}
 
-	AssertAdapterUsed(t, pred, "adapter.ChatAdapter")
+	AssertAdapterUsed(t, pred, "adapter.JSONAdapter")
 	AssertFallbackUsed(t, pred, false)
 }
 
@@ -132,7 +132,7 @@ func TestIntegration_TypedPredict_E2E_JSONOutput_ParsesIntoNestedStruct(t *testi
 	t.Parallel()
 	ctx := context.Background()
 
-	// Use JSON response so fallback adapter must switch Chat -> JSON.
+	// Use JSON response - JSONAdapter is now first in chain, so it succeeds without fallback
 	lm := NewMockLMWithResponse(`{"data": {"user": {"name": "Alice", "age": 30}, "tags": ["x", "y"]}}`)
 	fn, err := dsgo.NewTypedPredict[tpJSONIn, tpJSONOut](lm)
 	if err != nil {
@@ -151,7 +151,7 @@ func TestIntegration_TypedPredict_E2E_JSONOutput_ParsesIntoNestedStruct(t *testi
 	}
 
 	AssertAdapterUsed(t, pred, "adapter.JSONAdapter")
-	AssertFallbackUsed(t, pred, true)
+	AssertFallbackUsed(t, pred, false) // JSON is now first, no fallback needed
 }
 
 func TestIntegration_TypedPredict_Error_MissingRequiredInput_NilPointer_OmittedFromMap(t *testing.T) {
@@ -225,7 +225,7 @@ func TestIntegration_TypedPredict_ConcurrencySmoke(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	lm := NewMockLMWithResponse("[[ ## Answer ## ]]\nhello")
+	lm := NewMockLMWithResponse(`{"Answer": "hello"}`)
 	fn, err := dsgo.NewTypedPredict[tpStringIn, tpStringOut](lm)
 	if err != nil {
 		t.Fatalf("NewTypedPredict() error = %v", err)

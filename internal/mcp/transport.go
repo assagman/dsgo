@@ -134,6 +134,8 @@ func decodeJSONRPCResponse(contentType string, body io.Reader) (*JSONRPCResponse
 	var jsonRpcResp JSONRPCResponse
 	if strings.HasPrefix(contentType, "text/event-stream") {
 		scanner := bufio.NewScanner(body)
+		// Increase buffer size for large MCP tool responses (default 64KB is too small)
+		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024) // 4MB max
 		found := false
 		for scanner.Scan() {
 			line := scanner.Bytes()
@@ -339,6 +341,8 @@ func (t *SSETransport) readLoop(body io.ReadCloser) {
 		_ = body.Close()
 	}()
 	scanner := bufio.NewScanner(body)
+	// Increase buffer size for large MCP tool responses (default 64KB is too small)
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024) // 4MB max
 	var eventType string
 
 	for scanner.Scan() {

@@ -19,9 +19,10 @@ type HTMLReportGenerator struct {
 
 func NewHTMLReportGenerator() *HTMLReportGenerator {
 	funcMap := template.FuncMap{
-		"formatDate": formatDate,
-		"add":        func(a, b int) int { return a + b },
-		"toLower":    strings.ToLower,
+		"formatDate":     formatDate,
+		"add":            func(a, b int) int { return a + b },
+		"toLower":        strings.ToLower,
+		"countQuestions": countQuestions,
 	}
 
 	tmpl := template.Must(

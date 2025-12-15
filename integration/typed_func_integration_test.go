@@ -76,7 +76,7 @@ func TestIntegration_Func_Run_Success(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	lm := NewMockLMWithResponse("[[ ## Answer ## ]]\nok")
+	lm := NewMockLMWithResponse(`{"Answer": "ok"}`)
 	fn, err := dsgo.NewTypedPredict[tfIn, tfOut](lm)
 	if err != nil {
 		t.Fatalf("NewTypedPredict() error = %v", err)
@@ -95,7 +95,7 @@ func TestIntegration_Func_RunWithPrediction_Success(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	lm := NewMockLMWithResponse("[[ ## Answer ## ]]\nok")
+	lm := NewMockLMWithResponse(`{"Answer": "ok"}`)
 	fn, err := dsgo.NewTypedPredict[tfIn, tfOut](lm)
 	if err != nil {
 		t.Fatalf("NewTypedPredict() error = %v", err)

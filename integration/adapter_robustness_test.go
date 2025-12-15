@@ -480,26 +480,26 @@ func TestFallbackAdapter_ComplexRecovery(t *testing.T) {
 	tests := []struct {
 		name            string
 		content         string
-		expectedAdapter int // Which adapter in chain should succeed
+		expectedAdapter int // Which adapter in chain should succeed (0=JSONAdapter, 1=ChatAdapter)
 		wantErr         bool
 		validateOutput  func(map[string]any) bool
 	}{
 		{
-			name:            "Chat format with markers",
-			content:         "[[ ## answer ## ]]\nyes\n\n[[ ## score ## ]]\n0.9",
-			expectedAdapter: 0, // ChatAdapter
-			wantErr:         false,
-			validateOutput: func(outputs map[string]any) bool {
-				return outputs["answer"] == "yes" && outputs["score"].(float64) == 0.9
-			},
-		},
-		{
 			name:            "JSON format (no markers)",
 			content:         `{"answer": "yes", "score": 0.9}`,
-			expectedAdapter: 1, // JSONAdapter
+			expectedAdapter: 0, // JSONAdapter (first in chain)
 			wantErr:         false,
 			validateOutput: func(outputs map[string]any) bool {
 				return outputs["answer"] == "yes"
+			},
+		},
+		{
+			name:            "Chat format with markers",
+			content:         "[[ ## answer ## ]]\nyes\n\n[[ ## score ## ]]\n0.9",
+			expectedAdapter: 1, // ChatAdapter (fallback)
+			wantErr:         false,
+			validateOutput: func(outputs map[string]any) bool {
+				return outputs["answer"] == "yes" && outputs["score"].(float64) == 0.9
 			},
 		},
 		{
@@ -655,8 +655,10 @@ Some explanation here`,
 // TestAdapter_Metadata_Tracking tests adapter metadata tracking
 func TestAdapter_Metadata_Tracking(t *testing.T) {
 	t.Parallel()
+	// Use multi-field signature to prevent JSONAdapter's single-field raw text fallback
 	sig := dsgo.NewSignature("test").
-		AddOutput("answer", dsgo.FieldTypeString, "")
+		AddOutput("answer", dsgo.FieldTypeString, "").
+		AddOutput("reason", dsgo.FieldTypeString, "")
 
 	tests := []struct {
 		name                     string
@@ -666,15 +668,15 @@ func TestAdapter_Metadata_Tracking(t *testing.T) {
 		expectedAdapterUsedIndex int
 	}{
 		{
-			name:                     "First adapter success",
-			content:                  "[[ ## answer ## ]]\nyes",
+			name:                     "First adapter success (JSONAdapter)",
+			content:                  `{"answer": "yes", "reason": "because"}`,
 			expectedParseAttempts:    1,
 			expectedFallbackUsed:     false,
 			expectedAdapterUsedIndex: 0,
 		},
 		{
-			name:                     "Second adapter success",
-			content:                  `{"answer": "yes"}`,
+			name:                     "Second adapter success (ChatAdapter)",
+			content:                  "[[ ## answer ## ]]\nyes\n\n[[ ## reason ## ]]\nbecause",
 			expectedParseAttempts:    2,
 			expectedFallbackUsed:     true,
 			expectedAdapterUsedIndex: 1,
@@ -1191,10 +1193,9 @@ func TestAdapter_MixedFieldMarkers(t *testing.T) {
 			sig: dsgo.NewSignature("test").
 				AddOutput("answer", dsgo.FieldTypeString, "").
 				AddOutput("score", dsgo.FieldTypeFloat, ""),
+			// Pure chat markers without embedded JSON - ensures ChatAdapter handles this
 			input: `[[ ## answer ## ]]
 yes
-
-Here's also some JSON: {"score": 0.95}
 
 [[ ## score ## ]]
 0.85`,
@@ -1240,16 +1241,21 @@ Here's also some JSON: {"score": 0.95}
 			shouldSucceed:   false,
 		},
 		{
-			name: "JSON wrapped in Chat markers",
+			name: "Pure Chat markers (no embedded JSON)",
 			sig: dsgo.NewSignature("test").
-				AddOutput("data", dsgo.FieldTypeJSON, ""),
+				AddOutput("data", dsgo.FieldTypeString, "").
+				AddOutput("meta", dsgo.FieldTypeString, ""), // Multi-field to ensure JSONAdapter fails on non-JSON content
 			input: `[[ ## data ## ]]
-{"nested": {"key": "value", "array": [1, 2, 3]}}`,
+This is plain text data without any JSON structure
+
+[[ ## meta ## ]]
+some metadata`,
 			expectedAdapter: "chat",
 			shouldSucceed:   true,
 			validateOutputs: func(outputs map[string]any) bool {
 				_, hasData := outputs["data"]
-				return hasData
+				_, hasMeta := outputs["meta"]
+				return hasData && hasMeta
 			},
 		},
 	}

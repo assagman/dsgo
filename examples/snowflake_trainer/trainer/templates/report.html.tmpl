@@ -99,33 +99,63 @@
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 14px;
-      background: #fbfdff;
+      background: var(--panel);
     }
-    .module-card { border-color: #d9e2ec; }
-    .pill { padding: 4px 10px; border-radius: 999px; background: #eef2ff; color: #4338ca; font-weight: 600; font-size: 12px; }
-    ul { padding-left: 18px; }
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--primary-weak);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+      margin-right: 6px;
+    }
     pre {
-      background: #0f172a;
-      color: #e2e8f0;
-      padding: 12px;
+      background: var(--code);
+      color: #e8f1ff;
       border-radius: 8px;
+      padding: 14px;
       overflow-x: auto;
+      font-size: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th { background: var(--bg); font-weight: 600; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .question { margin-bottom: 14px; }
+    .footer {
+      text-align: center;
+      padding: 20px 0 10px;
+      color: var(--muted);
       font-size: 13px;
     }
-    code { font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; }
-    th { background: #f1f5f9; }
-    details { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
-    details summary { cursor: pointer; font-weight: 600; }
-    .muted { color: var(--muted); }
-    .section-heading { display: flex; align-items: center; gap: 10px; }
-    .question { margin-bottom: 14px; }
-    .footer { text-align: center; color: var(--muted); margin-top: 24px; font-size: 14px; }
-    @media print {
-      nav.toc { position: static; box-shadow: none; }
-      section { box-shadow: none; }
-      .page { padding: 0; }
+    details summary {
+      cursor: pointer;
+      font-weight: 600;
+      padding: 8px 0;
+    }
+    .warning {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 8px;
+      padding: 10px;
+      margin: 8px 0;
     }
   </style>
 </head>
@@ -133,20 +163,20 @@
   <div class="page">
     <header class="hero">
       <h1>{{.ReportTitle}}</h1>
+      <p class="muted">{{.Topic}} Training Report</p>
       <div class="meta">
-        <span class="badge">Topic: {{.Topic}}</span>
-        <span class="badge">Skill: {{.SkillLevel}}</span>
-        <span class="badge">Estimated: {{.EstimatedTime}}</span>
-        <span class="badge">Date: {{.ReportDate}}</span>
-        <span class="badge">Author: {{.Author}}</span>
+        <span class="badge">{{.SkillLevel}}</span>
+        <span class="badge">{{.EstimatedTime}}</span>
+        <span class="badge">{{len .Modules}} Modules</span>
+        <span class="badge">{{.Quizzes | countQuestions}} Questions</span>
       </div>
     </header>
 
     <nav class="toc">
-      <strong>Table of Contents</strong>
+      <strong>Quick Navigation</strong>
       <ul>
-        <li><a href="#summary">Executive Summary</a></li>
-        <li><a href="#modules">Learning Modules</a></li>
+        <li><a href="#summary">Summary</a></li>
+        <li><a href="#modules">Modules</a></li>
         <li><a href="#quizzes">Quiz Assessment</a></li>
         <li><a href="#exercises">Practical Exercises</a></li>
         <li><a href="#challenges">Challenges</a></li>
@@ -182,6 +212,7 @@
             <span class="pill">{{$m.Duration}}</span>
             <span class="pill">{{$m.Difficulty}}</span>
           </div>
+          
           <h4>Learning Objectives</h4>
           <ul>
             {{range $m.LearningObjectives}}
@@ -189,87 +220,39 @@
             {{end}}
           </ul>
 
-          {{range $m.Sections}}
           <div class="card" style="margin-top:10px;">
-            <h4>{{.Title}}</h4>
-            <p>{{.Content}}</p>
-            {{if .Diagram}}
-            <p class="muted">Diagram</p>
-            <pre><code>{{.Diagram}}</code></pre>
-            {{end}}
-            {{if .KeyPoints}}
-            <p class="muted">Key Points</p>
-            <ul>
-              {{range .KeyPoints}}
-              <li>{{.}}</li>
-              {{end}}
-            </ul>
-            {{end}}
+            <h4>Content</h4>
+            <p>{{$m.Content}}</p>
+          </div>
+
+          {{if $m.CodeExamples}}
+          <div class="card" style="margin-top:10px;">
+            <h4>Code Examples</h4>
+            <pre><code>{{$m.CodeExamples}}</code></pre>
           </div>
           {{end}}
 
-          <details style="margin-top:12px;">
-            <summary>Module Quiz ({{len $m.Quiz.Questions}} questions)</summary>
-            <div style="margin-top:10px;">
-              {{if $m.Quiz.Questions}}
-                {{range $idx, $q := $m.Quiz.Questions}}
-                  <div class="question">
-                    <strong>Q{{add $idx 1}}. {{$q.Question}}</strong>
-                    {{if $q.Options}}
-                    <ul>
-                      {{range $q.Options}}
-                      <li>{{.}}</li>
-                      {{end}}
-                    </ul>
-                    {{end}}
-                    {{if $q.Correct}}
-                    <p class="muted">Answer: {{$q.Correct}}</p>
-                    {{end}}
-                    {{if $q.Explanation}}
-                    <p class="muted">Explanation: {{$q.Explanation}}</p>
-                    {{end}}
-                  </div>
-                {{end}}
-              {{else}}
-                <p class="muted">No quiz questions for this module.</p>
+          {{if $m.KeyPoints}}
+          <div class="card" style="margin-top:10px;">
+            <h4>Key Points</h4>
+            <ul>
+              {{range $m.KeyPoints}}
+              <li>{{.}}</li>
               {{end}}
-            </div>
-          </details>
+            </ul>
+          </div>
+          {{end}}
 
-          <details style="margin-top:10px;">
-            <summary>Practical Exercise</summary>
-            <div style="margin-top:10px;">
-              {{if $m.PracticalExercise.Title}}
-                <p><strong>{{$m.PracticalExercise.Title}}</strong> · {{$m.PracticalExercise.Type}}</p>
-                <p>{{$m.PracticalExercise.Instructions}}</p>
-                {{if $m.PracticalExercise.Scenario}}
-                  <p class="muted">Scenario: {{$m.PracticalExercise.Scenario}}</p>
-                {{end}}
-                {{if $m.PracticalExercise.StarterCode}}
-                  <p class="muted">Starter Code</p>
-                  <pre><code>{{$m.PracticalExercise.StarterCode}}</code></pre>
-                {{end}}
-                {{if $m.PracticalExercise.Requirements}}
-                  <p class="muted">Requirements</p>
-                  <ul>
-                    {{range $m.PracticalExercise.Requirements}}
-                    <li>{{.}}</li>
-                    {{end}}
-                  </ul>
-                {{end}}
-                {{if $m.PracticalExercise.Solution}}
-                  <p class="muted">Solution</p>
-                  <pre><code>{{$m.PracticalExercise.Solution}}</code></pre>
-                {{end}}
-                {{if $m.PracticalExercise.Explanation}}
-                  <p class="muted">Explanation</p>
-                  <p>{{$m.PracticalExercise.Explanation}}</p>
-                {{end}}
-              {{else}}
-                <p class="muted">No practical exercise for this module.</p>
+          {{if $m.Warnings}}
+          <div class="warning" style="margin-top:10px;">
+            <h4>⚠️ Common Mistakes to Avoid</h4>
+            <ul>
+              {{range $m.Warnings}}
+              <li>{{.}}</li>
               {{end}}
-            </div>
-          </details>
+            </ul>
+          </div>
+          {{end}}
         </div>
         {{end}}
       </div>
@@ -280,24 +263,10 @@
       {{if .Quizzes}}
         {{range $i, $quiz := .Quizzes}}
           <div class="card">
-            <h3>Module {{add $i 1}} Quiz</h3>
+            <h3>{{$quiz.Title}}</h3>
             {{range $j, $question := $quiz.Questions}}
               <div class="question">
-                <strong>Q{{add $j 1}}. {{$question.Question}}</strong>
-                {{if $question.Options}}
-                  <ul>
-                    {{range $question.Options}}<li>{{.}}</li>{{end}}
-                  </ul>
-                {{end}}
-                {{if $question.Correct}}
-                  <p class="muted">Answer: {{$question.Correct}}</p>
-                {{end}}
-                {{if $question.Explanation}}
-                  <p class="muted">Explanation: {{$question.Explanation}}</p>
-                {{end}}
-                {{if $question.Template}}
-                  <pre><code>{{$question.Template}}</code></pre>
-                {{end}}
+                <strong>Q{{add $j 1}}.</strong> {{$question}}
               </div>
             {{end}}
           </div>
@@ -314,24 +283,17 @@
           {{range .Exercises}}
             <div class="card">
               <h3>{{.Title}}</h3>
-              <p class="muted">Type: {{.Type}}</p>
+              <p class="muted">Difficulty: {{.Difficulty}}</p>
               <p>{{.Instructions}}</p>
-              {{if .Scenario}}<p class="muted">Scenario: {{.Scenario}}</p>{{end}}
               {{if .StarterCode}}
                 <p class="muted">Starter Code</p>
                 <pre><code>{{.StarterCode}}</code></pre>
               {{end}}
               {{if .Solution}}
-                <p class="muted">Solution</p>
-                <pre><code>{{.Solution}}</code></pre>
-              {{end}}
-              {{if .Requirements}}
-                <p class="muted">Requirements</p>
-                <ul>{{range .Requirements}}<li>{{.}}</li>{{end}}</ul>
-              {{end}}
-              {{if .Hints}}
-                <p class="muted">Hints</p>
-                <ul>{{range .Hints}}<li>{{.}}</li>{{end}}</ul>
+                <details>
+                  <summary>Solution</summary>
+                  <pre><code>{{.Solution}}</code></pre>
+                </details>
               {{end}}
             </div>
           {{end}}
@@ -347,19 +309,11 @@
         {{range .Challenges}}
           <div class="card">
             <h3>{{.Title}}</h3>
-            <p class="muted">{{.Type}} · {{.Difficulty}} · {{.Duration}}</p>
+            <p class="muted">{{.Difficulty}} · {{.Duration}}</p>
             <p>{{.Description}}</p>
-            {{if .Requirements}}
-              <p class="muted">Requirements</p>
-              <ul>{{range .Requirements}}<li>{{.}}</li>{{end}}</ul>
-            {{end}}
-            {{if .Solution}}
-              <p class="muted">Solution</p>
-              <pre><code>{{.Solution}}</code></pre>
-            {{end}}
-            {{if .Scoring}}
-              <p class="muted">Scoring</p>
-              <ul>{{range .Scoring}}<li>{{.}}</li>{{end}}</ul>
+            {{if .Goals}}
+              <p class="muted">Goals</p>
+              <ul>{{range .Goals}}<li>{{.}}</li>{{end}}</ul>
             {{end}}
           </div>
         {{end}}
@@ -373,14 +327,13 @@
       {{if .Glossary}}
       <table>
         <thead>
-          <tr><th>Term</th><th>Definition</th><th>Category</th></tr>
+          <tr><th>Term</th><th>Definition</th></tr>
         </thead>
         <tbody>
           {{range .Glossary}}
           <tr>
             <td><strong>{{.Term}}</strong></td>
             <td>{{.Definition}}</td>
-            <td>{{.Category}}</td>
           </tr>
           {{end}}
         </tbody>
@@ -397,8 +350,7 @@
           {{range .Resources}}
           <li>
             <strong>{{.Title}}</strong> — <span class="muted">{{.Type}}</span><br/>
-            {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.URL}}</a><br/>{{end}}
-            <span class="muted">{{.Description}}</span>
+            {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.URL}}</a>{{end}}
           </li>
           {{end}}
         </ul>

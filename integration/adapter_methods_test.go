@@ -23,10 +23,13 @@ func newScriptedMockLM(t *testing.T, steps ...mock.HTTPResponseStep) dsgo.LM {
 }
 
 func TestAdapters_FormatAndParse_Smoke(t *testing.T) {
-	sig := fixtures.SimplePredictSig()
+	// Use multi-field signature for fallback test to prevent JSONAdapter's single-field raw text fallback
+	multiFieldSig := fixtures.ChainOfThoughtSig() // Has "reasoning" and "answer" fields
 
 	tests := []struct {
 		name          string
+		sig           *dsgo.Signature
+		inputs        map[string]any
 		adapter       dsgo.Adapter
 		response      string
 		expectAnswer  string
@@ -34,23 +37,29 @@ func TestAdapters_FormatAndParse_Smoke(t *testing.T) {
 	}{
 		{
 			name:         "JSONAdapter",
+			sig:          fixtures.SimplePredictSig(),
+			inputs:       map[string]any{"question": "test"},
 			adapter:      dsgo.NewJSONAdapter(),
 			response:     `{"answer": "ok"}`,
 			expectAnswer: "ok",
 		},
 		{
 			name:         "ChatAdapter",
+			sig:          fixtures.SimplePredictSig(),
+			inputs:       map[string]any{"question": "test"},
 			adapter:      dsgo.NewChatAdapter(),
 			response:     "[[ ## answer ## ]]\nok",
 			expectAnswer: "ok",
 		},
 		{
 			name:         "FallbackAdapter",
-			adapter:      dsgo.NewFallbackAdapter(),   // Defaults to Chat -> JSON
-			response:     `{"answer": "fallback ok"}`, // Chat fails, JSON succeeds
+			sig:          multiFieldSig,                                                        // Multi-field so JSONAdapter can't use raw text fallback
+			inputs:       map[string]any{"problem": "test"},                                    // ChainOfThoughtSig uses "problem" as input
+			adapter:      dsgo.NewFallbackAdapter(),                                            // Defaults to JSON -> Chat
+			response:     "[[ ## reasoning ## ]]\nthinking\n\n[[ ## answer ## ]]\nfallback ok", // JSON fails, Chat succeeds
 			expectAnswer: "fallback ok",
 			expectMetrics: map[string]any{
-				"__adapter_used":   "adapter.JSONAdapter",
+				"__adapter_used":   "adapter.ChatAdapter",
 				"__parse_attempts": 2, // 1st failed, 2nd succeeded
 				"__fallback_used":  true,
 			},
@@ -60,7 +69,7 @@ func TestAdapters_FormatAndParse_Smoke(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 1. Test Format
-			msgs, err := tt.adapter.Format(sig, map[string]any{"question": "test"}, nil)
+			msgs, err := tt.adapter.Format(tt.sig, tt.inputs, nil)
 			if err != nil {
 				t.Fatalf("Format failed: %v", err)
 			}
@@ -69,7 +78,7 @@ func TestAdapters_FormatAndParse_Smoke(t *testing.T) {
 			}
 
 			// 2. Test Parse
-			outputs, err := tt.adapter.Parse(sig, tt.response)
+			outputs, err := tt.adapter.Parse(tt.sig, tt.response)
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
 			}
@@ -94,24 +103,26 @@ func TestPredict_RecordsAdapterMetrics_NotInOutputs(t *testing.T) {
 	// This test verifies that Predict module extracts adapter metrics from outputs
 	// and puts them into the Prediction struct, removing them from Outputs map.
 	ctx := context.Background()
-	sig := fixtures.SimplePredictSig()
+	// Use multi-field signature to prevent JSONAdapter's single-field raw text fallback
+	sig := fixtures.ChainOfThoughtSig() // Has "reasoning" and "answer" fields
 
-	// Setup a response that requires fallback (JSON format, but default chain starts with ChatAdapter)
+	// Setup a response that requires fallback (Chat format, but default chain starts with JSONAdapter)
+	// The response uses Chat markers, so JSON fails and Chat succeeds
 	lm := newScriptedMockLM(t, mock.HTTPResponseStep{
-		Body: fixtures.OpenAIChatCompletionJSON(`{"answer": "fallback success"}`, "stop", 10, 5),
+		Body: fixtures.OpenAIChatCompletionJSON("[[ ## reasoning ## ]]\nthinking\n\n[[ ## answer ## ]]\nfallback success", "stop", 10, 5),
 	})
 
 	// Use FallbackAdapter explicitly
 	pred := dsgo.NewPredict(sig, lm).WithAdapter(dsgo.NewFallbackAdapter())
 
-	result, err := pred.Forward(ctx, map[string]any{"question": "test"})
+	result, err := pred.Forward(ctx, map[string]any{"problem": "test"})
 	if err != nil {
 		t.Fatalf("Forward failed: %v", err)
 	}
 
 	// 1. Check metrics on Prediction struct
-	if result.AdapterUsed != "adapter.JSONAdapter" {
-		t.Errorf("Expected AdapterUsed='adapter.JSONAdapter', got %q", result.AdapterUsed)
+	if result.AdapterUsed != "adapter.ChatAdapter" {
+		t.Errorf("Expected AdapterUsed='adapter.ChatAdapter', got %q", result.AdapterUsed)
 	}
 	if !result.FallbackUsed {
 		t.Error("Expected FallbackUsed=true")

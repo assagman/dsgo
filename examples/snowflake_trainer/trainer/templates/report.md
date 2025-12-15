@@ -44,44 +44,33 @@
 - {{.}}
 {{end}}
 
-{{range $module.Sections}}
+#### Content
 
-#### {{.Title}}
+{{$module.Content}}
 
-{{.Content}}
+{{if $module.CodeExamples}}
+#### Code Examples
 
-{{if .Diagram}}
-**Diagram:**
-
-```mermaid
-{{.Diagram}}
+```sql
+{{$module.CodeExamples}}
 ```
 
 {{end}}
 
-{{if .KeyPoints}}
-**Key Points:**
-{{range .KeyPoints}}
+{{if $module.KeyPoints}}
+#### Key Points
+{{range $module.KeyPoints}}
 - {{.}}
 {{end}}
 
 {{end}}
+
+{{if $module.Warnings}}
+#### Common Mistakes to Avoid
+{{range $module.Warnings}}
+- ⚠️ {{.}}
 {{end}}
 
-#### Module Quiz
-
-{{if $module.Quiz.Questions}}
-{{formatModuleQuiz $module.ID $module.Quiz}}
-{{else}}
-No quiz questions available for this module.
-{{end}}
-
-#### Practical Exercise
-
-{{if $module.PracticalExercise.Title}}
-{{formatExercise $module.PracticalExercise}}
-{{else}}
-No practical exercise available for this module.
 {{end}}
 
 ---
@@ -95,14 +84,10 @@ This section contains all quiz questions organized by module for comprehensive r
 **Total Questions:** {{.Quizzes | countQuestions}}
 
 {{range $i, $quiz := .Quizzes}}
-### Module {{add $i 1}} Quiz
+### {{$quiz.Title}}
 
 {{range $j, $question := $quiz.Questions}}
-#### Question {{add $j 1}}
-
-{{formatQuiz $question}}
-
----
+**Question {{add $j 1}}:** {{$question}}
 
 {{end}}
 {{end}}
@@ -112,7 +97,29 @@ This section contains all quiz questions organized by module for comprehensive r
 This section contains hands-on exercises to practice your skills.
 
 {{range .Exercises}}
-{{formatExercise .}}
+### {{.Title}}
+
+**Difficulty:** {{.Difficulty}}
+
+{{.Instructions}}
+
+{{if .StarterCode}}
+#### Starter Code
+
+```sql
+{{.StarterCode}}
+```
+
+{{end}}
+
+{{if .Solution}}
+#### Solution
+
+```sql
+{{.Solution}}
+```
+
+{{end}}
 
 ---
 
@@ -126,32 +133,14 @@ Apply your knowledge with these practical challenges.
 
 ### {{.Title}}
 
-**Type:** {{.Type}}  
 **Duration:** {{.Duration}}  
 **Difficulty:** {{.Difficulty}}
 
 {{.Description}}
 
-#### Requirements
-{{range .Requirements}}
-- {{.}}
-{{end}}
-
-{{if .Solution}}
-#### Solution
-
-{{if eq .Type "sql_playground"}}
-```sql
-{{.Solution}}
-```
-{{else}}
-{{.Solution}}
-{{end}}
-{{end}}
-
-{{if .Scoring}}
-#### Scoring Criteria
-{{range .Scoring}}
+{{if .Goals}}
+#### Goals
+{{range .Goals}}
 - {{.}}
 {{end}}
 {{end}}
@@ -162,10 +151,10 @@ Apply your knowledge with these practical challenges.
 
 ## Glossary
 
-| Term | Definition | Category |
-|------|------------|----------|
+| Term | Definition |
+|------|------------|
 {{range .Glossary}}
-| **{{.Term}}** | {{.Definition}} | {{.Category}} |
+| **{{.Term}}** | {{.Definition}} |
 {{end}}
 
 ## Additional Resources
@@ -174,8 +163,7 @@ Apply your knowledge with these practical challenges.
 
 {{range .Resources}}
 - **[{{.Title}}]({{.URL}})**  
-  *Type:* {{.Type}}  
-  {{.Description}}
+  *Type:* {{.Type}}
 
 {{end}}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -76,6 +77,127 @@ func extractNumericValue(s string) string {
 	return s
 }
 
+// looksLikeJSONArrayField uses heuristics on the field to decide if it expects an array.
+// This helps handle LLM responses that return map[string]T instead of []T.
+func looksLikeJSONArrayField(field *Field) bool {
+	if field == nil {
+		return false
+	}
+
+	text := strings.ToLower(strings.TrimSpace(field.Name + " " + field.Description))
+
+	// Strong signals in description
+	strongSignals := []string{
+		"list of", "array of", "sequence of", "ordered list",
+		"json array", "collection of", "set of",
+	}
+	for _, signal := range strongSignals {
+		if strings.Contains(text, signal) {
+			return true
+		}
+	}
+
+	// Weak but common signal: plural field name (ends with 's')
+	// e.g., "modules", "items", "steps", "quizzes", "exercises"
+	name := strings.ToLower(strings.TrimSpace(field.Name))
+	if len(name) > 1 && strings.HasSuffix(name, "s") && !strings.HasSuffix(name, "ss") {
+		return true
+	}
+
+	return false
+}
+
+// mapToArrayPreservingKeys converts a map[string]any whose values are all maps into []any.
+// It injects the original key as "id" if not present and sorts deterministically.
+// Returns the original value and false if conversion is not applicable.
+func mapToArrayPreservingKeys(value any) (any, bool) {
+	objMap, ok := value.(map[string]any)
+	if !ok {
+		return value, false
+	}
+	if len(objMap) == 0 {
+		return []any{}, true
+	}
+
+	type item struct {
+		key   string
+		index int
+		hasIx bool
+		val   map[string]any
+	}
+
+	items := make([]item, 0, len(objMap))
+
+	for k, raw := range objMap {
+		child, ok := raw.(map[string]any)
+		if !ok {
+			// Mixed types or non-map values - keep original map
+			return value, false
+		}
+
+		// Clone to avoid mutating shared maps
+		cloned := make(map[string]any, len(child)+1)
+		for ck, cv := range child {
+			cloned[ck] = cv
+		}
+
+		// Preserve key as "id" if not already present
+		if _, exists := cloned["id"]; !exists {
+			cloned["id"] = k
+		}
+
+		// Try to extract a numeric suffix from key (e.g., "module1", "step_02")
+		num, has := extractTrailingInt(k)
+
+		items = append(items, item{
+			key:   k,
+			index: num,
+			hasIx: has,
+			val:   cloned,
+		})
+	}
+
+	// Sort deterministically:
+	// - If all have numeric suffix, sort by that.
+	// - Otherwise sort by key.
+	allHaveIx := true
+	for _, it := range items {
+		if !it.hasIx {
+			allHaveIx = false
+			break
+		}
+	}
+	if allHaveIx {
+		sort.Slice(items, func(i, j int) bool { return items[i].index < items[j].index })
+	} else {
+		sort.Slice(items, func(i, j int) bool { return items[i].key < items[j].key })
+	}
+
+	arr := make([]any, 0, len(items))
+	for _, it := range items {
+		arr = append(arr, it.val)
+	}
+
+	return arr, true
+}
+
+// extractTrailingInt returns the integer at the end of a string, if any.
+func extractTrailingInt(s string) (int, bool) {
+	i := len(s) - 1
+	for i >= 0 && s[i] >= '0' && s[i] <= '9' {
+		i--
+	}
+	if i == len(s)-1 {
+		return 0, false
+	}
+	numStr := s[i+1:]
+	n, err := strconv.Atoi(numStr)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
 // coerceOutputs attempts to convert output values to expected types based on signature.
 // This is a shared helper used by both JSONAdapter and ChatAdapter to ensure consistent
 // type coercion behavior across all adapters.
@@ -135,7 +257,13 @@ func coerceOutputs(sig *Signature, outputs map[string]any, allowArrayToString bo
 			if s, ok := value.(string); ok && s != "" {
 				var parsed any
 				if err := json.Unmarshal([]byte(s), &parsed); err == nil {
-					// Successfully parsed as JSON
+					// Try map→array coercion if it looks like a list field
+					if looksLikeJSONArrayField(field) {
+						if coerced, ok := mapToArrayPreservingKeys(parsed); ok {
+							result[key] = coerced
+							continue
+						}
+					}
 					result[key] = parsed
 					continue
 				}
@@ -143,11 +271,26 @@ func coerceOutputs(sig *Signature, outputs map[string]any, allowArrayToString bo
 				repaired := jsonutil.RepairJSON(s)
 				if repaired != s { // Only if repair changed something
 					if err := json.Unmarshal([]byte(repaired), &parsed); err == nil {
+						// Try map→array coercion on repaired JSON
+						if looksLikeJSONArrayField(field) {
+							if coerced, ok := mapToArrayPreservingKeys(parsed); ok {
+								result[key] = coerced
+								continue
+							}
+						}
 						result[key] = parsed
 						continue
 					}
 				}
 				// If parsing/repair failed, keep as string (validation will catch this)
+			}
+
+			// For already-parsed map[string]any values, try map→array coercion
+			if looksLikeJSONArrayField(field) {
+				if coerced, ok := mapToArrayPreservingKeys(value); ok {
+					result[key] = coerced
+					continue
+				}
 			}
 
 		case FieldTypeString, FieldTypeClass:
@@ -917,12 +1060,12 @@ type FallbackAdapter struct {
 }
 
 // NewFallbackAdapter creates a new fallback adapter with the default chain
-// Default chain: ChatAdapter → JSONAdapter
+// Default chain: JSONAdapter → ChatAdapter (JSON first since most LLMs support structured output)
 func NewFallbackAdapter() *FallbackAdapter {
 	return &FallbackAdapter{
 		adapters: []Adapter{
-			NewChatAdapter(),
 			NewJSONAdapter(),
+			NewChatAdapter(),
 		},
 		lastUsedAdapter: -1,
 	}
@@ -931,10 +1074,10 @@ func NewFallbackAdapter() *FallbackAdapter {
 // NewFallbackAdapterWithChain creates a fallback adapter with custom adapters
 func NewFallbackAdapterWithChain(adapters ...Adapter) *FallbackAdapter {
 	if len(adapters) == 0 {
-		// Default to ChatAdapter → JSONAdapter
+		// Default to JSONAdapter → ChatAdapter (JSON first since most LLMs support structured output)
 		adapters = []Adapter{
-			NewChatAdapter(),
 			NewJSONAdapter(),
+			NewChatAdapter(),
 		}
 	}
 	return &FallbackAdapter{
