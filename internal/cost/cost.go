@@ -92,8 +92,10 @@ func (c *Calculator) SetModelPricing(model string, pricing ModelPricing) {
 	c.pricing[model] = pricing
 }
 
-// Calculate calculates the cost for the given usage
-// Returns cost in USD
+// Calculate calculates the cost for the given usage.
+// Returns cost in USD.
+//
+// Note: If the model has no pricing information, this returns 0.
 func (c *Calculator) Calculate(model string, promptTokens, completionTokens int) float64 {
 	pricing, ok := c.pricing[model]
 	if !ok {
@@ -105,6 +107,22 @@ func (c *Calculator) Calculate(model string, promptTokens, completionTokens int)
 	completionCost := float64(completionTokens) * pricing.CompletionPrice / 1_000_000
 
 	return promptCost + completionCost
+}
+
+// CalculateIfKnown calculates cost only when pricing is available.
+//
+// It returns (cost, true) when the model's pricing is known (including free models
+// with 0 pricing), and (0, false) when the model is unknown.
+func (c *Calculator) CalculateIfKnown(model string, promptTokens, completionTokens int) (float64, bool) {
+	pricing, ok := c.GetPricing(model)
+	if !ok {
+		return 0, false
+	}
+
+	promptCost := float64(promptTokens) * pricing.PromptPrice / 1_000_000
+	completionCost := float64(completionTokens) * pricing.CompletionPrice / 1_000_000
+
+	return promptCost + completionCost, true
 }
 
 // findPricingByPattern attempts to find pricing by matching model name patterns

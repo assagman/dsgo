@@ -3,10 +3,12 @@ package core
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/assagman/dsgo/internal/cost"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // mockWrapperLM is a mock LM for testing the wrapper
@@ -1281,4 +1283,80 @@ func (m *mockStreamToolCallsLM) SupportsTools() bool {
 
 func (m *mockStreamToolCallsLM) IsOpenAI() bool {
 	return false
+}
+
+type warnCaptureLogger struct {
+	mu       sync.Mutex
+	warns    int
+	lastMsg  string
+	lastData map[string]any
+}
+
+func (w *warnCaptureLogger) Debug(ctx context.Context, msg string, fields map[string]any) {}
+func (w *warnCaptureLogger) Info(ctx context.Context, msg string, fields map[string]any)  {}
+
+func (w *warnCaptureLogger) Warn(ctx context.Context, msg string, fields map[string]any) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.warns++
+	w.lastMsg = msg
+	w.lastData = fields
+}
+
+func (w *warnCaptureLogger) Error(ctx context.Context, msg string, fields map[string]any) {}
+func (w *warnCaptureLogger) Fatal(ctx context.Context, msg string, fields map[string]any) {}
+
+func TestLMWrapper_Generate_UnknownPricing_Warns(t *testing.T) {
+	// Do not run in parallel: this test mutates the global logger.
+	originalLogger := logging.GetLogger()
+	capture := &warnCaptureLogger{}
+	logging.SetLogger(capture)
+	t.Cleanup(func() {
+		logging.SetLogger(originalLogger)
+	})
+
+	mock := &mockWrapperLM{
+		name: "totally-unknown-model-12345",
+		generateFunc: func(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
+			return &GenerateResult{
+				Content:      "Hello, world!",
+				FinishReason: "stop",
+				Usage: Usage{
+					PromptTokens:     50,
+					CompletionTokens: 100,
+					TotalTokens:      150,
+				},
+			}, nil
+		},
+	}
+
+	wrapper := newLMWrapper(mock, nil)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hello"}}
+	options := DefaultGenerateOptions()
+
+	result, err := wrapper.Generate(ctx, messages, options)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if result.Usage.Cost != 0 {
+		t.Fatalf("Expected cost 0 for unknown pricing, got %f", result.Usage.Cost)
+	}
+
+	capture.mu.Lock()
+	warns := capture.warns
+	msg := capture.lastMsg
+	fields := capture.lastData
+	capture.mu.Unlock()
+
+	if warns != 1 {
+		t.Fatalf("Expected 1 warn log, got %d", warns)
+	}
+	if msg != "No pricing information for model" {
+		t.Fatalf("Unexpected warn message: %q", msg)
+	}
+	if fields["model"] != "totally-unknown-model-12345" {
+		t.Fatalf("Expected model field set, got %v", fields["model"])
+	}
 }

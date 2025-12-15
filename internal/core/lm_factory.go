@@ -69,12 +69,9 @@ func NewLM(ctx context.Context, model string) (LM, error) {
 		}
 	}
 
-	// Automatically wrap with lmWrapper if a Collector is configured
-	if settings.Collector != nil {
-		return newLMWrapperWithProvider(baseLM, settings.Collector, provider), nil
-	}
-
-	return baseLM, nil
+	// Always wrap with lmWrapper so cost/latency work by default.
+	// History collection remains a no-op when settings.Collector is nil.
+	return newLMWrapperWithProvider(baseLM, settings.Collector, provider), nil
 }
 
 // getRegisteredProviders returns a list of registered provider names.

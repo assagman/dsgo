@@ -58,6 +58,45 @@ func TestCalculate(t *testing.T) {
 	}
 }
 
+func TestCalculateIfKnown(t *testing.T) {
+	t.Parallel()
+	calc := NewCalculator()
+
+	t.Run("known model", func(t *testing.T) {
+		t.Parallel()
+		got, ok := calc.CalculateIfKnown("openai/gpt-4o", 1000, 500)
+		if !ok {
+			t.Fatal("CalculateIfKnown(openai/gpt-4o) ok=false")
+		}
+		want := 0.0075
+		if math.Abs(got-want) > 0.000001 {
+			t.Errorf("CalculateIfKnown() = %f, want %f", got, want)
+		}
+	})
+
+	t.Run("unknown model", func(t *testing.T) {
+		t.Parallel()
+		got, ok := calc.CalculateIfKnown("completely-unknown-model", 1000, 500)
+		if ok {
+			t.Fatal("CalculateIfKnown(completely-unknown-model) ok=true")
+		}
+		if got != 0 {
+			t.Errorf("CalculateIfKnown() = %f, want 0", got)
+		}
+	})
+
+	t.Run("free model", func(t *testing.T) {
+		t.Parallel()
+		got, ok := calc.CalculateIfKnown("minimax/minimax-m2:free", 1000, 500)
+		if !ok {
+			t.Fatal("CalculateIfKnown(minimax/minimax-m2:free) ok=false")
+		}
+		if got != 0 {
+			t.Errorf("CalculateIfKnown() = %f, want 0", got)
+		}
+	})
+}
+
 func TestDefaultCalculate(t *testing.T) {
 	t.Parallel()
 	cost := Calculate("openai/gpt-4o", 1000, 500)

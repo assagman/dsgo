@@ -3,10 +3,12 @@ package core
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/assagman/dsgo/internal/cost"
 	"github.com/assagman/dsgo/internal/ids"
+	"github.com/assagman/dsgo/internal/logging"
 )
 
 // lmWrapper wraps an LM to add observability (cost, latency, history collection)
@@ -17,6 +19,8 @@ type lmWrapper struct {
 	sessionID  string
 	provider   string // Store provider name to avoid guessing
 }
+
+var missingPricingWarned sync.Map
 
 // newLMWrapper creates a new LM wrapper with observability features
 func newLMWrapper(lm LM, collector Collector) LM {
@@ -61,7 +65,7 @@ func (w *lmWrapper) Generate(ctx context.Context, messages []Message, options *G
 	latency := time.Since(startTime).Milliseconds()
 
 	// Build history entry
-	entry := w.buildHistoryEntry(entryID, startTime, messages, options, result, latency, err)
+	entry := w.buildHistoryEntry(ctx, entryID, startTime, messages, options, result, latency, err)
 
 	// Collect history (best effort - don't fail the call if collection fails)
 	if w.collector != nil {
@@ -168,18 +172,7 @@ func (w *lmWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 		}
 
 		// Build and collect history entry
-		entry := w.buildHistoryEntry(entryID, startTime, messages, options, result, latency, streamErr)
-
-		// Update cost in entry if we have usage data
-		if result != nil && result.Usage.TotalTokens > 0 {
-			modelName := w.lm.Name()
-			calculatedCost := w.calculator.Calculate(
-				modelName,
-				result.Usage.PromptTokens,
-				result.Usage.CompletionTokens,
-			)
-			entry.Usage.Cost = calculatedCost
-		}
+		entry := w.buildHistoryEntry(ctx, entryID, startTime, messages, options, result, latency, streamErr)
 
 		// Collect history (best effort)
 		if w.collector != nil {
@@ -188,6 +181,29 @@ func (w *lmWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 	}()
 
 	return outChunkChan, outErrChan
+}
+
+func (w *lmWrapper) calculateCost(ctx context.Context, modelName string, promptTokens, completionTokens int) float64 {
+	if promptTokens == 0 && completionTokens == 0 {
+		return 0
+	}
+
+	calculatedCost, ok := w.calculator.CalculateIfKnown(modelName, promptTokens, completionTokens)
+	if ok {
+		return calculatedCost
+	}
+
+	if _, loaded := missingPricingWarned.LoadOrStore(modelName, struct{}{}); !loaded {
+		logging.GetLogger().Warn(ctx, "No pricing information for model", map[string]any{
+			"module":            "cost",
+			"provider":          w.getProvider(),
+			"model":             modelName,
+			"prompt_tokens":     promptTokens,
+			"completion_tokens": completionTokens,
+		})
+	}
+
+	return 0
 }
 
 // Name returns the underlying LM's name
@@ -210,8 +226,13 @@ func (w *lmWrapper) IsOpenAI() bool {
 	return w.lm.IsOpenAI()
 }
 
+func (w *lmWrapper) Unwrap() LM {
+	return w.lm
+}
+
 // buildHistoryEntry constructs a complete HistoryEntry
 func (w *lmWrapper) buildHistoryEntry(
+	ctx context.Context,
 	entryID string,
 	startTime time.Time,
 	messages []Message,
@@ -244,14 +265,9 @@ func (w *lmWrapper) buildHistoryEntry(
 		entry.Usage = result.Usage
 		entry.Usage.Latency = latency
 
-		// Calculate cost
+		// Calculate cost (best-effort)
 		modelName := w.lm.Name()
-		calculatedCost := w.calculator.Calculate(
-			modelName,
-			result.Usage.PromptTokens,
-			result.Usage.CompletionTokens,
-		)
-		entry.Usage.Cost = calculatedCost
+		entry.Usage.Cost = w.calculateCost(ctx, modelName, result.Usage.PromptTokens, result.Usage.CompletionTokens)
 
 		// Wire provider-specific metadata
 		if result.Metadata != nil {
