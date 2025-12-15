@@ -3805,3 +3805,321 @@ func TestChatAdapter_Format_WithExamples(t *testing.T) {
 		t.Errorf("expected at least 2 messages, got %d", len(messages))
 	}
 }
+
+// TestLooksLikeJSONArrayField tests the heuristic for detecting array-like JSON fields
+func TestLooksLikeJSONArrayField(t *testing.T) {
+	tests := []struct {
+		name        string
+		field       *Field
+		expectArray bool
+	}{
+		{
+			name:        "nil field",
+			field:       nil,
+			expectArray: false,
+		},
+		{
+			name:        "plural name - modules",
+			field:       &Field{Name: "modules", Type: FieldTypeJSON, Description: ""},
+			expectArray: true,
+		},
+		{
+			name:        "plural name - items",
+			field:       &Field{Name: "items", Type: FieldTypeJSON, Description: ""},
+			expectArray: true,
+		},
+		{
+			name:        "plural name - quizzes",
+			field:       &Field{Name: "quizzes", Type: FieldTypeJSON, Description: ""},
+			expectArray: true,
+		},
+		{
+			name:        "singular name - module",
+			field:       &Field{Name: "module", Type: FieldTypeJSON, Description: ""},
+			expectArray: false,
+		},
+		{
+			name:        "description with list of",
+			field:       &Field{Name: "data", Type: FieldTypeJSON, Description: "A list of items"},
+			expectArray: true,
+		},
+		{
+			name:        "description with array of",
+			field:       &Field{Name: "data", Type: FieldTypeJSON, Description: "JSON array of objects"},
+			expectArray: true,
+		},
+		{
+			name:        "description with sequence of",
+			field:       &Field{Name: "steps", Type: FieldTypeJSON, Description: "A sequence of steps"},
+			expectArray: true,
+		},
+		{
+			name:        "double s suffix - should not match",
+			field:       &Field{Name: "class", Type: FieldTypeJSON, Description: ""},
+			expectArray: false,
+		},
+		{
+			name:        "single letter - should not match",
+			field:       &Field{Name: "s", Type: FieldTypeJSON, Description: ""},
+			expectArray: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := looksLikeJSONArrayField(tt.field)
+			if got != tt.expectArray {
+				t.Errorf("looksLikeJSONArrayField() = %v, want %v", got, tt.expectArray)
+			}
+		})
+	}
+}
+
+// TestMapToArrayPreservingKeys tests the map-to-array conversion
+func TestMapToArrayPreservingKeys(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     any
+		wantArray bool
+		wantLen   int
+		checkIDs  []string
+	}{
+		{
+			name:      "non-map input",
+			input:     "string value",
+			wantArray: false,
+		},
+		{
+			name:      "empty map",
+			input:     map[string]any{},
+			wantArray: true,
+			wantLen:   0,
+		},
+		{
+			name: "map with numbered keys",
+			input: map[string]any{
+				"module2": map[string]any{"title": "Second"},
+				"module1": map[string]any{"title": "First"},
+				"module3": map[string]any{"title": "Third"},
+			},
+			wantArray: true,
+			wantLen:   3,
+			checkIDs:  []string{"module1", "module2", "module3"},
+		},
+		{
+			name: "map with non-numeric keys",
+			input: map[string]any{
+				"alpha": map[string]any{"value": 1},
+				"beta":  map[string]any{"value": 2},
+			},
+			wantArray: true,
+			wantLen:   2,
+			checkIDs:  []string{"alpha", "beta"},
+		},
+		{
+			name: "map with existing id field",
+			input: map[string]any{
+				"item1": map[string]any{"id": "existing_id", "value": 1},
+			},
+			wantArray: true,
+			wantLen:   1,
+			checkIDs:  []string{"existing_id"},
+		},
+		{
+			name: "mixed types - should not convert",
+			input: map[string]any{
+				"item1": map[string]any{"value": 1},
+				"item2": "string value",
+			},
+			wantArray: false,
+		},
+		{
+			name: "non-map children - should not convert",
+			input: map[string]any{
+				"item1": 123,
+				"item2": 456,
+			},
+			wantArray: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, ok := mapToArrayPreservingKeys(tt.input)
+			if ok != tt.wantArray {
+				t.Errorf("mapToArrayPreservingKeys() ok = %v, want %v", ok, tt.wantArray)
+				return
+			}
+
+			if !tt.wantArray {
+				return
+			}
+
+			arr, ok := result.([]any)
+			if !ok {
+				t.Errorf("expected []any, got %T", result)
+				return
+			}
+
+			if len(arr) != tt.wantLen {
+				t.Errorf("len(result) = %d, want %d", len(arr), tt.wantLen)
+			}
+
+			if tt.checkIDs != nil {
+				for i, expectedID := range tt.checkIDs {
+					if i >= len(arr) {
+						break
+					}
+					item, ok := arr[i].(map[string]any)
+					if !ok {
+						t.Errorf("arr[%d] is not map[string]any", i)
+						continue
+					}
+					if item["id"] != expectedID {
+						t.Errorf("arr[%d][id] = %v, want %v", i, item["id"], expectedID)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestExtractTrailingInt tests the trailing integer extraction
+func TestExtractTrailingInt(t *testing.T) {
+	tests := []struct {
+		input   string
+		wantNum int
+		wantOk  bool
+	}{
+		{"module1", 1, true},
+		{"step_02", 2, true},
+		{"item10", 10, true},
+		{"quiz100", 100, true},
+		{"noNumber", 0, false},
+		{"", 0, false},
+		{"123", 123, true},
+		{"prefix_0", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			num, ok := extractTrailingInt(tt.input)
+			if ok != tt.wantOk {
+				t.Errorf("extractTrailingInt(%q) ok = %v, want %v", tt.input, ok, tt.wantOk)
+			}
+			if ok && num != tt.wantNum {
+				t.Errorf("extractTrailingInt(%q) = %d, want %d", tt.input, num, tt.wantNum)
+			}
+		})
+	}
+}
+
+// TestCoerceOutputs_MapToArrayConversion tests the map-to-array coercion in coerceOutputs
+func TestCoerceOutputs_MapToArrayConversion(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("modules", FieldTypeJSON, "List of modules")
+
+	tests := []struct {
+		name      string
+		input     map[string]any
+		wantArray bool
+		wantLen   int
+	}{
+		{
+			name: "map of objects converted to array",
+			input: map[string]any{
+				"modules": map[string]any{
+					"module1": map[string]any{"title": "First"},
+					"module2": map[string]any{"title": "Second"},
+				},
+			},
+			wantArray: true,
+			wantLen:   2,
+		},
+		{
+			name: "already an array - kept as is",
+			input: map[string]any{
+				"modules": []any{
+					map[string]any{"title": "First"},
+					map[string]any{"title": "Second"},
+				},
+			},
+			wantArray: true,
+			wantLen:   2,
+		},
+		{
+			name: "JSON string with map converted to array",
+			input: map[string]any{
+				"modules": `{"module1": {"title": "First"}, "module2": {"title": "Second"}}`,
+			},
+			wantArray: true,
+			wantLen:   2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := coerceOutputs(sig, tt.input, false)
+
+			modules := result["modules"]
+			arr, ok := modules.([]any)
+			if ok != tt.wantArray {
+				t.Errorf("coerceOutputs() modules is array = %v, want %v (type: %T)", ok, tt.wantArray, modules)
+				return
+			}
+
+			if tt.wantArray && len(arr) != tt.wantLen {
+				t.Errorf("len(modules) = %d, want %d", len(arr), tt.wantLen)
+			}
+		})
+	}
+}
+
+// TestCoerceOutputs_MapToArrayWithOrdering tests that numeric key ordering works
+func TestCoerceOutputs_MapToArrayWithOrdering(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("steps", FieldTypeJSON, "Array of steps")
+
+	input := map[string]any{
+		"steps": map[string]any{
+			"step3":  map[string]any{"action": "third"},
+			"step1":  map[string]any{"action": "first"},
+			"step10": map[string]any{"action": "tenth"},
+			"step2":  map[string]any{"action": "second"},
+		},
+	}
+
+	result := coerceOutputs(sig, input, false)
+	arr, ok := result["steps"].([]any)
+	if !ok {
+		t.Fatalf("expected []any, got %T", result["steps"])
+	}
+
+	expectedOrder := []string{"first", "second", "third", "tenth"}
+	for i, expected := range expectedOrder {
+		item := arr[i].(map[string]any)
+		if item["action"] != expected {
+			t.Errorf("arr[%d][action] = %v, want %v", i, item["action"], expected)
+		}
+	}
+}
+
+// TestCoerceOutputs_NonArrayFieldNotConverted tests that non-array-like fields are not converted
+func TestCoerceOutputs_NonArrayFieldNotConverted(t *testing.T) {
+	sig := NewSignature("Test")
+	sig.AddOutput("config", FieldTypeJSON, "Configuration object")
+
+	input := map[string]any{
+		"config": map[string]any{
+			"setting1": map[string]any{"value": 1},
+			"setting2": map[string]any{"value": 2},
+		},
+	}
+
+	result := coerceOutputs(sig, input, false)
+
+	_, isMap := result["config"].(map[string]any)
+	if !isMap {
+		t.Errorf("expected config to remain map[string]any, got %T", result["config"])
+	}
+}
