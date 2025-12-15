@@ -8,7 +8,7 @@ The system uses a pipeline of specialized agents:
 
 1. **ChatAgent**: Parses your learning request and determines objectives
 2. **SupervisorAgent**: Plans research strategy and breaks down topics
-3. **WebResearchAgent**: Executes parallel web research using MCP tools (Exa/Jina)
+3. **WebResearchAgent**: Executes parallel web research using MCP tools (Exa/Tavily)
 4. **CombinerAgent**: Synthesizes findings into a unified knowledge base
 5. **CurriculumAgent**: Transforms knowledge into structured learning modules, quizzes, and exercises
 6. **ReportGenerator**: Renders the final markdown research report
@@ -31,7 +31,7 @@ export OPENAI_API_KEY="sk-..."
 
 # Optional (highly recommended for research quality)
 export EXA_API_KEY="..."
-export JINA_API_KEY="..."
+export TAVILY_API_KEY="..."
 
 # Optional Configuration
 export TRAINER_MODEL="openrouter/anthropic/claude-3.5-sonnet"

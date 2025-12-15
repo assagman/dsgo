@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"slices"
 	"testing"
 
@@ -473,5 +474,57 @@ func TestErrorFormatting(t *testing.T) {
 	err := NewError(42, "oops")
 	if err.Error() != "MCP Error 42: oops" {
 		t.Fatalf("unexpected error string: %s", err.Error())
+	}
+}
+
+func TestNewTavilyClient(t *testing.T) {
+	tests := []struct {
+		name    string
+		apiKey  string
+		wantErr bool
+	}{
+		{"simple key", "test-api-key", false},
+		{"key with special chars", "key+with&special=chars", false},
+		{"empty key", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewTavilyClient(tt.apiKey)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("NewTavilyClient error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if client == nil {
+				t.Fatal("Expected non-nil client")
+			}
+			if client.transport == nil {
+				t.Fatal("Expected non-nil transport")
+			}
+
+			// Verify it's an HTTP transport with the correct URL format
+			httpTransport, ok := client.transport.(*HTTPTransport)
+			if !ok {
+				t.Fatal("Expected HTTPTransport for Tavily client")
+			}
+
+			// Extract and verify the query parameter
+			parsedURL, err := url.Parse(httpTransport.url)
+			if err != nil {
+				t.Fatalf("Failed to parse transport URL: %v", err)
+			}
+
+			apiKeyParam := parsedURL.Query().Get("tavilyApiKey")
+			if apiKeyParam != tt.apiKey {
+				t.Errorf("Expected apiKey %q, got %q", tt.apiKey, apiKeyParam)
+			}
+
+			// API key should be empty since it's passed as query param
+			if httpTransport.apiKey != "" {
+				t.Errorf("Expected empty apiKey in transport, got %q", httpTransport.apiKey)
+			}
+		})
 	}
 }

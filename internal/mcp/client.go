@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sync/atomic"
 
 	"github.com/assagman/dsgo/internal/core"
@@ -43,6 +44,23 @@ func NewExaClient(apiKey string) (*Client, error) {
 func NewJinaClient(apiKey string) (*Client, error) {
 	// Jina MCP URL: https://mcp.jina.ai/sse (Using SSE as required by server)
 	transport := NewSSETransport("https://mcp.jina.ai/sse", apiKey)
+	return NewClient(ClientConfig{Transport: transport})
+}
+
+// NewTavilyClient creates a new MCP client for Tavily.
+// Provides tavily-search and tavily-extract tools for web search and content extraction.
+func NewTavilyClient(apiKey string) (*Client, error) {
+	// Tavily MCP URL: https://mcp.tavily.com/mcp?tavilyApiKey=<api-key>
+	// The API key is passed as a query parameter, not as a header
+	baseURL, err := url.Parse("https://mcp.tavily.com/mcp")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Tavily MCP URL: %w", err)
+	}
+	q := baseURL.Query()
+	q.Set("tavilyApiKey", apiKey)
+	baseURL.RawQuery = q.Encode()
+
+	transport := NewHTTPTransport(baseURL.String(), "")
 	return NewClient(ClientConfig{Transport: transport})
 }
 

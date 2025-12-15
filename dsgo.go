@@ -219,6 +219,9 @@ var (
 	NewMCPExaClient = mcp.NewExaClient
 	// NewMCPJinaClient creates a new MCP client for Jina URL reading and content extraction.
 	NewMCPJinaClient = mcp.NewJinaClient
+	// NewMCPTavilyClient creates a new MCP client for Tavily web search and content extraction.
+	// Provides tavily-search and tavily-extract tools.
+	NewMCPTavilyClient = mcp.NewTavilyClient
 	// NewMCPHTTPTransport creates a new HTTP transport for MCP communication.
 	NewMCPHTTPTransport = mcp.NewHTTPTransport
 	// NewMCPSSETransport creates a new SSE transport for MCP communication.

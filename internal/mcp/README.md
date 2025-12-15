@@ -22,6 +22,7 @@ DSGo collapses complex MCP JSON Schema types into compatible parameter types for
 
 - **Exa**: Search and web content extraction
 - **Jina**: URL reading and content extraction
+- **Tavily**: Web search (`tavily-search`) and content extraction (`tavily-extract`)
 
 ## Usage
 
