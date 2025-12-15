@@ -44,8 +44,10 @@ type openRouter struct {
 func newOpenRouter(model string) *openRouter {
 	apiKey := os.Getenv("OPENROUTER_API_KEY")
 
-	// Default timeout 30s; override via DSGO_HTTP_TIMEOUT_MS
-	timeout := 30 * time.Second
+	// Default timeout 300s (5 min) for LLM responses which can be slow with large outputs.
+	// Override via DSGO_HTTP_TIMEOUT_MS if needed.
+	// Note: This timeout includes body reading, so it must be long enough for streaming.
+	timeout := 300 * time.Second
 	if v := os.Getenv("DSGO_HTTP_TIMEOUT_MS"); v != "" {
 		if d, err := time.ParseDuration(v + "ms"); err == nil && d > 0 {
 			timeout = d
