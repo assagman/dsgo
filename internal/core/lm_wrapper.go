@@ -183,20 +183,22 @@ func (w *lmWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 	return outChunkChan, outErrChan
 }
 
-func (w *lmWrapper) calculateCost(ctx context.Context, modelName string, promptTokens, completionTokens int) float64 {
+func (w *lmWrapper) calculateCost(ctx context.Context, provider, modelName string, promptTokens, completionTokens int) float64 {
 	if promptTokens == 0 && completionTokens == 0 {
 		return 0
 	}
 
-	calculatedCost, ok := w.calculator.CalculateIfKnown(modelName, promptTokens, completionTokens)
+	calculatedCost, ok := w.calculator.CalculateIfKnown(provider, modelName, promptTokens, completionTokens)
 	if ok {
 		return calculatedCost
 	}
 
-	if _, loaded := missingPricingWarned.LoadOrStore(modelName, struct{}{}); !loaded {
+	// Use provider/model as the warning key to avoid duplicate warnings per provider
+	warnKey := provider + "/" + modelName
+	if _, loaded := missingPricingWarned.LoadOrStore(warnKey, struct{}{}); !loaded {
 		logging.GetLogger().Warn(ctx, "No pricing information for model", map[string]any{
 			"module":            "cost",
-			"provider":          w.getProvider(),
+			"provider":          provider,
 			"model":             modelName,
 			"prompt_tokens":     promptTokens,
 			"completion_tokens": completionTokens,
@@ -266,8 +268,9 @@ func (w *lmWrapper) buildHistoryEntry(
 		entry.Usage.Latency = latency
 
 		// Calculate cost (best-effort)
+		provider := w.getProvider()
 		modelName := w.lm.Name()
-		entry.Usage.Cost = w.calculateCost(ctx, modelName, result.Usage.PromptTokens, result.Usage.CompletionTokens)
+		entry.Usage.Cost = w.calculateCost(ctx, provider, modelName, result.Usage.PromptTokens, result.Usage.CompletionTokens)
 
 		// Wire provider-specific metadata
 		if result.Metadata != nil {
@@ -319,9 +322,14 @@ func (w *lmWrapper) buildRequestMeta(messages []Message, options *GenerateOption
 	return meta
 }
 
-// getProvider returns the provider name, preferring the explicitly set provider
+// getProvider returns the provider name, preferring the explicitly set provider.
+// This is critical for accurate cost calculation, as provider/model matching requires
+// the correct provider prefix. In normal usage, core.NewLM() always sets w.provider
+// when creating the wrapper, so extractProviderFromModel() is a fallback for:
+// - Test mocks that use newLMWrapper() without explicit provider
+// - Custom LM implementations that don't go through core.NewLM()
 func (w *lmWrapper) getProvider() string {
-	// Use explicitly set provider if available
+	// Use explicitly set provider if available (set by core.NewLM)
 	if w.provider != "" {
 		return w.provider
 	}
@@ -333,6 +341,7 @@ func (w *lmWrapper) getProvider() string {
 	}
 
 	// Fall back to extracting from model name
+	// WARNING: This is a best-effort heuristic and may fail for custom LMs
 	return w.extractProviderFromModel()
 }
 

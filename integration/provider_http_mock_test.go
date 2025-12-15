@@ -400,18 +400,21 @@ func TestOpenRouter_UsageTracking(t *testing.T) {
 func TestCostCalculation_OpenAI(t *testing.T) {
 	tests := []struct {
 		name             string
+		provider         string
 		model            string
 		promptTokens     int
 		completionTokens int
 	}{
 		{
 			name:             "GPT-4o-mini - 100 prompt, 50 completion",
+			provider:         "openai",
 			model:            "gpt-4o-mini",
 			promptTokens:     100,
 			completionTokens: 50,
 		},
 		{
 			name:             "GPT-4o - 1000 prompt, 500 completion",
+			provider:         "openai",
 			model:            "gpt-4o",
 			promptTokens:     1000,
 			completionTokens: 500,
@@ -423,9 +426,9 @@ func TestCostCalculation_OpenAI(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Check if pricing is available
-			pricing, ok := calc.GetPricing(tt.model)
+			pricing, ok := calc.GetPricing(tt.provider, tt.model)
 			if !ok {
-				t.Skipf("pricing not available for model %s", tt.model)
+				t.Skipf("pricing not available for model %s/%s", tt.provider, tt.model)
 			}
 
 			// Calculate cost - just verify it's positive for these tokens
@@ -445,18 +448,21 @@ func TestCostCalculation_OpenAI(t *testing.T) {
 func TestCostCalculation_OpenRouter(t *testing.T) {
 	tests := []struct {
 		name             string
+		provider         string
 		model            string
 		promptTokens     int
 		completionTokens int
 	}{
 		{
 			name:             "Llama 3.1 70B - 1000 tokens",
+			provider:         "openrouter",
 			model:            "meta/llama-3.1-70b",
 			promptTokens:     1000,
 			completionTokens: 500,
 		},
 		{
 			name:             "Llama 3.1 405B - 500 tokens",
+			provider:         "openrouter",
 			model:            "meta/llama-3.1-405b",
 			promptTokens:     500,
 			completionTokens: 250,
@@ -467,9 +473,9 @@ func TestCostCalculation_OpenRouter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pricing, ok := calc.GetPricing(tt.model)
+			pricing, ok := calc.GetPricing(tt.provider, tt.model)
 			if !ok {
-				t.Skipf("pricing not available for model %s", tt.model)
+				t.Skipf("pricing not available for model %s/%s", tt.provider, tt.model)
 			}
 
 			// Cost should be calculable (even if > 0)
