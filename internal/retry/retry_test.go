@@ -638,3 +638,256 @@ func BenchmarkRetryLogic_Concurrent(b *testing.B) {
 		}
 	})
 }
+
+func TestParseRetryAfter_Seconds(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		value    string
+		expected time.Duration
+	}{
+		{"empty", "", 0},
+		{"5 seconds", "5", 5 * time.Second},
+		{"30 seconds", "30", 30 * time.Second},
+		{"120 seconds", "120", 120 * time.Second},
+		{"negative", "-5", 0},
+		{"zero", "0", 0},
+		{"whitespace", "  10  ", 10 * time.Second},
+		{"invalid", "abc", 0},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			header := http.Header{}
+			if tt.value != "" {
+				header.Set("Retry-After", tt.value)
+			}
+			got := parseRetryAfter(header)
+			if got != tt.expected {
+				t.Errorf("parseRetryAfter(%q) = %v, want %v", tt.value, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestParseRetryAfter_HTTPDate(t *testing.T) {
+	t.Parallel()
+	futureTime := time.Now().Add(10 * time.Second).UTC()
+	header := http.Header{}
+	header.Set("Retry-After", futureTime.Format(http.TimeFormat))
+
+	got := parseRetryAfter(header)
+	if got < 8*time.Second || got > 12*time.Second {
+		t.Errorf("parseRetryAfter(HTTP date) = %v, want ~10s", got)
+	}
+}
+
+func TestParseRetryAfter_PastDate(t *testing.T) {
+	t.Parallel()
+	pastTime := time.Now().Add(-10 * time.Second).UTC()
+	header := http.Header{}
+	header.Set("Retry-After", pastTime.Format(http.TimeFormat))
+
+	got := parseRetryAfter(header)
+	if got != 0 {
+		t.Errorf("parseRetryAfter(past date) = %v, want 0", got)
+	}
+}
+
+func TestDefaultOptions(t *testing.T) {
+	t.Parallel()
+	opts := DefaultOptions()
+
+	if opts.MaxRetries != DefaultMaxRetries {
+		t.Errorf("MaxRetries = %d, want %d", opts.MaxRetries, DefaultMaxRetries)
+	}
+	if opts.InitialBackoff != DefaultInitialBackoff {
+		t.Errorf("InitialBackoff = %v, want %v", opts.InitialBackoff, DefaultInitialBackoff)
+	}
+	if opts.MaxBackoff != DefaultMaxBackoff {
+		t.Errorf("MaxBackoff = %v, want %v", opts.MaxBackoff, DefaultMaxBackoff)
+	}
+	if opts.JitterFactor != DefaultJitterFactor {
+		t.Errorf("JitterFactor = %v, want %v", opts.JitterFactor, DefaultJitterFactor)
+	}
+}
+
+func TestOptions_Copy(t *testing.T) {
+	t.Parallel()
+	original := &Options{
+		MaxRetries:     5,
+		InitialBackoff: 2 * time.Second,
+		MaxBackoff:     60 * time.Second,
+		JitterFactor:   0.2,
+	}
+
+	copied := original.Copy()
+
+	if copied.MaxRetries != original.MaxRetries {
+		t.Errorf("copied.MaxRetries = %d, want %d", copied.MaxRetries, original.MaxRetries)
+	}
+	if copied.InitialBackoff != original.InitialBackoff {
+		t.Errorf("copied.InitialBackoff = %v, want %v", copied.InitialBackoff, original.InitialBackoff)
+	}
+
+	original.MaxRetries = 10
+	if copied.MaxRetries == original.MaxRetries {
+		t.Error("Copy should be independent of original")
+	}
+}
+
+func TestOptions_Copy_Nil(t *testing.T) {
+	t.Parallel()
+	var nilOpts *Options
+	copied := nilOpts.Copy()
+
+	if copied == nil {
+		t.Fatal("Copy of nil should return default options")
+	}
+	if copied.MaxRetries != DefaultMaxRetries {
+		t.Errorf("nil copy should have default MaxRetries, got %d", copied.MaxRetries)
+	}
+}
+
+func TestWithExponentialBackoffOpts_CustomMaxRetries(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	ctx := context.Background()
+
+	opts := &Options{
+		MaxRetries:     1,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+		JitterFactor:   0.0,
+	}
+
+	_, err := WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
+		callCount++
+		return nil, errors.New("persistent error")
+	}, opts)
+
+	if err == nil {
+		t.Fatal("Expected error after max retries")
+	}
+	if callCount != 2 {
+		t.Errorf("Expected 2 calls (1 initial + 1 retry), got %d", callCount)
+	}
+}
+
+func TestWithExponentialBackoffOpts_ZeroRetries(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	ctx := context.Background()
+
+	opts := &Options{
+		MaxRetries:     0,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+		JitterFactor:   0.0,
+	}
+
+	_, err := WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
+		callCount++
+		return nil, errors.New("error")
+	}, opts)
+
+	if err == nil {
+		t.Fatal("Expected error")
+	}
+	if callCount != 1 {
+		t.Errorf("Expected 1 call (no retries), got %d", callCount)
+	}
+}
+
+func TestWithExponentialBackoffOpts_NilOptions(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	ctx := context.Background()
+
+	resp, err := WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
+		callCount++
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       http.NoBody,
+		}, nil
+	}, nil)
+
+	if err != nil {
+		t.Fatalf("Expected success, got error: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+	if callCount != 1 {
+		t.Errorf("Expected 1 call, got %d", callCount)
+	}
+}
+
+func TestWithExponentialBackoffOpts_RetryAfterHonored(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	ctx := context.Background()
+
+	opts := &Options{
+		MaxRetries:     3,
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		JitterFactor:   0.0,
+	}
+
+	start := time.Now()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := &http.Client{}
+	resp, err := WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
+		return client.Get(server.URL)
+	}, opts)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Expected success, got error: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+	if elapsed > 3*time.Second {
+		t.Errorf("Expected backoff ~1s (from Retry-After), but took %v", elapsed)
+	}
+	_ = resp.Body.Close()
+}
+
+func TestCalculateBackoffWithOpts_CustomOptions(t *testing.T) {
+	t.Parallel()
+	opts := &Options{
+		MaxRetries:     5,
+		InitialBackoff: 500 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+		JitterFactor:   0.0,
+	}
+
+	backoff0 := calculateBackoffWithOpts(0, opts)
+	if backoff0 != 500*time.Millisecond {
+		t.Errorf("Expected 500ms for attempt 0, got %v", backoff0)
+	}
+
+	backoff1 := calculateBackoffWithOpts(1, opts)
+	if backoff1 != 1*time.Second {
+		t.Errorf("Expected 1s for attempt 1, got %v", backoff1)
+	}
+
+	backoff10 := calculateBackoffWithOpts(10, opts)
+	if backoff10 != 5*time.Second {
+		t.Errorf("Expected 5s (max) for attempt 10, got %v", backoff10)
+	}
+}

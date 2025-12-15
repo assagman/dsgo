@@ -94,6 +94,19 @@ func (o *openAI) SetCache(cache core.Cache) {
 	o.Cache = cache
 }
 
+// retryOptionsFromConfig converts core.RetryConfig to retry.Options
+func retryOptionsFromConfig(cfg *core.RetryConfig) *retry.Options {
+	if cfg == nil {
+		return nil
+	}
+	return &retry.Options{
+		MaxRetries:     cfg.MaxRetries,
+		InitialBackoff: cfg.InitialBackoff,
+		MaxBackoff:     cfg.MaxBackoff,
+		JitterFactor:   cfg.JitterFactor,
+	}
+}
+
 // Generate generates a response from OpenAI
 func (o *openAI) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
@@ -122,7 +135,12 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := retry.WithExponentialBackoff(ctx, func() (*http.Response, error) {
+	var retryOpts *retry.Options
+	if options != nil {
+		retryOpts = retryOptionsFromConfig(options.RetryConfig)
+	}
+
+	resp, err := retry.WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
 		req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 		if err != nil {
 			return nil, err
@@ -130,7 +148,7 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+o.APIKey)
 		return o.Client.Do(req)
-	})
+	}, retryOpts)
 	if err != nil {
 		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
 		return nil, fmt.Errorf("request failed: %w", err)
@@ -498,7 +516,12 @@ func (o *openAI) Stream(ctx context.Context, messages []core.Message, options *c
 			return
 		}
 
-		resp, err := retry.WithExponentialBackoff(ctx, func() (*http.Response, error) {
+		var retryOpts *retry.Options
+		if options != nil {
+			retryOpts = retryOptionsFromConfig(options.RetryConfig)
+		}
+
+		resp, err := retry.WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
 			req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 			if err != nil {
 				return nil, err
@@ -508,7 +531,7 @@ func (o *openAI) Stream(ctx context.Context, messages []core.Message, options *c
 			req.Header.Set("Authorization", "Bearer "+o.APIKey)
 
 			return o.Client.Do(req)
-		})
+		}, retryOpts)
 		if err != nil {
 			errChan <- fmt.Errorf("request failed: %w", err)
 			return

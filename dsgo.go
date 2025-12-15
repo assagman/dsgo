@@ -29,6 +29,7 @@ type (
 	Message               = core.Message
 	GenerateOptions       = core.GenerateOptions
 	GenerateResult        = core.GenerateResult
+	RetryConfig           = core.RetryConfig
 	Field                 = core.Field
 	Signature             = core.Signature
 	Prediction            = core.Prediction
