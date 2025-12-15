@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Common errors
@@ -23,6 +24,14 @@ type Message struct {
 	ToolCalls []ToolCall // For assistant messages with tool calls
 }
 
+// RetryConfig contains configuration for HTTP retry behavior
+type RetryConfig struct {
+	MaxRetries     int           // Maximum number of retry attempts (default: 3)
+	InitialBackoff time.Duration // Initial backoff duration (default: 1s)
+	MaxBackoff     time.Duration // Maximum backoff duration (default: 30s)
+	JitterFactor   float64       // Jitter factor for randomization (default: 0.1)
+}
+
 // GenerateOptions contains options for LM generation
 type GenerateOptions struct {
 	Temperature      float64
@@ -38,6 +47,7 @@ type GenerateOptions struct {
 	FrequencyPenalty float64
 	PresencePenalty  float64
 	ProviderParams   map[string]any // Provider-specific request fields forwarded verbatim by providers that support it
+	RetryConfig      *RetryConfig   // Optional retry configuration (nil uses defaults)
 }
 
 // GenerateResult represents the result of an LM generation
@@ -170,6 +180,16 @@ func (o *GenerateOptions) Copy() *GenerateOptions {
 	if o.Tools != nil {
 		copied.Tools = make([]Tool, len(o.Tools))
 		copy(copied.Tools, o.Tools)
+	}
+
+	// Copy RetryConfig
+	if o.RetryConfig != nil {
+		copied.RetryConfig = &RetryConfig{
+			MaxRetries:     o.RetryConfig.MaxRetries,
+			InitialBackoff: o.RetryConfig.InitialBackoff,
+			MaxBackoff:     o.RetryConfig.MaxBackoff,
+			JitterFactor:   o.RetryConfig.JitterFactor,
+		}
 	}
 
 	return copied

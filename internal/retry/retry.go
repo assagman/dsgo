@@ -9,17 +9,55 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
 const (
-	MaxRetries     = 3
-	InitialBackoff = 1 * time.Second
-	MaxBackoff     = 30 * time.Second
-	JitterFactor   = 0.1
+	DefaultMaxRetries     = 3
+	DefaultInitialBackoff = 1 * time.Second
+	DefaultMaxBackoff     = 30 * time.Second
+	DefaultJitterFactor   = 0.1
 )
 
-// IsRetryable checks if an HTTP status code is retryable
+type Options struct {
+	MaxRetries     int
+	InitialBackoff time.Duration
+	MaxBackoff     time.Duration
+	JitterFactor   float64
+}
+
+func DefaultOptions() *Options {
+	return &Options{
+		MaxRetries:     DefaultMaxRetries,
+		InitialBackoff: DefaultInitialBackoff,
+		MaxBackoff:     DefaultMaxBackoff,
+		JitterFactor:   DefaultJitterFactor,
+	}
+}
+
+func (o *Options) Copy() *Options {
+	if o == nil {
+		return DefaultOptions()
+	}
+	return &Options{
+		MaxRetries:     o.MaxRetries,
+		InitialBackoff: o.InitialBackoff,
+		MaxBackoff:     o.MaxBackoff,
+		JitterFactor:   o.JitterFactor,
+	}
+}
+
+func NewOptions(maxRetries int, initialBackoff, maxBackoff time.Duration, jitterFactor float64) *Options {
+	return &Options{
+		MaxRetries:     maxRetries,
+		InitialBackoff: initialBackoff,
+		MaxBackoff:     maxBackoff,
+		JitterFactor:   jitterFactor,
+	}
+}
+
 func IsRetryable(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests || // 429
 		statusCode == http.StatusInternalServerError || // 500
@@ -28,16 +66,23 @@ func IsRetryable(statusCode int) bool {
 		statusCode == http.StatusGatewayTimeout // 504
 }
 
-// HTTPFunc is a function that performs an HTTP request
 type HTTPFunc func() (*http.Response, error)
 
-// WithExponentialBackoff executes an HTTP request with exponential backoff retry logic
 func WithExponentialBackoff(ctx context.Context, fn HTTPFunc) (*http.Response, error) {
+	return WithExponentialBackoffOpts(ctx, fn, nil)
+}
+
+func WithExponentialBackoffOpts(ctx context.Context, fn HTTPFunc, opts *Options) (*http.Response, error) {
+	if opts == nil {
+		opts = DefaultOptions()
+	} else {
+		opts = opts.Copy()
+	}
+
 	var lastErr error
 	var resp *http.Response
 
-	for attempt := 0; attempt <= MaxRetries; attempt++ {
-		// Check context before attempting
+	for attempt := 0; attempt <= opts.MaxRetries; attempt++ {
 		if err := ctx.Err(); err != nil {
 			if lastErr != nil {
 				return nil, fmt.Errorf("context cancelled after retries: %w (last error: %v)", err, lastErr)
@@ -45,43 +90,38 @@ func WithExponentialBackoff(ctx context.Context, fn HTTPFunc) (*http.Response, e
 			return nil, fmt.Errorf("context cancelled: %w", err)
 		}
 
-		// Execute the HTTP request
 		resp, lastErr = fn()
 
-		// Success - return immediately
 		if lastErr == nil && resp != nil && !IsRetryable(resp.StatusCode) {
 			return resp, nil
 		}
 
-		// Determine if we should retry
 		shouldRetry := false
+		var retryAfter time.Duration
+
 		if lastErr != nil {
-			// Network error - retry
 			shouldRetry = true
 		} else if resp != nil && IsRetryable(resp.StatusCode) {
-			// Check if this is a permanent failure (quota exhaustion)
-			// Don't retry on quota/billing issues
 			if isQuotaExhausted(resp) {
 				return resp, nil
 			}
-			// Retryable status code (transient rate limit)
 			shouldRetry = true
-			// Close the body to reuse connection
+			retryAfter = parseRetryAfter(resp.Header)
 			_ = resp.Body.Close()
 		}
 
-		// Don't retry if this was the last attempt
-		if !shouldRetry || attempt == MaxRetries {
+		if !shouldRetry || attempt == opts.MaxRetries {
 			if lastErr != nil {
 				return nil, fmt.Errorf("request failed after %d attempts: %w", attempt+1, lastErr)
 			}
 			return resp, nil
 		}
 
-		// Calculate backoff with exponential growth and jitter
-		backoff := calculateBackoff(attempt)
+		backoff := calculateBackoffWithOpts(attempt, opts)
+		if retryAfter > 0 && retryAfter < opts.MaxBackoff {
+			backoff = retryAfter
+		}
 
-		// Wait with context awareness
 		select {
 		case <-ctx.Done():
 			if lastErr != nil {
@@ -89,48 +129,81 @@ func WithExponentialBackoff(ctx context.Context, fn HTTPFunc) (*http.Response, e
 			}
 			return nil, fmt.Errorf("context cancelled during backoff: %w", ctx.Err())
 		case <-time.After(backoff):
-			// Continue to next retry
 		}
 	}
 
 	if lastErr != nil {
-		return nil, fmt.Errorf("request failed after %d attempts: %w", MaxRetries+1, lastErr)
+		return nil, fmt.Errorf("request failed after %d attempts: %w", opts.MaxRetries+1, lastErr)
 	}
 	return resp, nil
 }
 
-// calculateBackoff computes exponential backoff with jitter
 func calculateBackoff(attempt int) time.Duration {
-	// Exponential: initialBackoff * 2^attempt
-	backoff := float64(InitialBackoff) * math.Pow(2, float64(attempt))
+	return calculateBackoffWithOpts(attempt, nil)
+}
 
-	// Cap at MaxBackoff
-	if backoff > float64(MaxBackoff) {
-		backoff = float64(MaxBackoff)
+func calculateBackoffWithOpts(attempt int, opts *Options) time.Duration {
+	if opts == nil {
+		opts = DefaultOptions()
 	}
 
-	// Add jitter: ±10% randomness
-	jitter := backoff * JitterFactor * (2*rand.Float64() - 1)
-	backoff += jitter
+	backoff := float64(opts.InitialBackoff) * math.Pow(2, float64(attempt))
+
+	if backoff > float64(opts.MaxBackoff) {
+		backoff = float64(opts.MaxBackoff)
+	}
+
+	if opts.JitterFactor != 0 {
+		jitter := backoff * opts.JitterFactor * (2*rand.Float64() - 1)
+		backoff += jitter
+	}
+
+	if backoff < 0 {
+		backoff = 0
+	}
+	if backoff > float64(opts.MaxBackoff) {
+		backoff = float64(opts.MaxBackoff)
+	}
 
 	return time.Duration(backoff)
 }
 
-// isQuotaExhausted checks if a 429 response is due to quota exhaustion (not retryable)
-// vs rate limiting (retryable)
+func parseRetryAfter(header http.Header) time.Duration {
+	value := header.Get("Retry-After")
+	if value == "" {
+		return 0
+	}
+
+	value = strings.TrimSpace(value)
+
+	if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+
+	if t, err := http.ParseTime(value); err == nil {
+		delay := time.Until(t)
+		if delay > 0 {
+			return delay
+		}
+	}
+
+	return 0
+}
+
 func isQuotaExhausted(resp *http.Response) bool {
 	if resp.StatusCode != http.StatusTooManyRequests {
 		return false
 	}
 
-	// Read and restore body
-	bodyBytes, err := io.ReadAll(resp.Body)
+	originalBody := resp.Body
+	bodyBytes, err := io.ReadAll(originalBody)
+	_ = originalBody.Close()
+
 	if err != nil {
 		return false
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
-	// Try to parse error response
 	var errorResp struct {
 		Error struct {
 			Code string `json:"code"`
@@ -142,7 +215,6 @@ func isQuotaExhausted(resp *http.Response) bool {
 		return false
 	}
 
-	// Check for quota/billing-related error codes
 	return errorResp.Error.Code == "insufficient_quota" ||
 		errorResp.Error.Type == "insufficient_quota" ||
 		errorResp.Error.Code == "billing_hard_limit_reached"

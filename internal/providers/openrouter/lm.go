@@ -89,6 +89,13 @@ func (o *openRouter) SetCache(cache core.Cache) {
 	o.Cache = cache
 }
 
+func retryOptionsFromConfig(cfg *core.RetryConfig) *retry.Options {
+	if cfg == nil {
+		return nil
+	}
+	return retry.NewOptions(cfg.MaxRetries, cfg.InitialBackoff, cfg.MaxBackoff, cfg.JitterFactor)
+}
+
 // Generate generates a response from OpenRouter
 func (o *openRouter) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
@@ -117,7 +124,12 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := retry.WithExponentialBackoff(ctx, func() (*http.Response, error) {
+	var retryOpts *retry.Options
+	if options != nil {
+		retryOpts = retryOptionsFromConfig(options.RetryConfig)
+	}
+
+	resp, err := retry.WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
 		req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 		if err != nil {
 			return nil, err
@@ -131,7 +143,7 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 			req.Header.Set("HTTP-Referer", o.SiteURL)
 		}
 		return o.Client.Do(req)
-	})
+	}, retryOpts)
 	if err != nil {
 		logging.LogAPIError(ctx, "provider.OpenRouter", o.Model, err)
 		return nil, fmt.Errorf("request failed: %w", err)
@@ -611,7 +623,12 @@ func (o *openRouter) Stream(ctx context.Context, messages []core.Message, option
 			return
 		}
 
-		resp, err := retry.WithExponentialBackoff(ctx, func() (*http.Response, error) {
+		var retryOpts *retry.Options
+		if options != nil {
+			retryOpts = retryOptionsFromConfig(options.RetryConfig)
+		}
+
+		resp, err := retry.WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
 			req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 			if err != nil {
 				return nil, err
@@ -627,7 +644,7 @@ func (o *openRouter) Stream(ctx context.Context, messages []core.Message, option
 			}
 
 			return o.Client.Do(req)
-		})
+		}, retryOpts)
 		if err != nil {
 			errChan <- fmt.Errorf("request failed: %w", err)
 			return

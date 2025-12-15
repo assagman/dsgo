@@ -709,8 +709,8 @@ func TestRetry_MaxRetriesExceeded(t *testing.T) {
 
 	resp, err := retry.WithExponentialBackoff(ctx, httpFunc)
 
-	// Should not exceed MaxRetries + 1 (initial attempt + retries)
-	expectedMaxAttempts := retry.MaxRetries + 1
+	// Should not exceed DefaultMaxRetries + 1 (initial attempt + retries)
+	expectedMaxAttempts := retry.DefaultMaxRetries + 1
 	if attemptCount > expectedMaxAttempts {
 		t.Errorf("Expected max %d attempts, got %d", expectedMaxAttempts, attemptCount)
 	}
