@@ -153,6 +153,40 @@ options.ProviderParams = map[string]any{
 - ProviderParams are merged only for non-conflicting keys
 - Nested objects are supported
 
+## MCP (Model Context Protocol) Clients
+
+DSGo supports MCP clients for accessing external tools and services:
+
+| Client | Factory Function | Transport | Description |
+|--------|------------------|-----------|-------------|
+| Exa | `NewMCPExaClient(apiKey)` | HTTP | Web search and content extraction |
+| Jina | `NewMCPJinaClient(apiKey)` | SSE | URL reading and content extraction |
+| Tavily | `NewMCPTavilyClient(apiKey)` | HTTP | Web search and content extraction |
+| Filesystem | `NewMCPFilesystemClient(dirs...)` | Stdio | Local filesystem operations via official MCP server |
+
+### Filesystem MCP Client
+
+Uses the official `@modelcontextprotocol/server-filesystem` via npx/bunx:
+
+```go
+// Create filesystem client with allowed directories
+fsClient, err := dsgo.NewMCPFilesystemClient("/path/to/dir1", "/path/to/dir2")
+
+// Or use current directory (default)
+fsClient, err := dsgo.NewMCPFilesystemClient()
+
+// Initialize and get tools
+err = fsClient.Initialize(ctx)
+tools := fsClient.GetTools()
+
+// Use with ReAct agent
+agent := dsgo.NewReAct(sig, lm, tools)
+```
+
+**Available Tools**: `read_file`, `write_file`, `edit_file`, `create_directory`, `list_directory`, `directory_tree`, `move_file`, `search_files`, `get_file_info`, `list_allowed_directories`
+
+**Prerequisites**: Node.js with `npx` or Bun with `bunx`
+
 ## Links
 
 - Getting started: [`QUICKSTART.md`](QUICKSTART.md)

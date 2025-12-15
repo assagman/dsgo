@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
+	"os/exec"
 	"sync/atomic"
 
 	"github.com/assagman/dsgo/internal/core"
@@ -61,6 +63,42 @@ func NewTavilyClient(apiKey string) (*Client, error) {
 	baseURL.RawQuery = q.Encode()
 
 	transport := NewHTTPTransport(baseURL.String(), "")
+	return NewClient(ClientConfig{Transport: transport})
+}
+
+// NewFilesystemClient creates a new MCP client for local filesystem operations.
+// Uses the official @modelcontextprotocol/server-filesystem via npx/bunx with stdio transport.
+// allowedDirs specifies the directories that the filesystem server can access.
+// If no directories are provided, defaults to current working directory.
+func NewFilesystemClient(allowedDirs ...string) (*Client, error) {
+	// Default to current directory if none specified
+	if len(allowedDirs) == 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current directory: %w", err)
+		}
+		allowedDirs = []string{cwd}
+	}
+
+	// Try bunx first (Bun's npx equivalent), fall back to npx
+	command := "bunx"
+	if _, err := exec.LookPath("bunx"); err != nil {
+		command = "npx"
+		if _, err := exec.LookPath("npx"); err != nil {
+			return nil, fmt.Errorf("neither bunx nor npx found in PATH - please install Bun or Node.js")
+		}
+	}
+
+	// Build args: npx -y @modelcontextprotocol/server-filesystem <dir1> <dir2> ...
+	args := []string{"-y", "@modelcontextprotocol/server-filesystem"}
+	args = append(args, allowedDirs...)
+
+	// Create stdio transport
+	transport, err := NewStdioTransport(command, args, os.Environ())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdio transport: %w", err)
+	}
+
 	return NewClient(ClientConfig{Transport: transport})
 }
 

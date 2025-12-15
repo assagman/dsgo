@@ -120,6 +120,7 @@ LLM API implementations (auto-registered via init()):
 - [examples/modules/parallel/main.go](examples/modules/parallel/main.go): Concurrent execution patterns
 - [examples/project_review/main.go](examples/project_review/main.go): Multi-stage pipeline composition
 - [examples/multi_chain_comparison/main.go](examples/multi_chain_comparison/main.go): Answer synthesis from multiple chains
+- [examples/filesystem_mcp/main.go](examples/filesystem_mcp/main.go): ReAct agent with filesystem MCP tools
 
 ## API Quick Reference
 

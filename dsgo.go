@@ -223,6 +223,9 @@ var (
 	// NewMCPTavilyClient creates a new MCP client for Tavily web search and content extraction.
 	// Provides tavily-search and tavily-extract tools.
 	NewMCPTavilyClient = mcp.NewTavilyClient
+	// NewMCPFilesystemClient creates a new MCP client for local filesystem operations.
+	// Uses the official @modelcontextprotocol/server-filesystem via npx/bunx.
+	NewMCPFilesystemClient = mcp.NewFilesystemClient
 	// NewMCPHTTPTransport creates a new HTTP transport for MCP communication.
 	NewMCPHTTPTransport = mcp.NewHTTPTransport
 	// NewMCPSSETransport creates a new SSE transport for MCP communication.
