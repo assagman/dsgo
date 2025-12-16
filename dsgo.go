@@ -131,6 +131,14 @@ type (
 	MCPSSETransport = mcp.SSETransport
 	// MCPStdioTransport implements Transport over stdio of a subprocess.
 	MCPStdioTransport = mcp.StdioTransport
+	// MCPLocalTransport implements Transport over an in-process handler.
+	MCPLocalTransport = mcp.LocalTransport
+	// MCPLocalHandler routes JSON-RPC requests in-process.
+	MCPLocalHandler = mcp.LocalHandler
+	// MCPShellServer is a built-in MCP server exposing shell tools.
+	MCPShellServer = mcp.ShellServer
+	// MCPShellServerConfig configures the built-in shell server.
+	MCPShellServerConfig = mcp.ShellServerConfig
 )
 
 // Re-export typed generic type
@@ -241,10 +249,18 @@ var (
 	NewMCPFilesystemClient = mcp.NewFilesystemClient
 	// NewMCPHTTPTransport creates a new HTTP transport for MCP communication.
 	NewMCPHTTPTransport = mcp.NewHTTPTransport
+	// NewMCPHTTPTransportWithTimeout creates a new HTTP transport with a custom timeout.
+	NewMCPHTTPTransportWithTimeout = mcp.NewHTTPTransportWithTimeout
 	// NewMCPSSETransport creates a new SSE transport for MCP communication.
 	NewMCPSSETransport = mcp.NewSSETransport
+	// NewMCPSSETransportWithTimeouts creates a new SSE transport with custom timeouts.
+	NewMCPSSETransportWithTimeouts = mcp.NewSSETransportWithTimeouts
 	// NewMCPStdioTransport creates a new stdio transport for MCP communication.
 	NewMCPStdioTransport = mcp.NewStdioTransport
+	// NewMCPLocalTransport creates a local MCP transport.
+	NewMCPLocalTransport = mcp.NewLocalTransport
+	// NewMCPShellServer creates a built-in shell MCP server.
+	NewMCPShellServer = mcp.NewShellServer
 	// ConvertMCPToolsToDSGo converts MCP tool schemas to DSGo tools.
 	ConvertMCPToolsToDSGo = mcp.ConvertMCPToolsToDSGo
 	// NewMCPError creates a new MCP error with the given code and message.
