@@ -34,7 +34,7 @@ const (
 	FieldNextSteps   = "next_steps"
 
 	// Model
-	ModelName = "openrouter/amazon/nova-2-lite-v1"
+	ModelName = "openrouter/google/gemini-2.5-flash-lite-preview-09-2025"
 )
 
 func main() {

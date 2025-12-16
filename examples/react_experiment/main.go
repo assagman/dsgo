@@ -18,13 +18,12 @@ func main() {
 	ctx := context.Background()
 
 	models := []string{
-		"openrouter/amazon/nova-2-lite-v1",
+		"openrouter/google/gemini-2.5-flash-lite-preview-09-2025",
 		"openrouter/openai/gpt-4o-mini",
 		"openrouter/openai/gpt-5-mini-2025-08-07",
 		"openrouter/openai/gpt-5-nano-2025-08-07",
 		"openrouter/openai/gpt-4.1-2025-04-14",
 		"openrouter/google/gemini-2.5-flash",
-		"openrouter/google/gemini-2.5-flash-lite-preview-09-2025",
 		"openrouter/x-ai/grok-code-fast-1",
 		"openrouter/deepseek/deepseek-v3.2",
 		"openrouter/qwen/qwen3-next-80b-a3b-instruct",
