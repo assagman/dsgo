@@ -58,6 +58,7 @@ func newOpenAI(model string) *openAI {
 
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
+		option.WithBaseURL(defaultBaseURL),
 		option.WithRequestTimeout(timeout),
 	)
 
@@ -253,7 +254,34 @@ func (o *openAI) buildParams(messages []core.Message, options *core.GenerateOpti
 		}
 	}
 
+	applyProviderParams(&params, options.ProviderParams)
+
 	return params
+}
+
+func applyProviderParams(params *openai.ChatCompletionNewParams, providerParams map[string]any) {
+	if len(providerParams) == 0 {
+		return
+	}
+
+	extra := make(map[string]any, len(providerParams))
+	for key, value := range providerParams {
+		// Don't override DSGo-managed keys to maintain consistency.
+		switch key {
+		case "model", "messages", "temperature", "max_tokens", "max_completion_tokens", "top_p", "stop",
+			"response_format", "frequency_penalty", "presence_penalty", "tools", "tool_choice":
+			continue
+		default:
+			extra[key] = value
+		}
+	}
+
+	if len(extra) == 0 {
+		return
+	}
+
+	// For security reasons, only use with trusted input.
+	params.SetExtraFields(extra)
 }
 
 func (o *openAI) convertMessages(messages []core.Message) []openai.ChatCompletionMessageParamUnion {
@@ -446,6 +474,11 @@ func (o *openAI) extractMetadata(headers http.Header) map[string]any {
 // It handles IDs that are too long or contain invalid characters by creating
 // a deterministic hash-based ID that preserves uniqueness.
 func sanitizeToolCallID(id string) string {
+	if strings.TrimSpace(id) == "" {
+		hash := sha256.Sum256([]byte("dsgo_empty_tool_call_id"))
+		return "toolcall_" + hex.EncodeToString(hash[:])[:16]
+	}
+
 	// Check if ID is already valid
 	if len(id) <= maxToolCallIDLength && !toolCallIDPattern.MatchString(id) {
 		return id

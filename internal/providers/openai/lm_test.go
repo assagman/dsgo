@@ -1,12 +1,15 @@
 package openai
 
 import (
+	"context"
 	"encoding/json"
-	"strings"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/assagman/dsgo/internal/core"
 	openaiSDK "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 )
 
 func TestNewOpenAI(t *testing.T) {
@@ -123,6 +126,104 @@ func TestOpenAI_BuildParams_ToolChoice(t *testing.T) {
 			t.Errorf("expected specific_tool, got %q", fn.Name)
 		}
 	})
+
+	t.Run("with provider params", func(t *testing.T) {
+		lm := &openAI{Model: "gpt-4o"}
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{
+			Temperature: 0.7,
+			ProviderParams: map[string]any{
+				"seed":        42,
+				"temperature": 1.2, // should be ignored
+				"top_k":       50,
+			},
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+
+		if seed, ok := m["seed"].(float64); !ok || int(seed) != 42 {
+			t.Errorf("expected seed 42, got %v", m["seed"])
+		}
+		if topK, ok := m["top_k"].(float64); !ok || int(topK) != 50 {
+			t.Errorf("expected top_k 50, got %v", m["top_k"])
+		}
+		if temp, ok := m["temperature"].(float64); !ok || temp != 0.7 {
+			t.Errorf("expected temperature 0.7 (DSGo-managed), got %v", m["temperature"])
+		}
+	})
+
+	t.Run("with max tokens", func(t *testing.T) {
+		lm := &openAI{Model: "gpt-4o"}
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{MaxTokens: 100}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+		if tokens, ok := m["max_tokens"].(float64); !ok || int(tokens) != 100 {
+			t.Errorf("expected max_tokens 100, got %v", m["max_tokens"])
+		}
+	})
+
+	t.Run("with penalties", func(t *testing.T) {
+		lm := &openAI{Model: "gpt-4o"}
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{
+			FrequencyPenalty: 0.5,
+			PresencePenalty:  0.3,
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+		if fp, ok := m["frequency_penalty"].(float64); !ok || fp != 0.5 {
+			t.Errorf("expected frequency_penalty 0.5, got %v", m["frequency_penalty"])
+		}
+		if pp, ok := m["presence_penalty"].(float64); !ok || pp != 0.3 {
+			t.Errorf("expected presence_penalty 0.3, got %v", m["presence_penalty"])
+		}
+	})
+}
+
+func TestOpenAI_ConvertMessages(t *testing.T) {
+	t.Parallel()
+	lm := &openAI{}
+
+	t.Run("basic messages", func(t *testing.T) {
+		messages := []core.Message{
+			{Role: "system", Content: "You are helpful"},
+			{Role: "user", Content: "Hello"},
+			{Role: "assistant", Content: "Hi there"},
+		}
+		converted := lm.convertMessages(messages)
+
+		if len(converted) != 3 {
+			t.Errorf("expected 3 messages, got %d", len(converted))
+		}
+	})
+
+	t.Run("with tool calls", func(t *testing.T) {
+		messages := []core.Message{
+			{Role: "user", Content: "What's the weather?"},
+			{
+				Role: "assistant",
+				ToolCalls: []core.ToolCall{
+					{ID: "call_123", Name: "get_weather", Arguments: map[string]any{"location": "NYC"}},
+				},
+			},
+			{Role: "tool", Content: `{"temp": 72}`, ToolID: "call_123"},
+		}
+		converted := lm.convertMessages(messages)
+
+		if len(converted) != 3 {
+			t.Errorf("expected 3 messages, got %d", len(converted))
+		}
+	})
 }
 
 func TestOpenAI_ConvertTool(t *testing.T) {
@@ -163,36 +264,6 @@ func TestOpenAI_ConvertTool(t *testing.T) {
 	if len(required) != 1 || required[0] != "param1" {
 		t.Errorf("expected required to be [param1], got %v", required)
 	}
-}
-
-func TestSanitizeToolCallID(t *testing.T) {
-	t.Parallel()
-
-	t.Run("already valid", func(t *testing.T) {
-		got := sanitizeToolCallID("call_123")
-		if got != "call_123" {
-			t.Errorf("expected call_123, got %q", got)
-		}
-	})
-
-	t.Run("replaces invalid characters", func(t *testing.T) {
-		got := sanitizeToolCallID("call 123!!")
-		if got != "call_123__" {
-			t.Errorf("expected call_123__ , got %q", got)
-		}
-	})
-
-	t.Run("too long becomes deterministic", func(t *testing.T) {
-		long := strings.Repeat("a", maxToolCallIDLength+10)
-		got1 := sanitizeToolCallID(long)
-		got2 := sanitizeToolCallID(long)
-		if got1 != got2 {
-			t.Errorf("expected deterministic output, got %q vs %q", got1, got2)
-		}
-		if len(got1) > maxToolCallIDLength {
-			t.Errorf("expected length <= %d, got %d", maxToolCallIDLength, len(got1))
-		}
-	})
 }
 
 func TestOpenAI_ParseResponse_InvalidToolArgs(t *testing.T) {
@@ -309,6 +380,196 @@ func TestOpenAI_IsReasoningModel(t *testing.T) {
 			result := lm.isReasoningModel()
 			if result != tt.expected {
 				t.Errorf("isReasoningModel() for model %q = %v, expected %v", tt.model, result, tt.expected)
+			}
+		})
+	}
+}
+
+func createTestOpenAI(t *testing.T, server *httptest.Server) *openAI {
+	t.Helper()
+
+	client := openaiSDK.NewClient(
+		option.WithAPIKey("test-key"),
+		option.WithBaseURL(server.URL),
+	)
+
+	return &openAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4o",
+		BaseURL: server.URL,
+		Client:  client,
+	}
+}
+
+func TestOpenAI_Stream_Success(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		chunks := []string{
+			`data: {"id":"test","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}`,
+			`data: {"id":"test","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}`,
+			`data: [DONE]`,
+		}
+
+		for _, chunk := range chunks {
+			_, _ = w.Write([]byte(chunk + "\n\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	lm := createTestOpenAI(t, server)
+
+	messages := []core.Message{{Role: "user", Content: "Hello"}}
+	options := core.DefaultGenerateOptions()
+
+	chunkChan, errChan := lm.Stream(context.Background(), messages, options)
+
+	var chunks []core.Chunk
+	for chunk := range chunkChan {
+		chunks = append(chunks, chunk)
+	}
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	default:
+	}
+
+	if len(chunks) == 0 {
+		t.Fatal("expected at least one chunk")
+	}
+
+	var fullContent string
+	for _, chunk := range chunks {
+		fullContent += chunk.Content
+	}
+
+	if fullContent != "Hello" {
+		t.Errorf("expected content 'Hello', got %s", fullContent)
+	}
+}
+
+func TestOpenAI_Stream_Error(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error": {"message": "bad request"}}`))
+	}))
+	defer server.Close()
+
+	lm := createTestOpenAI(t, server)
+
+	chunkChan, errChan := lm.Stream(context.Background(), []core.Message{{Role: "user", Content: "test"}}, core.DefaultGenerateOptions())
+
+	for range chunkChan {
+	}
+
+	err := <-errChan
+	if err == nil {
+		t.Fatal("expected error for bad request")
+	}
+}
+
+func TestOpenAI_InitRegistration(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-registration-key")
+
+	lm, err := core.NewLM(context.Background(), "openai/gpt-4-registration")
+	if err != nil {
+		t.Fatalf("NewLM failed: %v", err)
+	}
+	if lm == nil {
+		t.Fatal("NewLM returned nil for openai provider")
+	}
+
+	if lm.Name() != "gpt-4-registration" {
+		t.Errorf("expected model name gpt-4-registration, got %s", lm.Name())
+	}
+}
+
+func TestSanitizeToolCallID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		wantLen  int  // expected max length
+		wantSame bool // expect input to be returned unchanged
+	}{
+		{
+			name:     "valid short ID",
+			input:    "call_abc123",
+			wantSame: true,
+		},
+		{
+			name:     "valid ID with underscores and hyphens",
+			input:    "call_abc-123_xyz",
+			wantSame: true,
+		},
+		{
+			name:     "ID at max length",
+			input:    "abcdefghij0123456789abcdefghij0123456789", // exactly 40 chars
+			wantSame: true,
+		},
+		{
+			name:    "ID exceeds max length",
+			input:   "this_is_a_very_long_tool_call_id_that_exceeds_the_maximum_allowed_length_of_40_characters",
+			wantLen: maxToolCallIDLength,
+		},
+		{
+			name:    "ID with invalid characters (spaces)",
+			input:   "call with spaces",
+			wantLen: maxToolCallIDLength,
+		},
+		{
+			name:    "ID with invalid characters (special chars)",
+			input:   "call@#$%^&*()",
+			wantLen: maxToolCallIDLength,
+		},
+		{
+			name:    "very long ID",
+			input:   string(make([]byte, 1220)),
+			wantLen: maxToolCallIDLength,
+		},
+		{
+			name:  "empty ID",
+			input: "",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := sanitizeToolCallID(tt.input)
+
+			if tt.wantSame {
+				if result != tt.input {
+					t.Errorf("expected unchanged ID %q, got %q", tt.input, result)
+				}
+				return
+			}
+
+			// Check length constraint
+			if len(result) > maxToolCallIDLength {
+				t.Errorf("result length %d exceeds max %d", len(result), maxToolCallIDLength)
+			}
+
+			// Check character validity
+			if toolCallIDPattern.MatchString(result) {
+				t.Errorf("result %q contains invalid characters", result)
+			}
+
+			// Check determinism - same input should produce same output
+			result2 := sanitizeToolCallID(tt.input)
+			if result != result2 {
+				t.Errorf("non-deterministic: got %q then %q for same input", result, result2)
 			}
 		})
 	}

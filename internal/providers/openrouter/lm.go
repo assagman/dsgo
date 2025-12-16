@@ -160,13 +160,13 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 		if options != nil && options.ResponseFormat == "json" {
 			if strings.Contains(errStr, "json_schema") || strings.Contains(errStr, "response_format") {
 				if options.ResponseSchema != nil {
-					fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support json_schema, falling back to json_object\n", o.Model)
+					fmt.Fprintf(os.Stderr, "Warning: model %s doesn't support json_schema, falling back to json_object\n", o.Model)
 					fallbackOpts := *options
 					fallbackOpts.ResponseSchema = nil
 					return o.Generate(ctx, messages, &fallbackOpts)
 				}
 				if strings.Contains(errStr, "json_object") || strings.Contains(errStr, "response format") {
-					fmt.Fprintf(os.Stderr, "⚠️  Model %s doesn't support JSON mode, using adapter-based parsing\n", o.Model)
+					fmt.Fprintf(os.Stderr, "Warning: model %s doesn't support JSON mode, using adapter-based parsing\n", o.Model)
 					fallbackOpts := *options
 					fallbackOpts.ResponseFormat = ""
 					fallbackOpts.ResponseSchema = nil
@@ -307,7 +307,34 @@ func (o *openRouter) buildParams(messages []core.Message, options *core.Generate
 		}
 	}
 
+	applyProviderParams(&params, options.ProviderParams)
+
 	return params
+}
+
+func applyProviderParams(params *openai.ChatCompletionNewParams, providerParams map[string]any) {
+	if len(providerParams) == 0 {
+		return
+	}
+
+	extra := make(map[string]any, len(providerParams))
+	for key, value := range providerParams {
+		// Don't override DSGo-managed keys to maintain consistency.
+		switch key {
+		case "model", "messages", "temperature", "max_tokens", "top_p", "stop",
+			"response_format", "frequency_penalty", "presence_penalty", "tools", "tool_choice":
+			continue
+		default:
+			extra[key] = value
+		}
+	}
+
+	if len(extra) == 0 {
+		return
+	}
+
+	// For security reasons, only use with trusted input.
+	params.SetExtraFields(extra)
 }
 
 func (o *openRouter) convertMessages(messages []core.Message) []openai.ChatCompletionMessageParamUnion {
@@ -593,6 +620,11 @@ func debugEnabled() bool {
 // It handles IDs that are too long or contain invalid characters by creating
 // a deterministic hash-based ID that preserves uniqueness.
 func sanitizeToolCallID(id string) string {
+	if strings.TrimSpace(id) == "" {
+		hash := sha256.Sum256([]byte("dsgo_empty_tool_call_id"))
+		return "toolcall_" + hex.EncodeToString(hash[:])[:16]
+	}
+
 	// Check if ID is already valid
 	if len(id) <= maxToolCallIDLength && !toolCallIDPattern.MatchString(id) {
 		return id

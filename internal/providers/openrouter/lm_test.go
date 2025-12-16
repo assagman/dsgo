@@ -344,6 +344,29 @@ func TestOpenRouter_BuildParams(t *testing.T) {
 		}
 	})
 
+	t.Run("with provider params", func(t *testing.T) {
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{
+			Temperature: 0.7,
+			ProviderParams: map[string]any{
+				"top_k":       50,
+				"temperature": 1.2, // should be ignored
+			},
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+
+		if topK, ok := m["top_k"].(float64); !ok || int(topK) != 50 {
+			t.Errorf("expected top_k 50, got %v", m["top_k"])
+		}
+		if temp, ok := m["temperature"].(float64); !ok || temp != 0.7 {
+			t.Errorf("expected temperature 0.7 (DSGo-managed), got %v", m["temperature"])
+		}
+	})
+
 	t.Run("with max tokens", func(t *testing.T) {
 		messages := []core.Message{{Role: "user", Content: "test"}}
 		options := &core.GenerateOptions{MaxTokens: 100}
@@ -671,9 +694,8 @@ func TestSanitizeToolCallID(t *testing.T) {
 			wantLen: maxToolCallIDLength,
 		},
 		{
-			name:     "empty ID",
-			input:    "",
-			wantSame: true,
+			name:  "empty ID",
+			input: "",
 		},
 	}
 
