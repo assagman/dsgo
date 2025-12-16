@@ -14,6 +14,7 @@ Runnable examples for DSGo.
 | `package_analysis/` | Analyze a Go package | `cd examples/package_analysis && go run main.go` | Signatures, parsing |
 | `security_scan/` | Security scanning workflow | `cd examples/security_scan && go run main.go` | Program patterns |
 | `snowflake_trainer/` | Trainer experiment | `cd examples/snowflake_trainer && go run main.go` | Trainers |
+| `yaml_program/` | Declarative pipeline builder | `cd examples/yaml_program && go run main.go` | YAML config, MCP |
 
 Notes:
 - Use provider-prefixed model IDs (e.g. `openai/gpt-4o-mini`, `openrouter/anthropic/claude-3-opus`).

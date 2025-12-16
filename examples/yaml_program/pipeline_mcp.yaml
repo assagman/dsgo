@@ -1,0 +1,96 @@
+# DSGo YAML Pipeline Definition with MCP Integration
+# This file demonstrates ReAct with MCP-based web search tools.
+# Requires: TAVILY_API_KEY environment variable for web search
+#
+# To run this example:
+#   export TAVILY_API_KEY=your-api-key
+#   go run . pipeline_mcp.yaml
+#
+# Get a free Tavily API key at: https://tavily.com
+
+name: dsgo_research_pipeline
+description: Deep code analysis for repo https://github.com/assagman/dsgo
+
+# Global settings for the pipeline
+settings:
+  temperature: 0.7
+  max_tokens: 10240
+
+# Define MCP clients (global registry)
+mcp:
+  tavily:
+    type: tavily
+    # api_key can be set here or via TAVILY_API_KEY env var
+
+# Define reusable signatures
+signatures:
+  research:
+    description: Research a topic using web search
+    inputs:
+      - name: topic
+        type: string
+        description: The topic to research
+      - name: depth
+        type: string
+        description: How deep to research (brief, moderate, comprehensive)
+    outputs:
+      - name: summary
+        type: string
+        description: Summary of research findings
+      - name: key_facts
+        type: string
+        description: Key facts discovered
+      - name: sources
+        type: string
+        description: Sources consulted
+
+  fact_check:
+    description: Verify facts using web search
+    inputs:
+      - name: claim
+        type: string
+        description: The claim to fact-check
+    outputs:
+      - name: verdict
+        type: class
+        classes: [true, false, partially_true, unverifiable]
+        description: Verdict on the claim
+      - name: evidence
+        type: string
+        description: Evidence supporting the verdict
+      - name: confidence
+        type: float
+        description: Confidence in the verdict (0-1)
+
+# Define modules that use the signatures
+modules:
+  researcher:
+    type: ReAct
+    signature: research
+    options:
+      temperature: 0.5
+      max_iterations: 10
+    mcp:
+      tavily:
+        tools:
+          - "*"  # Use all tools from tavily
+
+  fact_checker:
+    type: ReAct
+    signature: fact_check
+    options:
+      temperature: 0.3
+      max_iterations: 6
+    mcp:
+      tavily:
+        tools:
+          - tavily_search  # Use only specific tool
+
+# Define the pipeline as a sequence of modules
+pipeline:
+  - module: researcher
+
+# Pipeline inputs - these are passed to the first module
+inputs:
+  topic: "DSGo framework architecture and capabilities"
+  depth: "comprehensive"

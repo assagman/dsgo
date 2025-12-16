@@ -58,6 +58,27 @@ func NewOptions(maxRetries int, initialBackoff, maxBackoff time.Duration, jitter
 	}
 }
 
+// MergeFrom applies non-zero values from the provided overrides to this Options.
+// This allows partial configuration where callers only override specific fields.
+//
+// NOTE: This method mutates the receiver. It is NOT safe for concurrent use on
+// a shared *Options. Callers should use it only on freshly created instances
+// (e.g., from DefaultOptions() or Copy()) before sharing.
+func (o *Options) MergeFrom(maxRetries int, initialBackoff, maxBackoff time.Duration, jitterFactor float64) {
+	if maxRetries > 0 {
+		o.MaxRetries = maxRetries
+	}
+	if initialBackoff > 0 {
+		o.InitialBackoff = initialBackoff
+	}
+	if maxBackoff > 0 {
+		o.MaxBackoff = maxBackoff
+	}
+	if jitterFactor > 0 {
+		o.JitterFactor = jitterFactor
+	}
+}
+
 func IsRetryable(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests || // 429
 		statusCode == http.StatusInternalServerError || // 500
@@ -138,17 +159,16 @@ func WithExponentialBackoffOpts(ctx context.Context, fn HTTPFunc, opts *Options)
 	return resp, nil
 }
 
-func calculateBackoff(attempt int) time.Duration {
-	return calculateBackoffWithOpts(attempt, nil)
+func calculateBackoffWithOpts(attempt int, opts *Options) time.Duration {
+	return calculateBackoff(attempt, opts)
 }
 
-func calculateBackoffWithOpts(attempt int, opts *Options) time.Duration {
+func calculateBackoff(attempt int, opts *Options) time.Duration {
 	if opts == nil {
 		opts = DefaultOptions()
 	}
 
 	backoff := float64(opts.InitialBackoff) * math.Pow(2, float64(attempt))
-
 	if backoff > float64(opts.MaxBackoff) {
 		backoff = float64(opts.MaxBackoff)
 	}

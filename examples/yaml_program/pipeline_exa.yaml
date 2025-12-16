@@ -1,0 +1,53 @@
+# DSGo YAML Pipeline Definition with Exa MCP Integration
+# Requires: EXA_API_KEY environment variable
+#
+# To run this example:
+#   export EXA_API_KEY=your-api-key
+#   go run . pipeline_exa.yaml
+
+name: exa_research_pipeline
+description: A pipeline that researches topics using Exa web search
+
+settings:
+  temperature: 0.7
+  max_tokens: 10240
+
+# Define MCP clients (global registry)
+mcp:
+  exa:
+    type: exa
+
+signatures:
+  code_research:
+    description: Research programming topics and find code examples
+    inputs:
+      - name: question
+        type: string
+        description: Programming question or topic to research
+    outputs:
+      - name: answer
+        type: string
+        description: Comprehensive answer with code examples
+      - name: sources
+        type: string
+        description: Sources consulted
+
+modules:
+  code_researcher:
+    type: ReAct
+    signature: code_research
+    options:
+      temperature: 0.3
+      max_iterations: 8
+    mcp:
+      exa:
+        tools:
+          - web_search_exa
+          - get_code_context_exa
+
+pipeline:
+  - module: code_researcher
+
+# Pipeline inputs
+inputs:
+  question: "How do I implement a ReAct agent in Go using DSGo framework?"

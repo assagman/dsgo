@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -33,11 +34,22 @@ type HTTPTransport struct {
 	sessionID string
 }
 
+const defaultHTTPTimeout = 300 * time.Second
+
 // NewHTTPTransport creates a new HTTPTransport.
 func NewHTTPTransport(url string, apiKey string) *HTTPTransport {
+	return NewHTTPTransportWithTimeout(url, apiKey, defaultHTTPTimeout)
+}
+
+// NewHTTPTransportWithTimeout creates a new HTTPTransport with a custom client timeout.
+// If timeout <= 0, the default timeout is used.
+func NewHTTPTransportWithTimeout(url string, apiKey string, timeout time.Duration) *HTTPTransport {
+	if timeout <= 0 {
+		timeout = defaultHTTPTimeout
+	}
 	return &HTTPTransport{
 		url:       url,
-		client:    &http.Client{Timeout: 300 * time.Second},
+		client:    &http.Client{Timeout: timeout},
 		apiKey:    apiKey,
 		sessionID: fmt.Sprintf("sess_%d", time.Now().UnixNano()),
 	}
@@ -55,6 +67,11 @@ func (t *HTTPTransport) Send(ctx context.Context, request *JSONRPCRequest) (*JSO
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Short-circuit if context is already cancelled
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		req, err := http.NewRequestWithContext(ctx, "POST", t.url, bytes.NewReader(body))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
@@ -172,10 +189,16 @@ func decodeJSONRPCResponse(contentType string, body io.Reader) (*JSONRPCResponse
 
 // SSETransport implements Transport over SSE.
 type SSETransport struct {
-	sseURL    string
-	postURL   string
-	client    *http.Client
-	apiKey    string
+	sseURL  string
+	postURL string
+	client  *http.Client
+	apiKey  string
+
+	// Timeouts for the POST side of SSE MCP.
+	// These are intentionally separate from caller context since SSE streams can be long-lived.
+	postTimeout     time.Duration
+	responseTimeout time.Duration
+
 	running   atomic.Bool
 	mu        sync.Mutex
 	pending   map[any]chan *JSONRPCResponse
@@ -186,13 +209,28 @@ type SSETransport struct {
 
 // NewSSETransport creates a new SSETransport.
 func NewSSETransport(url string, apiKey string) *SSETransport {
+	return NewSSETransportWithTimeouts(url, apiKey, defaultHTTPTimeout, defaultHTTPTimeout)
+}
+
+// NewSSETransportWithTimeouts creates a new SSETransport with custom POST and response timeouts.
+// If either timeout <= 0, the default is used.
+func NewSSETransportWithTimeouts(url string, apiKey string, postTimeout time.Duration, responseTimeout time.Duration) *SSETransport {
+	if postTimeout <= 0 {
+		postTimeout = defaultHTTPTimeout
+	}
+	if responseTimeout <= 0 {
+		responseTimeout = defaultHTTPTimeout
+	}
+
 	t := &SSETransport{
-		sseURL:  url,
-		client:  &http.Client{Timeout: 0}, // No timeout for SSE stream
-		apiKey:  apiKey,
-		pending: make(map[any]chan *JSONRPCResponse),
-		stopCh:  make(chan struct{}),
-		initCh:  make(chan struct{}),
+		sseURL:          url,
+		client:          &http.Client{Timeout: 0}, // No timeout for SSE stream
+		apiKey:          apiKey,
+		postTimeout:     postTimeout,
+		responseTimeout: responseTimeout,
+		pending:         make(map[any]chan *JSONRPCResponse),
+		stopCh:          make(chan struct{}),
+		initCh:          make(chan struct{}),
 	}
 	t.running.Store(true)
 	return t
@@ -282,6 +320,7 @@ func (t *SSETransport) Send(ctx context.Context, request *JSONRPCRequest) (*JSON
 	t.pending[request.ID] = respCh
 	t.mu.Unlock()
 
+	// Ensure cleanup of pending map entry on all return paths (success, error, timeout)
 	defer func() {
 		t.mu.Lock()
 		delete(t.pending, request.ID)
@@ -293,9 +332,13 @@ func (t *SSETransport) Send(ctx context.Context, request *JSONRPCRequest) (*JSON
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Use a separate timeout for the POST request (300 seconds)
-	// Don't use the parent context directly as it may have a shorter timeout
-	postCtx, postCancel := context.WithTimeout(context.Background(), 300*time.Second)
+	// Use a separate timeout for the POST request.
+	// Don't use the parent context directly as it may have a shorter timeout.
+	postTimeout := t.postTimeout
+	if postTimeout <= 0 {
+		postTimeout = defaultHTTPTimeout
+	}
+	postCtx, postCancel := context.WithTimeout(context.Background(), postTimeout)
 	defer postCancel()
 
 	req, err := http.NewRequestWithContext(postCtx, "POST", t.postURL, bytes.NewReader(body))
@@ -331,7 +374,12 @@ func (t *SSETransport) Send(ctx context.Context, request *JSONRPCRequest) (*JSON
 			return nil, fmt.Errorf("received nil response - transport may have closed")
 		}
 		return resp, nil
-	case <-time.After(300 * time.Second):
+	case <-time.After(func() time.Duration {
+		if t.responseTimeout > 0 {
+			return t.responseTimeout
+		}
+		return defaultHTTPTimeout
+	}()):
 		return nil, fmt.Errorf("timeout waiting for response to request %v", request.ID)
 	}
 }
@@ -382,7 +430,7 @@ func (t *SSETransport) readLoop(body io.ReadCloser) {
 					u, err := url.Parse(t.sseURL)
 					if err != nil {
 						// Fallback to simple string manipulation if parsing fails
-						fmt.Printf("Warning: failed to parse SSE URL %q: %v\n", t.sseURL, err)
+						fmt.Fprintf(os.Stderr, "dsgo: warning: failed to parse SSE URL %q: %v\n", t.sseURL, err)
 					} else {
 						// Construct new URL
 						t.postURL = u.Scheme + "://" + u.Host + endpoint

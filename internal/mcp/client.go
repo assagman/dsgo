@@ -200,7 +200,21 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 	}
 
 	if result.IsError {
-		return "", fmt.Errorf("tool returned error status")
+		// Many MCP servers return error details in the content array.
+		// Preserve that information so callers can see the real failure cause.
+		var errText string
+		for _, content := range result.Content {
+			if content.Type == "text" && content.Text != "" {
+				if errText != "" {
+					errText += "\n"
+				}
+				errText += content.Text
+			}
+		}
+		if errText == "" {
+			errText = "tool returned error status"
+		}
+		return "", fmt.Errorf("tool returned error status: %s", errText)
 	}
 
 	// Combine text content
