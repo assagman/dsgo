@@ -57,7 +57,7 @@ func TestMockHTTP_CostTracking_Generate_WithCollector(t *testing.T) {
 		t.Fatalf("usage.total=%d, want %d", result.Usage.TotalTokens, totalTokens)
 	}
 
-	expectedCost := cost.Calculate("mock", "gpt-4o-mini", promptTokens, completionTokens)
+	expectedCost := cost.Calculate("mock/gpt-4o-mini", promptTokens, completionTokens)
 	if expectedCost <= 0 {
 		t.Fatalf("expected positive pricing for mock/gpt-4o-mini; got %.12f", expectedCost)
 	}
@@ -124,7 +124,7 @@ func TestMockHTTP_CostTracking_Stream_WithCollector(t *testing.T) {
 		t.Fatalf("entry.usage.total=%d, want %d", entry.Usage.TotalTokens, totalTokens)
 	}
 
-	expectedCost := cost.Calculate("mock", "gpt-4o-mini", promptTokens, completionTokens)
+	expectedCost := cost.Calculate("mock/gpt-4o-mini", promptTokens, completionTokens)
 	if expectedCost <= 0 {
 		t.Fatalf("expected positive pricing for mock/gpt-4o-mini; got %.12f", expectedCost)
 	}

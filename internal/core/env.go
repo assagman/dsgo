@@ -3,8 +3,10 @@ package core
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/assagman/dsgo/internal/cost"
 	"github.com/assagman/dsgo/internal/logging"
 )
 
@@ -20,6 +22,8 @@ import (
 //   - DSGO_CACHEDIR: Disk cache directory (default: ~/.dsgo_cache/proj_<hash>/)
 //   - DSGO_CACHE_LIMIT: Disk cache size limit in bytes (default: 30GB)
 //   - DSGO_CACHE_DISK: Enable disk caching ("true" or "false", default "true")
+//   - DSGO_OPENAI_PRICING_TIER: Pricing tier for OpenAI cost estimation (standard|batch|priority|flex)
+//   - DSGO_OPENROUTER_PRICING_TIER: Pricing tier for OpenRouter cost estimation (standard)
 //   - DSGO_OPENAI_API_KEY: OpenAI API key
 //   - DSGO_OPENROUTER_API_KEY: OpenRouter API key
 //   - DSGO_STRUCTURED_OUTPUTS: Enable structured outputs ("true" or "false", default "true")
@@ -123,6 +127,27 @@ func loadEnv() {
 	if tempStr := os.Getenv("DSGO_STRUCTURED_TEMPERATURE"); tempStr != "" {
 		if temp, err := strconv.ParseFloat(tempStr, 32); err == nil {
 			globalSettings.StructuredOutput.Temperature = float32(temp)
+		}
+	}
+
+	// Pricing tiers (cost estimation only)
+	if globalSettings.PricingTierByProvider == nil {
+		globalSettings.PricingTierByProvider = map[string]cost.PricingTier{}
+	}
+
+	if tierStr := os.Getenv("DSGO_OPENAI_PRICING_TIER"); tierStr != "" {
+		tier := cost.PricingTier(strings.ToLower(strings.TrimSpace(tierStr)))
+		switch tier {
+		case cost.TierStandard, cost.TierFlex, cost.TierPriority, cost.TierBatch:
+			globalSettings.PricingTierByProvider["openai"] = tier
+		}
+	}
+
+	if tierStr := os.Getenv("DSGO_OPENROUTER_PRICING_TIER"); tierStr != "" {
+		tier := cost.PricingTier(strings.ToLower(strings.TrimSpace(tierStr)))
+		// OpenRouter is treated as standard-only.
+		if tier == cost.TierStandard {
+			globalSettings.PricingTierByProvider["openrouter"] = tier
 		}
 	}
 

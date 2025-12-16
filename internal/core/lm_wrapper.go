@@ -188,9 +188,13 @@ func (w *lmWrapper) calculateCost(ctx context.Context, provider, modelName strin
 		return 0
 	}
 
-	calculatedCost, ok := w.calculator.CalculateIfKnown(provider, modelName, promptTokens, completionTokens)
-	if ok {
-		return calculatedCost
+	// Build canonical model key
+	canonicalModel := canonicalModelID(provider, modelName)
+	tier := pricingTierForProvider(provider)
+
+	// Check if we have pricing for this model
+	if w.calculator.HasPricingForTier(canonicalModel, tier) {
+		return w.calculator.CalculateWithTier(canonicalModel, tier, promptTokens, completionTokens)
 	}
 
 	// Use provider/model as the warning key to avoid duplicate warnings per provider
@@ -359,4 +363,27 @@ func (w *lmWrapper) extractProviderFromModel() string {
 
 	// Default to unknown
 	return "unknown"
+}
+
+func canonicalModelID(provider, name string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	name = strings.ToLower(strings.TrimSpace(name))
+	if provider == "" {
+		return name
+	}
+	if strings.HasPrefix(name, provider+"/") {
+		return name
+	}
+	return provider + "/" + name
+}
+
+func pricingTierForProvider(provider string) cost.PricingTier {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	settings := GetSettings()
+	if settings.PricingTierByProvider != nil {
+		if tier, ok := settings.PricingTierByProvider[provider]; ok {
+			return tier
+		}
+	}
+	return cost.TierStandard
 }

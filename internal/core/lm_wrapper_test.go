@@ -78,7 +78,7 @@ func TestNewLMWrapper(t *testing.T) {
 
 func TestLMWrapper_Generate_Success(t *testing.T) {
 	mock := &mockWrapperLM{
-		name: "gpt-4",
+		name: "gpt-4o",
 		generateFunc: func(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
 			return &GenerateResult{
 				Content:      "Hello, world!",
@@ -142,8 +142,8 @@ func TestLMWrapper_Generate_Success(t *testing.T) {
 		t.Error("Expected session ID to be set")
 	}
 
-	if entry.Model != "gpt-4" {
-		t.Errorf("Expected model 'gpt-4', got '%s'", entry.Model)
+	if entry.Model != "gpt-4o" {
+		t.Errorf("Expected model 'gpt-4o', got '%s'", entry.Model)
 	}
 
 	if entry.Provider != "openai" {
@@ -830,7 +830,7 @@ func TestLMWrapper_FullObservabilityIntegration(t *testing.T) {
 
 	// Create mock with full metadata
 	mock := &mockWrapperLM{
-		name: "gpt-4",
+		name: "openai/gpt-4o-mini",
 		generateFunc: func(ctx context.Context, messages []Message, options *GenerateOptions) (*GenerateResult, error) {
 			return &GenerateResult{
 				Content:      "Test response",
@@ -925,7 +925,7 @@ func TestLMWrapper_FullObservabilityIntegration(t *testing.T) {
 
 func TestLMWrapper_Stream_Success(t *testing.T) {
 	mock := &mockStreamSuccessLM{
-		name: "gpt-4",
+		name: "gpt-4o",
 	}
 
 	memCollector := NewMemoryCollector(10)

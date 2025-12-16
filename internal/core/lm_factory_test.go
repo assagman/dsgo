@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"testing"
+
+	"github.com/assagman/dsgo/internal/modelcatalog"
 )
 
 func TestRegisterLM(t *testing.T) {
@@ -81,6 +83,10 @@ func TestNewLM(t *testing.T) {
 		return &mockLM{}
 	})
 
+	// Authoritative model catalog requires explicit registration.
+	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "testprovider/test-model"})
+	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "provider2/model-2"})
+
 	ctx := context.Background()
 
 	t.Run("Success", func(t *testing.T) {
@@ -129,7 +135,7 @@ func TestNewLM(t *testing.T) {
 		if err == nil {
 			t.Error("expected error when model string is empty")
 		}
-		if err.Error() != "model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")" {
+		if err.Error() != "model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/google/gemini-2.5-flash'. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")" {
 			t.Errorf("unexpected error message: %v", err)
 		}
 	})
@@ -259,6 +265,7 @@ func TestLMFactory_WithCollector(t *testing.T) {
 	}
 	RegisterLM("test-provider", testLMFactory)
 	RegisterLM("openrouter", testLMFactory)
+	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model"})
 
 	ctx := context.Background()
 	collector := NewMemoryCollector(10)
@@ -318,6 +325,7 @@ func TestLMFactory_WithoutCollector(t *testing.T) {
 	}
 	RegisterLM("test-provider", testLMFactory)
 	RegisterLM("openrouter", testLMFactory)
+	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model"})
 
 	ctx := context.Background()
 
@@ -369,6 +377,7 @@ func TestNewLM_WithCache(t *testing.T) {
 	RegisterLM("openrouter", func(model string) LM {
 		return NewMockLM()
 	})
+	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model"})
 
 	ctx := context.Background()
 
@@ -425,8 +434,8 @@ func TestNewLM_WithModelStringArg(t *testing.T) {
 		model     string
 		wantError bool
 	}{
-		{"explicit openai gpt-4", "openai/gpt-4", false},
-		{"explicit openai gpt-4-turbo", "openai/gpt-4-turbo", false},
+		{"explicit openai gpt-4o", "openai/gpt-4o", false},
+		{"explicit openai gpt-4o-mini", "openai/gpt-4o-mini", false},
 		{"explicit meta model via openrouter", "openrouter/meta-llama/llama-3.3-70b-instruct", false},
 		{"explicit unknown model", "unknownprovider/model", true},
 	}

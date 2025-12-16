@@ -6,9 +6,11 @@ package dsgo
 
 import (
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/cost"
 	"github.com/assagman/dsgo/internal/env"
 	"github.com/assagman/dsgo/internal/logging"
 	"github.com/assagman/dsgo/internal/mcp"
+	"github.com/assagman/dsgo/internal/modelcatalog"
 	"github.com/assagman/dsgo/internal/module"
 	signature_typed "github.com/assagman/dsgo/internal/signature_typed"
 
@@ -67,6 +69,14 @@ type (
 	CacheMeta             = core.CacheMeta
 	CacheStats            = core.CacheStats
 	ToolParameter         = core.ToolParameter
+)
+
+// Re-export model catalog and cost types
+type (
+	Model          = modelcatalog.Model
+	PricingTier    = cost.PricingTier
+	ModelPricing   = cost.ModelPricing
+	CostCalculator = cost.Calculator
 )
 
 // Re-export module types
@@ -163,6 +173,7 @@ var (
 	WithModel                       = core.WithModel
 	WithTimeout                     = core.WithTimeout
 	WithLM                          = core.WithLM
+	WithPricingTier                 = core.WithPricingTier
 	WithAPIKey                      = core.WithAPIKey
 	WithMaxRetries                  = core.WithMaxRetries
 	WithTracing                     = core.WithTracing
@@ -196,6 +207,20 @@ var (
 	DefaultCacheConfiguration       = core.DefaultCacheConfiguration
 	DefaultGenerateOptions          = core.DefaultGenerateOptions
 	StripMarkers                    = core.StripMarkers
+)
+
+// Re-export model catalog and cost functions
+var (
+	RegisterModel         = modelcatalog.RegisterModel
+	RegisterAlias         = modelcatalog.RegisterAlias
+	ResolveModel          = modelcatalog.Resolve
+	IsValidModel          = modelcatalog.IsValid
+	IsValidCanonicalModel = modelcatalog.IsValidCanonical
+	ListModels            = modelcatalog.ListModels
+	ListModelsByProvider  = modelcatalog.ListModelsByProvider
+	DefaultCostCalculator = cost.DefaultCalculator
+	CalculateCost         = cost.Calculate
+	CalculateCostWithTier = cost.CalculateWithTier
 )
 
 // Re-export module functions
@@ -356,6 +381,12 @@ const (
 	FieldTypeJSON     = core.FieldTypeJSON
 	FieldTypeImage    = core.FieldTypeImage
 	FieldTypeDatetime = core.FieldTypeDatetime
+
+	// Pricing tier constants
+	TierStandard = cost.TierStandard
+	TierFlex     = cost.TierFlex
+	TierPriority = cost.TierPriority
+	TierBatch    = cost.TierBatch
 
 	// Logging level constants
 	LevelDebug = logging.LevelDebug

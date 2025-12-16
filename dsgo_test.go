@@ -110,6 +110,40 @@ func TestPackageInit(t *testing.T) {
 	}
 }
 
+// TestModelCatalog verifies model catalog and cost APIs
+func TestModelCatalog(t *testing.T) {
+	if !IsValidModel("openai/gpt-4o") {
+		t.Fatal("expected openai/gpt-4o to be valid")
+	}
+	if !IsValidModel("gpt-4o") {
+		t.Fatal("expected alias gpt-4o to be valid")
+	}
+	if IsValidModel("openai/does-not-exist") {
+		t.Fatal("expected unknown model to be invalid")
+	}
+
+	models := ListModelsByProvider("openai")
+	if len(models) == 0 {
+		t.Fatal("expected some openai models")
+	}
+
+	found := false
+	for _, m := range models {
+		if m.ID == "openai/gpt-4o" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected openai/gpt-4o to be listed")
+	}
+
+	pricing, ok := DefaultCostCalculator.GetPricingForTier("openai/gpt-4o", TierStandard)
+	if !ok || pricing.PromptPrice == 0 {
+		t.Fatal("expected pricing for openai/gpt-4o")
+	}
+}
+
 // TestReexportedTypes verifies that all re-exported types are accessible and properly typed
 func TestReexportedTypes(t *testing.T) {
 	// This test ensures that the type aliases in dsgo.go compile and are accessible
@@ -493,3 +527,5 @@ func TestTypedGenericFunctionality(t *testing.T) {
 		}
 	})
 }
+
+// TestModelCatalog verifies model catalog and cost APIs

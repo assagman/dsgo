@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/assagman/dsgo/internal/cost"
 	"github.com/assagman/dsgo/internal/logging"
 )
 
@@ -78,6 +79,11 @@ type Settings struct {
 	// APIKey stores provider-specific API keys.
 	APIKey map[string]string
 
+	// PricingTierByProvider selects pricing tiers per provider.
+	//
+	// Used for cost estimation/observability only; it does not affect provider behavior.
+	PricingTierByProvider map[string]cost.PricingTier
+
 	// MaxRetries sets the default number of retries for failed LM calls.
 	MaxRetries int
 
@@ -112,11 +118,15 @@ var (
 var globalSettings = &Settings{
 	DefaultTimeout: 30 * time.Second,
 	APIKey:         make(map[string]string),
-	MaxRetries:     3,
-	EnableTracing:  false,
-	CacheTTL:       0, // No expiry by default
-	CacheConfig:    DefaultCacheConfiguration(),
-	Logger:         nil, // Will be set by logging package initialization
+	PricingTierByProvider: map[string]cost.PricingTier{
+		"openai":     cost.TierStandard,
+		"openrouter": cost.TierStandard,
+	},
+	MaxRetries:    3,
+	EnableTracing: false,
+	CacheTTL:      0, // No expiry by default
+	CacheConfig:   DefaultCacheConfiguration(),
+	Logger:        nil, // Will be set by logging package initialization
 	StructuredOutput: StructuredOutputConfig{
 		Enabled:     true, // Structured outputs enabled by default
 		MaxAttempts: 3,    // 1 initial + up to 2 retries
@@ -191,20 +201,24 @@ func GetSettings() Settings {
 	apiKeyCopy := make(map[string]string, len(globalSettings.APIKey))
 	maps.Copy(apiKeyCopy, globalSettings.APIKey)
 
+	pricingTierCopy := make(map[string]cost.PricingTier, len(globalSettings.PricingTierByProvider))
+	maps.Copy(pricingTierCopy, globalSettings.PricingTierByProvider)
+
 	return Settings{
-		DefaultLM:        globalSettings.DefaultLM,
-		DefaultProvider:  globalSettings.DefaultProvider,
-		DefaultModel:     globalSettings.DefaultModel,
-		DefaultTimeout:   globalSettings.DefaultTimeout,
-		APIKey:           apiKeyCopy,
-		MaxRetries:       globalSettings.MaxRetries,
-		EnableTracing:    globalSettings.EnableTracing,
-		Collector:        globalSettings.Collector,
-		DefaultCache:     globalSettings.DefaultCache,
-		CacheTTL:         globalSettings.CacheTTL,
-		CacheConfig:      globalSettings.CacheConfig,
-		Logger:           globalSettings.Logger,
-		StructuredOutput: globalSettings.StructuredOutput,
+		DefaultLM:             globalSettings.DefaultLM,
+		DefaultProvider:       globalSettings.DefaultProvider,
+		DefaultModel:          globalSettings.DefaultModel,
+		DefaultTimeout:        globalSettings.DefaultTimeout,
+		APIKey:                apiKeyCopy,
+		PricingTierByProvider: pricingTierCopy,
+		MaxRetries:            globalSettings.MaxRetries,
+		EnableTracing:         globalSettings.EnableTracing,
+		Collector:             globalSettings.Collector,
+		DefaultCache:          globalSettings.DefaultCache,
+		CacheTTL:              globalSettings.CacheTTL,
+		CacheConfig:           globalSettings.CacheConfig,
+		Logger:                globalSettings.Logger,
+		StructuredOutput:      globalSettings.StructuredOutput,
 	}
 }
 
@@ -323,6 +337,10 @@ func (s *Settings) Reset() {
 	s.DefaultModel = ""
 	s.DefaultTimeout = 30 * time.Second
 	s.APIKey = make(map[string]string)
+	s.PricingTierByProvider = map[string]cost.PricingTier{
+		"openai":     cost.TierStandard,
+		"openrouter": cost.TierStandard,
+	}
 	s.MaxRetries = 3
 	s.EnableTracing = false
 	s.Collector = nil

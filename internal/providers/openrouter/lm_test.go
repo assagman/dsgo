@@ -745,18 +745,19 @@ func TestInit_RegistersLM(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
+	// Use a model that's registered in the catalog
 	core.Configure(
 		core.WithProvider("openrouter"),
-		core.WithModel("test-model"),
+		core.WithModel("google/gemini-2.5-flash"),
 	)
 
-	lm, err := core.NewLM(ctx, "openrouter/test-model")
+	lm, err := core.NewLM(ctx, "openrouter/google/gemini-2.5-flash")
 	if err != nil {
 		t.Fatalf("expected LM to be created, got error: %v", err)
 	}
 
-	if lm.Name() != "test-model" {
-		t.Errorf("expected model name test-model, got %s", lm.Name())
+	if lm.Name() != "google/gemini-2.5-flash" {
+		t.Errorf("expected model name google/gemini-2.5-flash, got %s", lm.Name())
 	}
 }
 

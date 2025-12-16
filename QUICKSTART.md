@@ -559,6 +559,33 @@ totalCost += result.Usage.Cost
 totalTokens += result.Usage.TotalTokens
 ```
 
+Supported models are validated via the built-in model catalog:
+
+```go
+fmt.Println(dsgo.IsValidModel("openai/gpt-4o-mini"))
+for _, m := range dsgo.ListModelsByProvider("openai") {
+    pricing, ok := dsgo.DefaultCostCalculator.GetPricingForTier(m.ID, dsgo.TierStandard)
+    if ok {
+        fmt.Println(m.ID, pricing)
+    } else {
+        fmt.Println(m.ID)
+    }
+}
+```
+
+If you register a custom provider via `dsgo.RegisterLM`, you must also register its supported models:
+
+```go
+_ = dsgo.RegisterModel(dsgo.Model{ID: "myprovider/my-model"})
+```
+
+You can select a pricing tier for cost estimation (OpenAI supports multiple tiers):
+
+```go
+// Or set DSGO_OPENAI_PRICING_TIER=batch
+dsgo.Configure(dsgo.WithPricingTier("openai", dsgo.TierBatch))
+```
+
 ### Caching
 
 DSGo includes automatic LRU caching:

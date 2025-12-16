@@ -498,7 +498,8 @@ func TestOpenAI_Stream_Error(t *testing.T) {
 func TestOpenAI_InitRegistration(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-registration-key")
 
-	lm, err := core.NewLM(context.Background(), "openai/gpt-4-registration")
+	// Use a model that's registered in the catalog
+	lm, err := core.NewLM(context.Background(), "openai/gpt-4o-mini")
 	if err != nil {
 		t.Fatalf("NewLM failed: %v", err)
 	}
@@ -506,8 +507,8 @@ func TestOpenAI_InitRegistration(t *testing.T) {
 		t.Fatal("NewLM returned nil for openai provider")
 	}
 
-	if lm.Name() != "gpt-4-registration" {
-		t.Errorf("expected model name gpt-4-registration, got %s", lm.Name())
+	if lm.Name() != "gpt-4o-mini" {
+		t.Errorf("expected model name gpt-4o-mini, got %s", lm.Name())
 	}
 }
 

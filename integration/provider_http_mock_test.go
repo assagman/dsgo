@@ -426,9 +426,10 @@ func TestCostCalculation_OpenAI(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Check if pricing is available
-			pricing, ok := calc.GetPricing(tt.provider, tt.model)
+			modelKey := tt.provider + "/" + tt.model
+			pricing, ok := calc.GetPricing(modelKey)
 			if !ok {
-				t.Skipf("pricing not available for model %s/%s", tt.provider, tt.model)
+				t.Skipf("pricing not available for model %s", modelKey)
 			}
 
 			// Calculate cost - just verify it's positive for these tokens
@@ -473,9 +474,10 @@ func TestCostCalculation_OpenRouter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pricing, ok := calc.GetPricing(tt.provider, tt.model)
+			modelKey := tt.provider + "/" + tt.model
+			pricing, ok := calc.GetPricing(modelKey)
 			if !ok {
-				t.Skipf("pricing not available for model %s/%s", tt.provider, tt.model)
+				t.Skipf("pricing not available for model %s", modelKey)
 			}
 
 			// Cost should be calculable (even if > 0)
