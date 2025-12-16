@@ -526,6 +526,8 @@ func validateGitArgs(args []string) error {
 			return fmt.Errorf("git-dir overrides are not allowed")
 		case arg == "--work-tree" || strings.HasPrefix(arg, "--work-tree"):
 			return fmt.Errorf("work-tree overrides are not allowed")
+		case arg == "-o" || strings.HasPrefix(arg, "-o") || arg == "--output" || strings.HasPrefix(arg, "--output"):
+			return fmt.Errorf("git output flags are not allowed")
 		default:
 			return fmt.Errorf("git global option not allowed: %s", arg)
 		}
@@ -602,6 +604,9 @@ func validateDiffPath(p string) error {
 	}
 	if strings.Contains(p, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("parent traversal paths are not allowed in patches")
+	}
+	if strings.HasPrefix(p, ".git"+string(filepath.Separator)) || p == ".git" {
+		return fmt.Errorf("modifying .git directory is not allowed")
 	}
 	return nil
 }

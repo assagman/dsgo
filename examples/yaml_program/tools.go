@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -246,7 +247,7 @@ func validatePath(projectRoot, path string) (string, error) {
 	}
 	path = filepath.Clean(path)
 
-	if !strings.HasPrefix(path, projectRoot) {
+	if path != projectRoot && !strings.HasPrefix(path, projectRoot+string(os.PathSeparator)) {
 		return "", fmt.Errorf("path %s is outside project root", path)
 	}
 	return path, nil
@@ -411,9 +412,9 @@ func newSearchFilesTool() dsgo.Tool {
 		}, nil
 	}
 
-	return *dsgo.NewTool("search_files", "Search for files matching a glob pattern", searchFiles).
+	return *dsgo.NewTool("search_files", "Search for files matching a glob pattern (standard Go match, no ** recursion)", searchFiles).
 		AddParameter("directory", "string", "The directory to search in (relative to project root)", false).
-		AddParameter("pattern", "string", "Glob pattern to match (e.g., *.go, **/*.txt)", true)
+		AddParameter("pattern", "string", "Glob pattern to match (e.g., *.go)", true)
 }
 
 // createFunctionTool creates a native Go function tool
@@ -621,11 +622,12 @@ func newEnvironmentInfoTool() dsgo.Tool {
 		hostname, _ := os.Hostname()
 
 		info := map[string]any{
-			"os":          os.Getenv("GOOS"),
-			"arch":        os.Getenv("GOARCH"),
+			"os":          runtime.GOOS,
+			"arch":        runtime.GOARCH,
 			"hostname":    hostname,
 			"working_dir": cwd,
-			"go_version":  os.Getenv("GOVERSION"),
+			"go_version":  runtime.Version(),
+			"num_cpu":     runtime.NumCPU(),
 			"user":        os.Getenv("USER"),
 			"home":        os.Getenv("HOME"),
 		}

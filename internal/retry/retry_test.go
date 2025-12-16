@@ -222,7 +222,7 @@ func TestCalculateBackoff(t *testing.T) {
 		tt := tt
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
-			backoff := calculateBackoff(tt.attempt)
+			backoff := calculateBackoff(tt.attempt, nil)
 			if backoff < tt.minExpected || backoff > tt.maxExpected {
 				t.Errorf("calculateBackoff(%d) = %v, want between %v and %v",
 					tt.attempt, backoff, tt.minExpected, tt.maxExpected)

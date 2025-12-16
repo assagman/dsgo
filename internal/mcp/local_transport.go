@@ -18,7 +18,11 @@ type LocalTransport struct {
 }
 
 // NewLocalTransport creates a new LocalTransport.
+// It panics if handler is nil.
 func NewLocalTransport(handler LocalHandler) *LocalTransport {
+	if handler == nil {
+		panic("handler cannot be nil")
+	}
 	return &LocalTransport{handler: handler}
 }
 

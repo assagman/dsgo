@@ -138,17 +138,16 @@ func WithExponentialBackoffOpts(ctx context.Context, fn HTTPFunc, opts *Options)
 	return resp, nil
 }
 
-func calculateBackoff(attempt int) time.Duration {
-	return calculateBackoffWithOpts(attempt, nil)
+func calculateBackoffWithOpts(attempt int, opts *Options) time.Duration {
+	return calculateBackoff(attempt, opts)
 }
 
-func calculateBackoffWithOpts(attempt int, opts *Options) time.Duration {
+func calculateBackoff(attempt int, opts *Options) time.Duration {
 	if opts == nil {
 		opts = DefaultOptions()
 	}
 
 	backoff := float64(opts.InitialBackoff) * math.Pow(2, float64(attempt))
-
 	if backoff > float64(opts.MaxBackoff) {
 		backoff = float64(opts.MaxBackoff)
 	}
