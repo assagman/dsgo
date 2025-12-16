@@ -34,7 +34,7 @@ const (
 	FieldNextSteps   = "next_steps"
 
 	// Model
-	ModelName = "openrouter/google/gemini-2.5-flash-lite-preview-09-2025"
+	ModelName = "openrouter/minimax/minimax-m2"
 )
 
 func main() {

@@ -13,7 +13,7 @@
 #   go run . pipeline_todo.yaml
 
 name: pipeline_todo
-description: Generates a repo-aware numbered TODO list from a task
+description: Project TODO list generation via codebase analysis and web research
 
 model:
   name: openrouter/z-ai/glm-4.6
@@ -33,7 +33,7 @@ mcp:
   filesystem:
     type: filesystem
     allowed_dirs:
-      - ~/source/me/dsgo/example-generator/
+      - .
 
 signatures:
   codebase_analysis:
@@ -139,4 +139,4 @@ pipeline:
 
 inputs:
   task: |
-    Review cost operations
+    Review project code quality
