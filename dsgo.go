@@ -74,7 +74,6 @@ type (
 // Re-export model catalog and cost types
 type (
 	Model          = modelcatalog.Model
-	PricingTier    = cost.PricingTier
 	ModelPricing   = cost.ModelPricing
 	CostCalculator = cost.Calculator
 )
@@ -174,7 +173,6 @@ var (
 	WithTimeout                     = core.WithTimeout
 	WithLM                          = core.WithLM
 	WithSkipModelValidation         = core.WithSkipModelValidation
-	WithPricingTier                 = core.WithPricingTier
 	WithAPIKey                      = core.WithAPIKey
 	WithMaxRetries                  = core.WithMaxRetries
 	WithTracing                     = core.WithTracing
@@ -221,7 +219,6 @@ var (
 	ListModelsByProvider  = modelcatalog.ListModelsByProvider
 	DefaultCostCalculator = cost.DefaultCalculator
 	CalculateCost         = cost.Calculate
-	CalculateCostWithTier = cost.CalculateWithTier
 )
 
 // Re-export module functions
@@ -382,12 +379,6 @@ const (
 	FieldTypeJSON     = core.FieldTypeJSON
 	FieldTypeImage    = core.FieldTypeImage
 	FieldTypeDatetime = core.FieldTypeDatetime
-
-	// Pricing tier constants
-	TierStandard = cost.TierStandard
-	TierFlex     = cost.TierFlex
-	TierPriority = cost.TierPriority
-	TierBatch    = cost.TierBatch
 
 	// Logging level constants
 	LevelDebug = logging.LevelDebug

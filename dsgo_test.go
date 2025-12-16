@@ -138,7 +138,7 @@ func TestModelCatalog(t *testing.T) {
 		t.Fatal("expected openai/gpt-4o to be listed")
 	}
 
-	pricing, ok := DefaultCostCalculator.GetPricingForTier("openai/gpt-4o", TierStandard)
+	pricing, ok := DefaultCostCalculator.GetPricing("openai/gpt-4o")
 	if !ok || pricing.PromptPrice == 0 {
 		t.Fatal("expected pricing for openai/gpt-4o")
 	}

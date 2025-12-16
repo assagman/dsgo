@@ -1,7 +1,9 @@
 package cost
 
 import (
+	"fmt"
 	"math"
+	"sync"
 	"testing"
 )
 
@@ -58,31 +60,6 @@ func TestCalculate(t *testing.T) {
 	}
 }
 
-func TestCalculateWithTier(t *testing.T) {
-	t.Parallel()
-	calc := NewCalculator()
-
-	standard := calc.CalculateWithTier("openai/gpt-4o", TierStandard, 1000, 500)
-	batch := calc.CalculateWithTier("openai/gpt-4o", TierBatch, 1000, 500)
-
-	if standard <= 0 {
-		t.Fatalf("expected standard cost > 0, got %f", standard)
-	}
-	if batch <= 0 {
-		t.Fatalf("expected batch cost > 0, got %f", batch)
-	}
-	if batch >= standard {
-		t.Fatalf("expected batch cost < standard cost (batch=%f standard=%f)", batch, standard)
-	}
-
-	// Batch is not defined for gpt-3.5-turbo in our curated table; should fall back to standard.
-	standard35 := calc.CalculateWithTier("openai/gpt-3.5-turbo", TierStandard, 1000, 500)
-	batch35 := calc.CalculateWithTier("openai/gpt-3.5-turbo", TierBatch, 1000, 500)
-	if math.Abs(standard35-batch35) > 0.000001 {
-		t.Fatalf("expected tier fallback to match standard (standard=%f batch=%f)", standard35, batch35)
-	}
-}
-
 func TestDefaultCalculate(t *testing.T) {
 	t.Parallel()
 	cost := Calculate("openai/gpt-4o", 1000, 500)
@@ -112,22 +89,6 @@ func TestSetModelPricing(t *testing.T) {
 	}
 }
 
-func TestSetModelPricingForTier(t *testing.T) {
-	t.Parallel()
-	calc := NewCalculator()
-
-	calc.SetModelPricingForTier("custom-model", TierPriority, ModelPricing{PromptPrice: 1.0, CompletionPrice: 2.0})
-	priority := calc.CalculateWithTier("custom-model", TierPriority, 1000, 500)
-	standard := calc.CalculateWithTier("custom-model", TierStandard, 1000, 500)
-
-	if priority == 0 {
-		t.Fatalf("expected priority cost > 0")
-	}
-	if standard != 0 {
-		t.Fatalf("expected standard cost to be 0 without standard pricing, got %f", standard)
-	}
-}
-
 func TestHasPricing(t *testing.T) {
 	t.Parallel()
 	calc := NewCalculator()
@@ -154,22 +115,6 @@ func TestHasPricing(t *testing.T) {
 	}
 }
 
-func TestGetPricingForTier(t *testing.T) {
-	t.Parallel()
-	calc := NewCalculator()
-
-	pricing, ok := calc.GetPricingForTier("openai/gpt-4o", TierPriority)
-	if !ok {
-		t.Fatal("expected pricing for openai/gpt-4o priority")
-	}
-	if pricing.PromptPrice != 4.25 {
-		t.Fatalf("PromptPrice = %f, want 4.25", pricing.PromptPrice)
-	}
-	if pricing.CompletionPrice != 17.0 {
-		t.Fatalf("CompletionPrice = %f, want 17.0", pricing.CompletionPrice)
-	}
-}
-
 func TestCalculatorConcurrency(t *testing.T) {
 	calc := NewCalculator()
 
@@ -184,4 +129,100 @@ func TestCalculatorConcurrency(t *testing.T) {
 	for range 10 {
 		<-done
 	}
+}
+
+func TestCalculate_UnknownModel(t *testing.T) {
+	t.Parallel()
+
+	calc := NewCalculator()
+	tests := []struct {
+		name             string
+		model            string
+		promptTokens     int
+		completionTokens int
+		wantCost         float64
+	}{
+		{"completely unknown model", "unknown/model", 1000, 500, 0.0},
+		{"empty model name", "", 1000, 500, 0.0},
+		{"whitespace model name", "   ", 1000, 500, 0.0},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := calc.Calculate(tt.model, tt.promptTokens, tt.completionTokens)
+			if got != tt.wantCost {
+				t.Errorf("Calculate() = %f, want %f", got, tt.wantCost)
+			}
+		})
+	}
+}
+
+func TestCalculate_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	calc := NewCalculator()
+
+	// Negative tokens should not panic
+	t.Run("negative tokens", func(t *testing.T) {
+		_ = calc.Calculate("openai/gpt-4o", -1000, -500)
+	})
+
+	// Very large tokens
+	t.Run("very large tokens", func(t *testing.T) {
+		cost := calc.Calculate("openai/gpt-4o", 1_000_000_000, 0)
+		if cost < 2000.0 {
+			t.Errorf("Calculate() = %f, want at least 2000.0", cost)
+		}
+	})
+}
+
+func TestCalculator_NilMaps(t *testing.T) {
+	t.Parallel()
+
+	calc := &Calculator{pricing: nil}
+
+	cost := calc.Calculate("openai/gpt-4o", 1000, 500)
+	if cost != 0 {
+		t.Errorf("Calculate with nil pricing = %f, want 0", cost)
+	}
+
+	ok := calc.HasPricing("openai/gpt-4o")
+	if ok {
+		t.Error("HasPricing with nil pricing = true, want false")
+	}
+}
+
+func TestConcurrentSetAndGet(t *testing.T) {
+	t.Parallel()
+
+	calc := NewCalculator()
+	var wg sync.WaitGroup
+
+	// Concurrent writers
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		i := i
+		go func() {
+			defer wg.Done()
+			calc.SetModelPricing(fmt.Sprintf("concurrent/model-%d", i), ModelPricing{
+				PromptPrice:     float64(i),
+				CompletionPrice: float64(i * 2),
+			})
+		}()
+	}
+
+	// Concurrent readers
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = calc.Calculate("openai/gpt-4o", 1000, 500)
+			_ = calc.HasPricing("openai/gpt-4o")
+			_, _ = calc.GetPricing("openai/gpt-4o")
+		}()
+	}
+
+	wg.Wait()
 }

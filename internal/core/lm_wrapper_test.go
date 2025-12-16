@@ -1356,7 +1356,7 @@ func TestLMWrapper_Generate_UnknownPricing_Warns(t *testing.T) {
 	if msg != "No pricing information for model" {
 		t.Fatalf("Unexpected warn message: %q", msg)
 	}
-	if fields["model"] != "totally-unknown-model-12345" {
+	if fields["model"] != "unknown/totally-unknown-model-12345" {
 		t.Fatalf("Expected model field set, got %v", fields["model"])
 	}
 }
