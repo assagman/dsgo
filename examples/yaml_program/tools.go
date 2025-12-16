@@ -18,12 +18,14 @@ import (
 // MCPClientRegistry holds initialized MCP clients
 type MCPClientRegistry struct {
 	clients map[string]*dsgo.MCPClient
+	specs   map[string]MCPSpec
 }
 
 // NewMCPClientRegistry creates MCP clients from YAML specs
 func NewMCPClientRegistry(ctx context.Context, specs map[string]MCPSpec, timeouts TimeoutSettings) (*MCPClientRegistry, error) {
 	registry := &MCPClientRegistry{
 		clients: make(map[string]*dsgo.MCPClient),
+		specs:   specs,
 	}
 
 	for name, spec := range specs {
@@ -35,6 +37,21 @@ func NewMCPClientRegistry(ctx context.Context, specs map[string]MCPSpec, timeout
 	}
 
 	return registry, nil
+}
+
+// GetSpec returns the spec for an MCP client
+func (r *MCPClientRegistry) GetSpec(name string) (MCPSpec, bool) {
+	spec, exists := r.specs[name]
+	return spec, exists
+}
+
+// Clients returns all client names
+func (r *MCPClientRegistry) Clients() []string {
+	names := make([]string, 0, len(r.clients))
+	for name := range r.clients {
+		names = append(names, name)
+	}
+	return names
 }
 
 // Get returns an MCP client by name
@@ -86,7 +103,27 @@ func createMCPClient(ctx context.Context, name string, spec MCPSpec, timeouts Ti
 		if err != nil {
 			return nil, fmt.Errorf("failed to create shell MCP server: %w", err)
 		}
-		transport = dsgo.NewMCPLocalTransport(shellServer)
+		transport, err = dsgo.NewMCPLocalTransport(shellServer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create local transport: %w", err)
+		}
+	case "filesystem":
+		projectRoot, err := findProjectRoot()
+		if err != nil {
+			return nil, fmt.Errorf("failed to find project root: %w", err)
+		}
+		allowedDirs := []string{projectRoot}
+		if len(spec.AllowedDirs) > 0 {
+			allowedDirs = spec.AllowedDirs
+		}
+		client, err := dsgo.NewMCPFilesystemClient(allowedDirs...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create filesystem MCP client: %w", err)
+		}
+		if err := client.Initialize(ctx); err != nil {
+			return nil, fmt.Errorf("failed to initialize filesystem MCP client: %w", err)
+		}
+		return client, nil
 	case "custom":
 		transport = dsgo.NewMCPHTTPTransportWithTimeout(spec.URL, apiKey, httpTimeout)
 	default:
@@ -119,19 +156,21 @@ func getAPIKeyFromEnv(mcpType string) string {
 	return ""
 }
 
-// ToolRegistry holds resolved DSGo tools
+// ToolRegistry holds resolved DSGo tools (custom tools only, not MCP)
 type ToolRegistry struct {
-	tools map[string]dsgo.Tool
+	tools       map[string]dsgo.Tool
+	mcpRegistry *MCPClientRegistry
 }
 
-// NewToolRegistry creates tools from YAML specs
+// NewToolRegistry creates tools from YAML specs (custom tools only)
 func NewToolRegistry(ctx context.Context, specs map[string]ToolSpec, mcpRegistry *MCPClientRegistry) (*ToolRegistry, error) {
 	registry := &ToolRegistry{
-		tools: make(map[string]dsgo.Tool),
+		tools:       make(map[string]dsgo.Tool),
+		mcpRegistry: mcpRegistry,
 	}
 
 	for name, spec := range specs {
-		tool, err := createTool(ctx, name, spec, mcpRegistry)
+		tool, err := createTool(name, spec)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tool '%s': %w", name, err)
 		}
@@ -163,43 +202,66 @@ func (r *ToolRegistry) GetMultiple(names []string) ([]dsgo.Tool, error) {
 	return result, nil
 }
 
-// createTool creates a DSGo tool from a spec
-func createTool(ctx context.Context, name string, spec ToolSpec, mcpRegistry *MCPClientRegistry) (dsgo.Tool, error) {
+// GetMCPTools returns tools from an MCP client, filtered by the tool list.
+// If toolFilters contains "*", all tools from that MCP client are returned.
+func (r *ToolRegistry) GetMCPTools(mcpName string, toolFilters []string) ([]dsgo.Tool, error) {
+	if r.mcpRegistry == nil {
+		return nil, fmt.Errorf("no MCP registry available")
+	}
+
+	client, err := r.mcpRegistry.Get(mcpName)
+	if err != nil {
+		return nil, err
+	}
+
+	allTools := client.GetTools()
+
+	// Check for wildcard
+	for _, filter := range toolFilters {
+		if filter == "*" {
+			return allTools, nil
+		}
+	}
+
+	// Filter to specific tools
+	filterSet := make(map[string]bool)
+	for _, name := range toolFilters {
+		filterSet[name] = true
+	}
+
+	result := make([]dsgo.Tool, 0, len(toolFilters))
+	for _, tool := range allTools {
+		if filterSet[tool.Name] {
+			result = append(result, tool)
+		}
+	}
+
+	return result, nil
+}
+
+// GetAllMCPToolsForModule resolves all MCP tools configured for a module
+func (r *ToolRegistry) GetAllMCPToolsForModule(mcpConfigs map[string]ModuleMCPSpec) ([]dsgo.Tool, error) {
+	var result []dsgo.Tool
+	for mcpName, mcpSpec := range mcpConfigs {
+		tools, err := r.GetMCPTools(mcpName, mcpSpec.Tools)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tools from MCP '%s': %w", mcpName, err)
+		}
+		result = append(result, tools...)
+	}
+	return result, nil
+}
+
+// createTool creates a DSGo tool from a spec (custom tools only, not MCP)
+func createTool(name string, spec ToolSpec) (dsgo.Tool, error) {
 	switch spec.Type {
-	case "mcp":
-		return createMCPTool(ctx, name, spec, mcpRegistry)
 	case "filesystem":
 		return createFilesystemTool(name, spec)
 	case "function":
 		return createFunctionTool(name, spec)
 	default:
-		return dsgo.Tool{}, fmt.Errorf("unsupported tool type: %s", spec.Type)
+		return dsgo.Tool{}, fmt.Errorf("unsupported tool type: %s (valid: filesystem, function)", spec.Type)
 	}
-}
-
-// createMCPTool creates a tool from an MCP client
-func createMCPTool(ctx context.Context, name string, spec ToolSpec, mcpRegistry *MCPClientRegistry) (dsgo.Tool, error) {
-	client, err := mcpRegistry.Get(spec.Source)
-	if err != nil {
-		return dsgo.Tool{}, err
-	}
-
-	mcpTools := client.GetTools()
-
-	if spec.Name != "" {
-		for _, tool := range mcpTools {
-			if tool.Name == spec.Name {
-				return tool, nil
-			}
-		}
-		return dsgo.Tool{}, fmt.Errorf("MCP tool '%s' not found in client '%s'", spec.Name, spec.Source)
-	}
-
-	if len(mcpTools) == 1 {
-		return mcpTools[0], nil
-	}
-
-	return dsgo.Tool{}, fmt.Errorf("MCP client '%s' has %d tools; specify 'name' to select one", spec.Source, len(mcpTools))
 }
 
 // createFilesystemTool creates a filesystem tool

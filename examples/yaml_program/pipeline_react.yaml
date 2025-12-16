@@ -1,28 +1,21 @@
 # DSGo YAML Pipeline Definition with ReAct and Tools
-# This file demonstrates the ReAct module with filesystem tools
+# This file demonstrates the ReAct module with filesystem MCP tools
 # for code analysis tasks.
+#
+# Requires: Node.js (npx) or Bun (bunx) for filesystem MCP server
 
 name: code_analysis_pipeline
-description: A pipeline that analyzes codebase using ReAct with filesystem tools
+description: A pipeline that analyzes codebase using ReAct with filesystem MCP
 
 # Global settings for the pipeline
 settings:
   temperature: 0.7
   max_tokens: 10240
 
-# Define filesystem tools (built-in)
-tools:
-  list_files:
+# Define MCP clients (global registry)
+mcp:
+  filesystem:
     type: filesystem
-    name: list_files
-  
-  read_file:
-    type: filesystem
-    name: read_file
-  
-  search_files:
-    type: filesystem
-    name: search_files
 
 # Define reusable signatures
 signatures:
@@ -68,10 +61,10 @@ modules:
     options:
       temperature: 0.5
       max_iterations: 8
-      tools:
-        - list_files
-        - read_file
-        - search_files
+    mcp:
+      filesystem:
+        tools:
+          - "*"  # Use all filesystem tools
 
   code_reviewer:
     type: ReAct
@@ -79,8 +72,11 @@ modules:
     options:
       temperature: 0.3
       max_iterations: 5
-      tools:
-        - read_file
+    mcp:
+      filesystem:
+        tools:
+          - read_file
+          - get_file_info
 
 # Define the pipeline as a sequence of modules
 pipeline:

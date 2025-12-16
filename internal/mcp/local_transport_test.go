@@ -14,12 +14,22 @@ func (h testHandler) Handle(ctx context.Context, req *JSONRPCRequest) (*JSONRPCR
 }
 
 func TestLocalTransport_Send(t *testing.T) {
-	tr := NewLocalTransport(testHandler{})
+	tr, err := NewLocalTransport(testHandler{})
+	if err != nil {
+		t.Fatalf("NewLocalTransport() error: %v", err)
+	}
 	resp, err := tr.Send(context.Background(), &JSONRPCRequest{JSONRPC: "2.0", ID: "1", Method: "tools/list"})
 	if err != nil {
 		t.Fatalf("Send() error: %v", err)
 	}
 	if resp == nil || resp.Result == nil {
 		t.Fatalf("expected response result")
+	}
+}
+
+func TestLocalTransport_NilHandler(t *testing.T) {
+	_, err := NewLocalTransport(nil)
+	if err == nil {
+		t.Fatal("expected error for nil handler")
 	}
 }

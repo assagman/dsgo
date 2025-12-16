@@ -12,20 +12,10 @@ settings:
   temperature: 0.7
   max_tokens: 10240
 
+# Define MCP clients (global registry)
 mcp:
   exa:
     type: exa
-
-tools:
-  exa_search:
-    type: mcp
-    source: exa
-    name: web_search_exa
-
-  exa_code:
-    type: mcp
-    source: exa
-    name: get_code_context_exa
 
 signatures:
   code_research:
@@ -49,9 +39,11 @@ modules:
     options:
       temperature: 0.3
       max_iterations: 8
-      tools:
-        - exa_search
-        - exa_code
+    mcp:
+      exa:
+        tools:
+          - web_search_exa
+          - get_code_context_exa
 
 pipeline:
   - module: code_researcher

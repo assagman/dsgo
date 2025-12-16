@@ -1,6 +1,7 @@
 # DSGo YAML Pipeline Definition with Function Tools
-# This file demonstrates ReAct with native Go function tools.
-# No API keys required - works completely offline.
+# This file demonstrates ReAct with native Go function tools and filesystem MCP.
+#
+# Requires: Node.js (npx) or Bun (bunx) for filesystem MCP server
 
 name: assistant_pipeline
 description: A pipeline that answers questions using built-in utility tools
@@ -9,6 +10,11 @@ description: A pipeline that answers questions using built-in utility tools
 settings:
   temperature: 0.7
   max_tokens: 4096
+
+# Define MCP clients (global registry)
+mcp:
+  filesystem:
+    type: filesystem
 
 # Define function tools (native Go implementations)
 tools:
@@ -31,14 +37,6 @@ tools:
   env_info:
     type: function
     name: environment_info
-
-  list_files:
-    type: filesystem
-    name: list_files
-
-  read_file:
-    type: filesystem
-    name: read_file
 
 # Define reusable signatures
 signatures:
@@ -87,8 +85,10 @@ modules:
         - random
         - text_analyzer
         - env_info
-        - list_files
-        - read_file
+    mcp:
+      filesystem:
+        tools:
+          - "*"  # Use all filesystem MCP tools
 
   analyzer:
     type: ReAct

@@ -16,23 +16,11 @@ settings:
   temperature: 0.7
   max_tokens: 10240
 
-# Define MCP clients
+# Define MCP clients (global registry)
 mcp:
   tavily:
     type: tavily
     # api_key can be set here or via TAVILY_API_KEY env var
-
-# Define tools from MCP clients
-tools:
-  web_search:
-    type: mcp
-    source: tavily
-    name: tavily_search
-
-  web_extract:
-    type: mcp
-    source: tavily
-    name: tavily_extract
 
 # Define reusable signatures
 signatures:
@@ -82,9 +70,10 @@ modules:
     options:
       temperature: 0.5
       max_iterations: 10
-      tools:
-        - web_search
-        - web_extract
+    mcp:
+      tavily:
+        tools:
+          - "*"  # Use all tools from tavily
 
   fact_checker:
     type: ReAct
@@ -92,8 +81,10 @@ modules:
     options:
       temperature: 0.3
       max_iterations: 6
-      tools:
-        - web_search
+    mcp:
+      tavily:
+        tools:
+          - tavily_search  # Use only specific tool
 
 # Define the pipeline as a sequence of modules
 pipeline:

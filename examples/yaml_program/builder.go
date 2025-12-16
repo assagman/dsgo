@@ -133,10 +133,11 @@ type FieldSpec struct {
 
 // ModuleSpec represents a module definition in YAML
 type ModuleSpec struct {
-	Type      string        `yaml:"type"`
-	Model     string        `yaml:"model,omitempty"`
-	Signature string        `yaml:"signature"`
-	Options   ModuleOptions `yaml:"options"`
+	Type      string                   `yaml:"type"`
+	Model     string                   `yaml:"model,omitempty"`
+	Signature string                   `yaml:"signature"`
+	Options   ModuleOptions            `yaml:"options"`
+	MCP       map[string]ModuleMCPSpec `yaml:"mcp,omitempty"` // Per-module MCP tool configuration
 }
 
 // ModuleOptions represents module-specific options
@@ -145,14 +146,20 @@ type ModuleOptions struct {
 	MaxTokens     int      `yaml:"max_tokens"`
 	MaxIterations int      `yaml:"max_iterations,omitempty"`
 	Verbose       bool     `yaml:"verbose,omitempty"`
-	Tools         []string `yaml:"tools,omitempty"`
+	Tools         []string `yaml:"tools,omitempty"` // References to custom tools defined in top-level tools section
+}
+
+// ModuleMCPSpec represents per-module MCP configuration
+type ModuleMCPSpec struct {
+	Tools []string `yaml:"tools"` // "*" for all tools, or list of specific tool names
 }
 
 // MCPSpec represents an MCP client configuration
 type MCPSpec struct {
-	Type   string `yaml:"type"`
-	APIKey string `yaml:"api_key,omitempty"`
-	URL    string `yaml:"url,omitempty"`
+	Type        string   `yaml:"type"`
+	APIKey      string   `yaml:"api_key,omitempty"`
+	URL         string   `yaml:"url,omitempty"`
+	AllowedDirs []string `yaml:"allowed_dirs,omitempty"`
 }
 
 // ToolSpec represents a tool definition
@@ -267,16 +274,16 @@ func validateConfig(config *PipelineConfig) error {
 		}
 	}
 
-	// Validate tool definitions
+	// Validate tool definitions (custom tools only)
 	for name, toolSpec := range config.Tools {
-		if err := validateTool(name, toolSpec, config.MCP); err != nil {
+		if err := validateTool(name, toolSpec); err != nil {
 			return err
 		}
 	}
 
-	// Validate modules reference existing signatures
+	// Validate modules reference existing signatures and MCP clients
 	for name, mod := range config.Modules {
-		if err := validateModule(name, mod, config.Signatures, config.Tools); err != nil {
+		if err := validateModule(name, mod, config.Signatures, config.Tools, config.MCP); err != nil {
 			return err
 		}
 	}
@@ -294,15 +301,16 @@ func validateConfig(config *PipelineConfig) error {
 // validateMCP validates an MCP client configuration
 func validateMCP(name string, spec MCPSpec) error {
 	validTypes := map[string]bool{
-		"exa":    true,
-		"jina":   true,
-		"tavily": true,
-		"custom": true,
-		"shell":  true,
+		"exa":        true,
+		"jina":       true,
+		"tavily":     true,
+		"custom":     true,
+		"shell":      true,
+		"filesystem": true,
 	}
 
 	if !validTypes[spec.Type] {
-		return fmt.Errorf("MCP '%s' has invalid type: %s (valid: exa, jina, tavily, custom, shell)", name, spec.Type)
+		return fmt.Errorf("MCP '%s' has invalid type: %s (valid: exa, jina, tavily, custom, shell, filesystem)", name, spec.Type)
 	}
 
 	if spec.Type == "custom" && spec.URL == "" {
@@ -312,25 +320,15 @@ func validateMCP(name string, spec MCPSpec) error {
 	return nil
 }
 
-// validateTool validates a tool definition
-func validateTool(name string, spec ToolSpec, mcpClients map[string]MCPSpec) error {
+// validateTool validates a tool definition (custom tools only, not MCP)
+func validateTool(name string, spec ToolSpec) error {
 	validTypes := map[string]bool{
-		"mcp":        true,
 		"filesystem": true,
 		"function":   true,
 	}
 
 	if !validTypes[spec.Type] {
-		return fmt.Errorf("tool '%s' has invalid type: %s (valid: mcp, filesystem, function)", name, spec.Type)
-	}
-
-	if spec.Type == "mcp" {
-		if spec.Source == "" {
-			return fmt.Errorf("tool '%s' is MCP type but has no source (MCP client reference) defined", name)
-		}
-		if _, exists := mcpClients[spec.Source]; !exists {
-			return fmt.Errorf("tool '%s' references undefined MCP client: %s", name, spec.Source)
-		}
+		return fmt.Errorf("tool '%s' has invalid type: %s (valid: filesystem, function)", name, spec.Type)
 	}
 
 	if spec.Type == "function" {
@@ -399,7 +397,7 @@ func validateSignature(name string, sig SignatureSpec) error {
 }
 
 // validateModule validates a module definition
-func validateModule(name string, mod ModuleSpec, signatures map[string]SignatureSpec, tools map[string]ToolSpec) error {
+func validateModule(name string, mod ModuleSpec, signatures map[string]SignatureSpec, tools map[string]ToolSpec, mcpClients map[string]MCPSpec) error {
 	validTypes := map[string]bool{
 		"Predict":        true,
 		"ChainOfThought": true,
@@ -414,13 +412,24 @@ func validateModule(name string, mod ModuleSpec, signatures map[string]Signature
 		return fmt.Errorf("module '%s' references undefined signature: %s", name, mod.Signature)
 	}
 
-	if mod.Type == "ReAct" && len(mod.Options.Tools) == 0 {
-		return fmt.Errorf("module '%s' is ReAct type but has no tools defined", name)
+	// For ReAct, require either tools or mcp configuration
+	hasMCP := len(mod.MCP) > 0
+	hasTools := len(mod.Options.Tools) > 0
+	if mod.Type == "ReAct" && !hasMCP && !hasTools {
+		return fmt.Errorf("module '%s' is ReAct type but has no tools or mcp defined", name)
 	}
 
+	// Validate custom tool references
 	for _, toolRef := range mod.Options.Tools {
 		if _, exists := tools[toolRef]; !exists {
 			return fmt.Errorf("module '%s' references undefined tool: %s", name, toolRef)
+		}
+	}
+
+	// Validate per-module MCP references
+	for mcpName := range mod.MCP {
+		if _, exists := mcpClients[mcpName]; !exists {
+			return fmt.Errorf("module '%s' references undefined MCP client: %s", name, mcpName)
 		}
 	}
 

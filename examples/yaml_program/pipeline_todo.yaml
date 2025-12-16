@@ -1,11 +1,12 @@
-# DSGo YAML Pipeline: Task -> Web research -> Codebase analysis -> TODO list
+# DSGo YAML Pipeline: Task -> Codebase analysis -> Web research -> TODO list
 #
 # Input: task
 # Flow:
-#   task -> web_research -> codebase_analysis -> todo
+#   task -> codebase_analysis -> web_research -> todo
 #
 # Requires:
 #   - TAVILY_API_KEY for web search/extraction (MCP)
+#   - Node.js (npx) or Bun (bunx) for filesystem MCP server
 #
 # Run:
 #   export TAVILY_API_KEY=your-key
@@ -25,60 +26,22 @@ dsgo:
     lm_http: 15m
     mcp_http: 10m
 
+# Define MCP clients (global registry)
 mcp:
   tavily:
     type: tavily
-
-tools:
-  # Tavily tools
-  web_search:
-    type: mcp
-    source: tavily
-    name: tavily_search
-
-  web_extract:
-    type: mcp
-    source: tavily
-    name: tavily_extract
-
-  # Filesystem tools
-  list_files:
+  filesystem:
     type: filesystem
-    name: list_files
-
-  read_file:
-    type: filesystem
-    name: read_file
-
-  search_files:
-    type: filesystem
-    name: search_files
+    allowed_dirs:
+      - ~/source/me/dsgo/example-generator/
 
 signatures:
-  web_research:
-    description: Research the task on the web and collect practical sources and pitfalls
-    inputs:
-      - name: task
-        type: string
-        description: Task to perform in a codebase
-    outputs:
-      - name: research_notes
-        type: string
-        description: Practical notes (best practices, pitfalls, relevant APIs), tailored to the task
-      - name: sources
-        type: string
-        description: 5-12 URLs with a 1-line relevance note each
-
   codebase_analysis:
     description: Analyze the current repository to locate files and implementation approach
     inputs:
       - name: task
         type: string
         description: Task to perform in this repository
-      - name: research_notes
-        type: string
-        description: Web research notes to guide analysis
-        optional: true
     outputs:
       - name: codebase_notes
         type: string
@@ -86,6 +49,28 @@ signatures:
       - name: files_examined
         type: string
         description: Files/dirs examined (paths)
+
+  web_research:
+    description: Research the task on the web based on codebase analysis findings
+    inputs:
+      - name: task
+        type: string
+        description: Task to perform in a codebase
+      - name: codebase_notes
+        type: string
+        description: Codebase analysis notes to guide research
+        optional: true
+      - name: files_examined
+        type: string
+        description: Files examined in the codebase
+        optional: true
+    outputs:
+      - name: research_notes
+        type: string
+        description: Practical notes (best practices, pitfalls, relevant APIs), tailored to the task and codebase
+      - name: sources
+        type: string
+        description: 5-12 URLs with a 1-line relevance note each
 
   write_todo:
     description: Produce a flat, actionable TODO list for implementing the task
@@ -114,40 +99,44 @@ modules:
   researcher:
     type: ReAct
     signature: web_research
+    model: openrouter/google/gemini-2.5-flash
     options:
-      temperature: 0.4
+      temperature: 0.3
       max_tokens: 4096
       max_iterations: 10
       verbose: true
-      tools:
-        - web_search
-        - web_extract
+    mcp:
+      tavily:
+        tools:
+          - "*"
 
   analyzer:
     type: ReAct
     signature: codebase_analysis
+    model: openrouter/openai/gpt-5.2
     options:
-      temperature: 0.3
+      temperature: 0.4
       max_tokens: 4096
       max_iterations: 12
       verbose: true
-      tools:
-        - list_files
-        - search_files
-        - read_file
+    mcp:
+      filesystem:
+        tools:
+          - "*"
 
   todo_writer:
     type: ChainOfThought
     signature: write_todo
+    model: openrouter/z-ai/glm-4.6
     options:
       temperature: 0.2
       max_tokens: 2048
 
 pipeline:
-  - module: researcher
   - module: analyzer
+  - module: researcher
   - module: todo_writer
 
 inputs:
   task: |
-    ChainOfThought module review
+    Review cost operations

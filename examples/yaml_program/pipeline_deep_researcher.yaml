@@ -26,20 +26,10 @@ dsgo:
     mcp_sse_post: 2h
     mcp_sse_wait: 2h
 
+# Define MCP clients (global registry)
 mcp:
   tavily:
     type: tavily
-
-tools:
-  web_search:
-    type: mcp
-    source: tavily
-    name: tavily_search
-
-  web_extract:
-    type: mcp
-    source: tavily
-    name: tavily_extract
 
 signatures:
   initial_research:
@@ -141,9 +131,10 @@ modules:
       max_tokens: 4096
       max_iterations: 10
       verbose: true
-      tools:
-        - web_search
-        - web_extract
+    mcp:
+      tavily:
+        tools:
+          - "*"
 
   deep_topic_planner:
     type: ChainOfThought
@@ -160,9 +151,10 @@ modules:
       max_tokens: 6144
       max_iterations: 12
       verbose: true
-      tools:
-        - web_search
-        - web_extract
+    mcp:
+      tavily:
+        tools:
+          - "*"
 
   article_writer:
     type: ChainOfThought

@@ -7,8 +7,9 @@ Demonstrates how to define DSGo pipelines declaratively using YAML configuration
 This example shows how to:
 - Define signatures (inputs/outputs) in YAML
 - Configure modules (Predict, ChainOfThought, ReAct) declaratively
-- Define MCP clients for external tool access (Exa, Jina, Tavily)
-- Configure filesystem and MCP-based tools for ReAct agents
+- Define MCP clients for external tool access (Exa, Jina, Tavily, Filesystem)
+- Configure custom function/filesystem tools separately from MCP
+- Specify MCP tools per-module with tool filtering
 - Compose multi-stage pipelines without writing Go code for the pipeline structure
 - Execute pipelines with automatic data flow between stages
 
@@ -17,8 +18,8 @@ This example shows how to:
 | File | Purpose |
 |------|---------|
 | `pipeline.yaml` | Basic YAML pipeline definition (Predict, ChainOfThought) |
-| `pipeline_react.yaml` | ReAct pipeline with filesystem tools |
-| `pipeline_functions.yaml` | ReAct with native function tools (no API keys needed) |
+| `pipeline_react.yaml` | ReAct pipeline with filesystem MCP tools |
+| `pipeline_functions.yaml` | ReAct with native function tools + filesystem MCP |
 | `pipeline_mcp.yaml` | ReAct pipeline with MCP web search tools (requires API key) |
 | `pipeline_deep_researcher.yaml` | Multi-stage deep researcher (requires API key) |
 | `pipeline_deep_review.yaml` | 2-iteration implement/test/review loop (requires TAVILY_API_KEY) |
@@ -69,34 +70,12 @@ pipeline:
   - module: module_name_2
 ```
 
-### ReAct with Filesystem Tools
+### Custom Tools (Function and Filesystem)
+
+Custom tools are defined in the top-level `tools:` section and referenced by modules:
 
 ```yaml
-tools:
-  list_files:
-    type: filesystem
-    name: list_files
-  
-  read_file:
-    type: filesystem
-    name: read_file
-
-modules:
-  code_explorer:
-    type: ReAct
-    signature: code_exploration
-    options:
-      temperature: 0.5
-      max_iterations: 8
-      tools:
-        - list_files
-        - read_file
-```
-
-### ReAct with Function Tools
-
-```yaml
-# Native Go function tools (no API keys required)
+# Custom tools (function/filesystem types only)
 tools:
   get_datetime:
     type: function
@@ -106,9 +85,9 @@ tools:
     type: function
     name: calculate
 
-  text_analyzer:
-    type: function
-    name: word_count
+  list_files:
+    type: filesystem
+    name: list_files
 
 modules:
   assistant:
@@ -116,36 +95,82 @@ modules:
     signature: assistant
     options:
       max_iterations: 6
-      tools:
+      tools:  # Reference custom tools here
         - get_datetime
         - calculator
-        - text_analyzer
+        - list_files
 ```
 
-### MCP Integration
+### MCP Tools (Per-Module Configuration)
+
+MCP clients are defined globally, but tool selection is configured per-module:
 
 ```yaml
-# Define MCP clients
+# Define MCP clients (global registry)
 mcp:
   tavily:
-    type: tavily  # exa, jina, tavily, or custom
-    # api_key: optional, defaults to env var (TAVILY_API_KEY, etc.)
-
-# Define tools from MCP clients
-tools:
-  web_search:
-    type: mcp
-    source: tavily
-    name: tavily-search  # specific tool from the MCP client
+    type: tavily
+    # api_key: optional, defaults to env var (TAVILY_API_KEY)
+  filesystem:
+    type: filesystem
 
 modules:
   researcher:
     type: ReAct
     signature: research
     options:
+      temperature: 0.5
       max_iterations: 10
-      tools:
-        - web_search
+    mcp:
+      tavily:
+        tools:
+          - "*"  # Use all tools from tavily
+      filesystem:
+        tools:
+          - read_file
+          - list_directory
+
+  fact_checker:
+    type: ReAct
+    signature: fact_check
+    options:
+      max_iterations: 6
+    mcp:
+      tavily:
+        tools:
+          - tavily_search  # Use only specific tool
+```
+
+### Combining Custom Tools and MCP Tools
+
+Modules can use both custom tools and MCP tools:
+
+```yaml
+mcp:
+  filesystem:
+    type: filesystem
+
+tools:
+  get_datetime:
+    type: function
+    name: current_datetime
+  calculator:
+    type: function
+    name: calculate
+
+modules:
+  assistant:
+    type: ReAct
+    signature: assistant
+    options:
+      max_iterations: 8
+      tools:  # Custom tools
+        - get_datetime
+        - calculator
+    mcp:  # MCP tools
+      filesystem:
+        tools:
+          - "*"
 ```
 
 ## Module Types
@@ -154,15 +179,14 @@ modules:
 |------|-------------|---------|
 | `Predict` | Basic prediction | `temperature`, `max_tokens` |
 | `ChainOfThought` | Step-by-step reasoning | `temperature`, `max_tokens` |
-| `ReAct` | Reasoning + Acting with tools | `temperature`, `max_tokens`, `max_iterations`, `tools` |
+| `ReAct` | Reasoning + Acting with tools | `temperature`, `max_tokens`, `max_iterations`, `tools` (custom), `mcp` (per-module) |
 
-## Tool Types
+## Tool Types (Custom)
 
 | Type | Description | Fields |
 |------|-------------|--------|
 | `filesystem` | Built-in file tools | `name`: `list_files`, `read_file`, `search_files` |
 | `function` | Native Go function tools | `name`: function name (see below) |
-| `mcp` | MCP client tools | `source`: MCP client name, `name`: tool name from client |
 
 ## Function Tools
 
@@ -184,6 +208,8 @@ Native Go function tools that work without any API keys:
 | `exa` | `EXA_API_KEY` | Exa search and web content |
 | `jina` | `JINA_API_KEY` | Jina URL reading and extraction |
 | `tavily` | `TAVILY_API_KEY` | Tavily web search and extraction |
+| `filesystem` | - | Local filesystem operations |
+| `shell` | - | Shell command execution (apply_patch, shell_run) |
 | `custom` | - | Custom MCP server (requires `url` field) |
 
 ## Run
@@ -243,7 +269,7 @@ go run . path/to/custom.yaml
 └─────────────────────┘
 ```
 
-### ReAct Pipeline
+### ReAct Pipeline with MCP
 ```
 ┌─────────────────────┐
 │   Input: question   │
@@ -253,9 +279,9 @@ go run . path/to/custom.yaml
 ┌─────────────────────┐
 │   code_explorer     │  ReAct
 │   ┌─────────────┐   │
-│   │ list_files  │   │  ← Tools
-│   │ read_file   │   │
-│   │ search_files│   │
+│   │ MCP:        │   │
+│   │  filesystem │   │  ← MCP tools (per-module)
+│   │    - "*"    │   │    (all filesystem tools)
 │   └─────────────┘   │
 │ → answer            │
 │ → files_examined    │

@@ -82,7 +82,7 @@ func (f *ModuleFactory) CreateModule(name string, spec ModuleSpec) (dsgo.Module,
 	case "ChainOfThought":
 		return f.createChainOfThought(sig, lm, options), nil
 	case "ReAct":
-		return f.createReAct(sig, lm, options, spec.Options)
+		return f.createReAct(sig, lm, options, spec)
 	default:
 		return nil, fmt.Errorf("unsupported module type: %s", spec.Type)
 	}
@@ -103,21 +103,36 @@ func (f *ModuleFactory) createChainOfThought(sig *dsgo.Signature, lm dsgo.LM, op
 }
 
 // createReAct creates a ReAct module with tools
-func (f *ModuleFactory) createReAct(sig *dsgo.Signature, lm dsgo.LM, options *dsgo.GenerateOptions, moduleOpts ModuleOptions) (dsgo.Module, error) {
-	tools, err := f.toolRegistry.GetMultiple(moduleOpts.Tools)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve tools: %w", err)
+func (f *ModuleFactory) createReAct(sig *dsgo.Signature, lm dsgo.LM, options *dsgo.GenerateOptions, spec ModuleSpec) (dsgo.Module, error) {
+	var allTools []dsgo.Tool
+
+	// Get custom tools from options.tools
+	if len(spec.Options.Tools) > 0 {
+		customTools, err := f.toolRegistry.GetMultiple(spec.Options.Tools)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve custom tools: %w", err)
+		}
+		allTools = append(allTools, customTools...)
 	}
 
-	react := dsgo.NewReAct(sig, lm, tools).
+	// Get MCP tools from per-module mcp configuration
+	if len(spec.MCP) > 0 {
+		mcpTools, err := f.toolRegistry.GetAllMCPToolsForModule(spec.MCP)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve MCP tools: %w", err)
+		}
+		allTools = append(allTools, mcpTools...)
+	}
+
+	react := dsgo.NewReAct(sig, lm, allTools).
 		WithOptions(options).
 		WithAdapter(dsgo.NewFallbackAdapter())
 
-	if moduleOpts.MaxIterations > 0 {
-		react.WithMaxIterations(moduleOpts.MaxIterations)
+	if spec.Options.MaxIterations > 0 {
+		react.WithMaxIterations(spec.Options.MaxIterations)
 	}
 
-	react.WithVerbose(moduleOpts.Verbose)
+	react.WithVerbose(spec.Options.Verbose)
 
 	return react, nil
 }

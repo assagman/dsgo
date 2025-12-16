@@ -320,6 +320,7 @@ func (t *SSETransport) Send(ctx context.Context, request *JSONRPCRequest) (*JSON
 	t.pending[request.ID] = respCh
 	t.mu.Unlock()
 
+	// Ensure cleanup of pending map entry on all return paths (success, error, timeout)
 	defer func() {
 		t.mu.Lock()
 		delete(t.pending, request.ID)

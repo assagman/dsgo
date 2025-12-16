@@ -1,6 +1,9 @@
 package mcp
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // LocalHandler handles MCP JSON-RPC requests in-process.
 //
@@ -19,14 +22,12 @@ type LocalTransport struct {
 
 // NewLocalTransport creates a new LocalTransport.
 //
-// Panics if handler is nil. This is intentional: a nil handler is a programmer
-// error that should be caught immediately during initialization, not deferred
-// to runtime when Send is called.
-func NewLocalTransport(handler LocalHandler) *LocalTransport {
+// Returns an error if handler is nil.
+func NewLocalTransport(handler LocalHandler) (*LocalTransport, error) {
 	if handler == nil {
-		panic("handler cannot be nil")
+		return nil, fmt.Errorf("handler cannot be nil")
 	}
-	return &LocalTransport{handler: handler}
+	return &LocalTransport{handler: handler}, nil
 }
 
 // Send routes the request to the local handler.

@@ -31,47 +31,14 @@ dsgo:
     lm_http: 2h
     mcp_http: 2h
 
+# Define MCP clients (global registry)
 mcp:
   tavily:
     type: tavily
   shell:
     type: shell
-
-tools:
-  # Tavily tools
-  web_search:
-    type: mcp
-    source: tavily
-    name: tavily_search
-
-  web_extract:
-    type: mcp
-    source: tavily
-    name: tavily_extract
-
-  # Built-in shell tools
-  shell_run:
-    type: mcp
-    source: shell
-    name: shell_run
-
-  apply_patch:
-    type: mcp
-    source: shell
-    name: apply_patch
-
-  # Filesystem tools
-  list_files:
+  filesystem:
     type: filesystem
-    name: list_files
-
-  read_file:
-    type: filesystem
-    name: read_file
-
-  search_files:
-    type: filesystem
-    name: search_files
 
 signatures:
   enhance_task:
@@ -235,14 +202,16 @@ modules:
       max_tokens: 4096
       max_iterations: 12
       verbose: true
-      tools:
-        - list_files
-        - search_files
-        - read_file
-        - web_search
-        - web_extract
-        - apply_patch
-        - shell_run
+    mcp:
+      tavily:
+        tools:
+          - "*"
+      shell:
+        tools:
+          - "*"
+      filesystem:
+        tools:
+          - "*"
 
   test_1:
     type: ReAct
@@ -252,8 +221,10 @@ modules:
       max_tokens: 4096
       max_iterations: 8
       verbose: true
-      tools:
-        - shell_run
+    mcp:
+      shell:
+        tools:
+          - shell_run
 
   review_1:
     type: ChainOfThought
@@ -270,14 +241,16 @@ modules:
       max_tokens: 4096
       max_iterations: 12
       verbose: true
-      tools:
-        - list_files
-        - search_files
-        - read_file
-        - web_search
-        - web_extract
-        - apply_patch
-        - shell_run
+    mcp:
+      tavily:
+        tools:
+          - "*"
+      shell:
+        tools:
+          - "*"
+      filesystem:
+        tools:
+          - "*"
 
   test_2:
     type: ReAct
@@ -287,8 +260,10 @@ modules:
       max_tokens: 4096
       max_iterations: 8
       verbose: true
-      tools:
-        - shell_run
+    mcp:
+      shell:
+        tools:
+          - shell_run
 
   review_2:
     type: ChainOfThought
@@ -305,8 +280,10 @@ modules:
       max_tokens: 4096
       max_iterations: 6
       verbose: false
-      tools:
-        - shell_run
+    mcp:
+      shell:
+        tools:
+          - shell_run
 
 pipeline:
   - module: enhancer
