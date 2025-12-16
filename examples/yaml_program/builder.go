@@ -3,35 +3,116 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
-// PipelineConfig represents the top-level YAML structure
-type PipelineConfig struct {
-	Name        string                   `yaml:"name"`
-	Description string                   `yaml:"description"`
-	Model       ModelSpec                `yaml:"model,omitempty"`
-	Settings    GlobalSettings           `yaml:"settings"`
-	MCP         map[string]MCPSpec       `yaml:"mcp,omitempty"`
-	Tools       map[string]ToolSpec      `yaml:"tools,omitempty"`
-	Signatures  map[string]SignatureSpec `yaml:"signatures"`
-	Modules     map[string]ModuleSpec    `yaml:"modules"`
-	Pipeline    []PipelineStep           `yaml:"pipeline"`
-	Inputs      map[string]any           `yaml:"inputs,omitempty"`
+// Duration is a YAML-friendly duration type.
+//
+// It accepts:
+// - Go duration strings (e.g., "30s", "5m", "2h")
+// - Integers interpreted as seconds
+//
+// Zero values mean "not set".
+type Duration struct {
+	time.Duration
 }
 
-// ModelSpec represents a model configuration (global or module-level)
-type ModelSpec struct {
-	Name        string  `yaml:"name"`
-	Temperature float64 `yaml:"temperature,omitempty"`
-	MaxTokens   int     `yaml:"max_tokens,omitempty"`
+func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil {
+		return nil
+	}
+	if value.Kind != yaml.ScalarNode {
+		return fmt.Errorf("duration must be a scalar value")
+	}
+	if value.Value == "" {
+		d.Duration = 0
+		return nil
+	}
+
+	// Allow integer values as seconds for convenience.
+	if value.Tag == "!!int" {
+		sec, err := strconv.ParseInt(value.Value, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid duration seconds %q: %w", value.Value, err)
+		}
+		if sec < 0 {
+			return fmt.Errorf("duration must be >= 0")
+		}
+		d.Duration = time.Duration(sec) * time.Second
+		return nil
+	}
+
+	dur, err := time.ParseDuration(value.Value)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", value.Value, err)
+	}
+	if dur < 0 {
+		return fmt.Errorf("duration must be >= 0")
+	}
+	d.Duration = dur
+	return nil
 }
 
-// GlobalSettings represents global pipeline settings
-type GlobalSettings struct {
+// TimeoutSettings configures timeouts for the YAML runner.
+type TimeoutSettings struct {
+	// Pipeline is the overall runtime timeout for the whole pipeline.
+	Pipeline Duration `yaml:"pipeline,omitempty"`
+	// LMHTTP controls provider HTTP client timeouts (openai/openrouter).
+	LMHTTP Duration `yaml:"lm_http,omitempty"`
+	// MCPHTTP controls MCP HTTP transport request timeouts.
+	MCPHTTP Duration `yaml:"mcp_http,omitempty"`
+	// MCPSSEPost controls the POST-side timeout for MCP SSE transports.
+	MCPSSEPost Duration `yaml:"mcp_sse_post,omitempty"`
+	// MCPSSEWait controls how long to wait for an SSE response.
+	MCPSSEWait Duration `yaml:"mcp_sse_wait,omitempty"`
+}
+
+// ModelSettings are model generation defaults applied to modules unless overridden.
+type ModelSettings struct {
+	// Name is the default model identifier in "provider/model" form.
+	Name        string  `yaml:"name,omitempty"`
 	Temperature float64 `yaml:"temperature"`
 	MaxTokens   int     `yaml:"max_tokens"`
+}
+
+// DSGoSettings are runtime settings for the DSGo pipeline runner.
+type DSGoSettings struct {
+	Timeouts TimeoutSettings `yaml:"timeouts,omitempty"`
+}
+
+// PipelineConfig represents the top-level YAML structure.
+//
+// Backward compatibility:
+// - `settings:` is the legacy key for model defaults, and may also include `timeouts:`.
+// - Prefer `model:` for model defaults and `dsgo:` for runtime settings.
+type PipelineConfig struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+
+	// Legacy.
+	Settings GlobalSettings `yaml:"settings,omitempty"`
+
+	// Preferred.
+	Model ModelSettings `yaml:"model,omitempty"`
+	DSGo  DSGoSettings  `yaml:"dsgo,omitempty"`
+
+	MCP        map[string]MCPSpec       `yaml:"mcp,omitempty"`
+	Tools      map[string]ToolSpec      `yaml:"tools,omitempty"`
+	Signatures map[string]SignatureSpec `yaml:"signatures"`
+	Modules    map[string]ModuleSpec    `yaml:"modules"`
+	Pipeline   []PipelineStep           `yaml:"pipeline"`
+	Inputs     map[string]any           `yaml:"inputs,omitempty"`
+}
+
+// GlobalSettings represents legacy global pipeline settings.
+// Prefer `model:` and `dsgo:` instead.
+type GlobalSettings struct {
+	Temperature float64         `yaml:"temperature"`
+	MaxTokens   int             `yaml:"max_tokens"`
+	Timeouts    TimeoutSettings `yaml:"timeouts,omitempty"`
 }
 
 // SignatureSpec represents a signature definition in YAML
@@ -53,8 +134,8 @@ type FieldSpec struct {
 // ModuleSpec represents a module definition in YAML
 type ModuleSpec struct {
 	Type      string        `yaml:"type"`
+	Model     string        `yaml:"model,omitempty"`
 	Signature string        `yaml:"signature"`
-	Model     *ModelSpec    `yaml:"model,omitempty"`
 	Options   ModuleOptions `yaml:"options"`
 }
 
@@ -63,6 +144,7 @@ type ModuleOptions struct {
 	Temperature   float64  `yaml:"temperature"`
 	MaxTokens     int      `yaml:"max_tokens"`
 	MaxIterations int      `yaml:"max_iterations,omitempty"`
+	Verbose       bool     `yaml:"verbose,omitempty"`
 	Tools         []string `yaml:"tools,omitempty"`
 }
 
@@ -93,6 +175,45 @@ type ToolParamSpec struct {
 // PipelineStep represents a step in the pipeline
 type PipelineStep struct {
 	Module string `yaml:"module"`
+}
+
+func (c *PipelineConfig) EffectiveModelSettings() ModelSettings {
+	settings := ModelSettings{
+		Temperature: c.Settings.Temperature,
+		MaxTokens:   c.Settings.MaxTokens,
+	}
+	if c.Model.Name != "" {
+		settings.Name = c.Model.Name
+	}
+	if c.Model.Temperature > 0 {
+		settings.Temperature = c.Model.Temperature
+	}
+	if c.Model.MaxTokens > 0 {
+		settings.MaxTokens = c.Model.MaxTokens
+	}
+	return settings
+}
+
+func (c *PipelineConfig) EffectiveTimeouts() TimeoutSettings {
+	settings := c.Settings.Timeouts
+
+	if c.DSGo.Timeouts.Pipeline.Duration > 0 {
+		settings.Pipeline = c.DSGo.Timeouts.Pipeline
+	}
+	if c.DSGo.Timeouts.LMHTTP.Duration > 0 {
+		settings.LMHTTP = c.DSGo.Timeouts.LMHTTP
+	}
+	if c.DSGo.Timeouts.MCPHTTP.Duration > 0 {
+		settings.MCPHTTP = c.DSGo.Timeouts.MCPHTTP
+	}
+	if c.DSGo.Timeouts.MCPSSEPost.Duration > 0 {
+		settings.MCPSSEPost = c.DSGo.Timeouts.MCPSSEPost
+	}
+	if c.DSGo.Timeouts.MCPSSEWait.Duration > 0 {
+		settings.MCPSSEWait = c.DSGo.Timeouts.MCPSSEWait
+	}
+
+	return settings
 }
 
 // LoadPipelineConfig loads a pipeline configuration from a YAML file
@@ -177,10 +298,11 @@ func validateMCP(name string, spec MCPSpec) error {
 		"jina":   true,
 		"tavily": true,
 		"custom": true,
+		"shell":  true,
 	}
 
 	if !validTypes[spec.Type] {
-		return fmt.Errorf("MCP '%s' has invalid type: %s (valid: exa, jina, tavily, custom)", name, spec.Type)
+		return fmt.Errorf("MCP '%s' has invalid type: %s (valid: exa, jina, tavily, custom, shell)", name, spec.Type)
 	}
 
 	if spec.Type == "custom" && spec.URL == "" {

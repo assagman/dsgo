@@ -21,6 +21,8 @@ This example shows how to:
 | `pipeline_functions.yaml` | ReAct with native function tools (no API keys needed) |
 | `pipeline_mcp.yaml` | ReAct pipeline with MCP web search tools (requires API key) |
 | `pipeline_deep_researcher.yaml` | Multi-stage deep researcher (requires API key) |
+| `pipeline_deep_review.yaml` | 2-iteration implement/test/review loop (requires TAVILY_API_KEY) |
+| `pipeline_todo.yaml` | Task -> web research -> codebase analysis -> numbered TODO list (requires TAVILY_API_KEY) |
 | `builder.go` | YAML parsing and validation |
 | `converter.go` | YAML to DSGo Signature conversion |
 | `factory.go` | Module creation from specs |
@@ -203,6 +205,9 @@ TAVILY_API_KEY=your-key go run . pipeline_mcp.yaml
 
 # Deep researcher pipeline (requires TAVILY_API_KEY)
 TAVILY_API_KEY=your-key go run . pipeline_deep_researcher.yaml
+
+# Deep review pipeline (requires TAVILY_API_KEY)
+TAVILY_API_KEY=your-key go run . pipeline_deep_review.yaml
 
 # Or with custom YAML file:
 go run . path/to/custom.yaml

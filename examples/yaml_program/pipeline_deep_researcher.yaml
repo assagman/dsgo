@@ -12,9 +12,19 @@
 name: deep_researcher_pipeline
 description: Topic-driven deep research that ends in a clear article
 
-settings:
+model:
+  name: openrouter/z-ai/glm-4.6
   temperature: 0.6
   max_tokens: 10240
+
+dsgo:
+  timeouts:
+    # Very high timeouts for deep research runs.
+    pipeline: 2h
+    lm_http: 2h
+    mcp_http: 2h
+    mcp_sse_post: 2h
+    mcp_sse_wait: 2h
 
 mcp:
   tavily:
@@ -130,6 +140,7 @@ modules:
       temperature: 0.4
       max_tokens: 4096
       max_iterations: 10
+      verbose: true
       tools:
         - web_search
         - web_extract
@@ -148,6 +159,7 @@ modules:
       temperature: 0.4
       max_tokens: 6144
       max_iterations: 12
+      verbose: true
       tools:
         - web_search
         - web_extract
@@ -167,4 +179,7 @@ pipeline:
 
 inputs:
   topic: |
-    Practical implications of sodium-ion batteries for grid-scale energy storage
+    Snowflake data loading features, Ingestion of structured,
+    semi-structured, and unstructured data. Implementation of
+    stages and file formats. causes of ingestion errors. 
+    resolutions for ingestion errors

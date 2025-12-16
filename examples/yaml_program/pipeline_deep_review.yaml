@@ -1,0 +1,325 @@
+# DSGo YAML Pipeline: Deep Review (2-pass)
+#
+# Input: task
+# Flow:
+#   task -> enhanced_task -> plan_prompt -> plan
+#   -> todo_1 -> test_1 -> review_1
+#   -> todo_2 -> test_2 -> review_2
+#   -> deliver
+#
+# Requires:
+#   - TAVILY_API_KEY for web search/extraction
+#
+# Built-in MCP:
+#   - shell (whitelisted command runner + apply_patch)
+#
+# Run:
+#   export TAVILY_API_KEY=your-key
+#   go run . pipeline_deep_review.yaml
+
+name: deep_review_pipeline
+description: Two-iteration implement/test/review loop that can patch code and run tests
+
+model:
+  name: openrouter/z-ai/glm-4.6
+  temperature: 0.5
+  max_tokens: 10240
+
+dsgo:
+  timeouts:
+    pipeline: 2h
+    lm_http: 2h
+    mcp_http: 2h
+
+mcp:
+  tavily:
+    type: tavily
+  shell:
+    type: shell
+
+tools:
+  # Tavily tools
+  web_search:
+    type: mcp
+    source: tavily
+    name: tavily_search
+
+  web_extract:
+    type: mcp
+    source: tavily
+    name: tavily_extract
+
+  # Built-in shell tools
+  shell_run:
+    type: mcp
+    source: shell
+    name: shell_run
+
+  apply_patch:
+    type: mcp
+    source: shell
+    name: apply_patch
+
+  # Filesystem tools
+  list_files:
+    type: filesystem
+    name: list_files
+
+  read_file:
+    type: filesystem
+    name: read_file
+
+  search_files:
+    type: filesystem
+    name: search_files
+
+signatures:
+  enhance_task:
+    description: Rewrite the user task into an explicit, repo-aware implementation prompt
+    inputs:
+      - name: task
+        type: string
+        description: Task to perform in a codebase
+    outputs:
+      - name: enhanced_task
+        type: string
+        description: Enhanced implementation prompt with constraints and acceptance criteria
+
+  plan_prompt:
+    description: Produce a planning prompt for a two-iteration coding loop
+    inputs:
+      - name: enhanced_task
+        type: string
+        description: Enhanced implementation prompt
+    outputs:
+      - name: plan_prompt
+        type: string
+        description: Prompt that asks for a practical plan with steps
+
+  plan:
+    description: Produce a concrete plan and test strategy
+    inputs:
+      - name: enhanced_task
+        type: string
+        description: Enhanced implementation prompt
+      - name: plan_prompt
+        type: string
+        description: Planning prompt to follow
+    outputs:
+      - name: plan
+        type: string
+        description: Concrete implementation plan
+      - name: test_strategy
+        type: string
+        description: Specific commands to run and what success looks like
+
+  todo_iteration:
+    description: Implement changes using tools; ONLY modify repo via apply_patch (no direct writes)
+    inputs:
+      - name: enhanced_task
+        type: string
+        description: Enhanced implementation prompt
+      - name: plan
+        type: string
+        description: Implementation plan
+      - name: review_feedback
+        type: string
+        description: Feedback from the previous review (empty for first iteration)
+        optional: true
+    outputs:
+      - name: changes_made
+        type: string
+        description: Summary of changes made
+      - name: patches_applied
+        type: string
+        description: What patches were applied (high level)
+      - name: files_touched
+        type: string
+        description: Files changed/added
+
+  test_run:
+    description: Run tests/build/lint using shell_run (prefer make targets) and report results
+    inputs:
+      - name: test_strategy
+        type: string
+        description: Commands to run and expected outcomes
+      - name: changes_made
+        type: string
+        description: Context about what changed
+    outputs:
+      - name: test_status
+        type: class
+        classes: [pass, fail]
+        description: Whether tests passed
+      - name: test_output
+        type: string
+        description: Combined test output and summary
+      - name: commands_run
+        type: string
+        description: Commands executed
+
+  review:
+    description: Review changes and test output, then decide pass/fail
+    inputs:
+      - name: enhanced_task
+        type: string
+        description: Enhanced implementation prompt
+      - name: plan
+        type: string
+        description: Plan that was followed
+      - name: changes_made
+        type: string
+        description: Summary of changes made
+      - name: test_status
+        type: string
+        description: pass/fail
+      - name: test_output
+        type: string
+        description: Test output
+    outputs:
+      - name: review_status
+        type: class
+        classes: [pass, fail]
+        description: Whether the review passed
+      - name: review_feedback
+        type: string
+        description: Actionable feedback to address in the next iteration if needed
+
+  deliver:
+    description: Produce final deliverable; use shell_run to run git diff and validation commands
+    inputs:
+      - name: enhanced_task
+        type: string
+        description: Enhanced implementation prompt
+      - name: changes_made
+        type: string
+        description: Final summary of changes
+      - name: review_status
+        type: string
+        description: pass/fail
+    outputs:
+      - name: final_diff
+        type: string
+        description: git diff of final changes
+      - name: run_instructions
+        type: string
+        description: Commands to run to validate the result
+
+modules:
+  enhancer:
+    type: ChainOfThought
+    signature: enhance_task
+    options:
+      temperature: 0.4
+      max_tokens: 2048
+
+  planner_prompt:
+    type: ChainOfThought
+    signature: plan_prompt
+    options:
+      temperature: 0.4
+      max_tokens: 1024
+
+  planner:
+    type: ChainOfThought
+    signature: plan
+    options:
+      temperature: 0.4
+      max_tokens: 2048
+
+  todo_1:
+    type: ReAct
+    signature: todo_iteration
+    options:
+      temperature: 0.3
+      max_tokens: 4096
+      max_iterations: 12
+      verbose: true
+      tools:
+        - list_files
+        - search_files
+        - read_file
+        - web_search
+        - web_extract
+        - apply_patch
+        - shell_run
+
+  test_1:
+    type: ReAct
+    signature: test_run
+    options:
+      temperature: 0.2
+      max_tokens: 4096
+      max_iterations: 8
+      verbose: true
+      tools:
+        - shell_run
+
+  review_1:
+    type: ChainOfThought
+    signature: review
+    options:
+      temperature: 0.3
+      max_tokens: 2048
+
+  todo_2:
+    type: ReAct
+    signature: todo_iteration
+    options:
+      temperature: 0.2
+      max_tokens: 4096
+      max_iterations: 12
+      verbose: true
+      tools:
+        - list_files
+        - search_files
+        - read_file
+        - web_search
+        - web_extract
+        - apply_patch
+        - shell_run
+
+  test_2:
+    type: ReAct
+    signature: test_run
+    options:
+      temperature: 0.2
+      max_tokens: 4096
+      max_iterations: 8
+      verbose: true
+      tools:
+        - shell_run
+
+  review_2:
+    type: ChainOfThought
+    signature: review
+    options:
+      temperature: 0.3
+      max_tokens: 2048
+
+  deliver:
+    type: ReAct
+    signature: deliver
+    options:
+      temperature: 0.2
+      max_tokens: 4096
+      max_iterations: 6
+      verbose: false
+      tools:
+        - shell_run
+
+pipeline:
+  - module: enhancer
+  - module: planner_prompt
+  - module: planner
+  - module: todo_1
+  - module: test_1
+  - module: review_1
+  - module: todo_2
+  - module: test_2
+  - module: review_2
+  - module: deliver
+
+inputs:
+  task: |
+    moonshotai provider support in providers package

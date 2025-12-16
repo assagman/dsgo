@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math/rand"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,13 +20,13 @@ type MCPClientRegistry struct {
 }
 
 // NewMCPClientRegistry creates MCP clients from YAML specs
-func NewMCPClientRegistry(ctx context.Context, specs map[string]MCPSpec) (*MCPClientRegistry, error) {
+func NewMCPClientRegistry(ctx context.Context, specs map[string]MCPSpec, timeouts TimeoutSettings) (*MCPClientRegistry, error) {
 	registry := &MCPClientRegistry{
 		clients: make(map[string]*dsgo.MCPClient),
 	}
 
 	for name, spec := range specs {
-		client, err := createMCPClient(ctx, name, spec)
+		client, err := createMCPClient(ctx, name, spec, timeouts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create MCP client '%s': %w", name, err)
 		}
@@ -44,30 +45,54 @@ func (r *MCPClientRegistry) Get(name string) (*dsgo.MCPClient, error) {
 	return client, nil
 }
 
-// createMCPClient creates an MCP client from a spec
-func createMCPClient(ctx context.Context, name string, spec MCPSpec) (*dsgo.MCPClient, error) {
+// createMCPClient creates an MCP client from a spec.
+//
+// We build clients via explicit transports so the YAML runner can override
+// timeouts without relying on environment variables.
+func createMCPClient(ctx context.Context, name string, spec MCPSpec, timeouts TimeoutSettings) (*dsgo.MCPClient, error) {
 	apiKey := spec.APIKey
 	if apiKey == "" {
 		apiKey = getAPIKeyFromEnv(spec.Type)
 	}
 
-	var client *dsgo.MCPClient
-	var err error
+	httpTimeout := timeouts.MCPHTTP.Duration
+	postTimeout := timeouts.MCPSSEPost.Duration
+	waitTimeout := timeouts.MCPSSEWait.Duration
 
+	var transport dsgo.MCPTransport
 	switch spec.Type {
 	case "exa":
-		client, err = dsgo.NewMCPExaClient(apiKey)
+		transport = dsgo.NewMCPHTTPTransportWithTimeout("https://mcp.exa.ai/mcp", apiKey, httpTimeout)
 	case "jina":
-		client, err = dsgo.NewMCPJinaClient(apiKey)
+		transport = dsgo.NewMCPSSETransportWithTimeouts("https://mcp.jina.ai/sse", apiKey, postTimeout, waitTimeout)
 	case "tavily":
-		client, err = dsgo.NewMCPTavilyClient(apiKey)
+		baseURL, err := url.Parse("https://mcp.tavily.com/mcp")
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse Tavily MCP URL: %w", err)
+		}
+		q := baseURL.Query()
+		q.Set("tavilyApiKey", apiKey)
+		baseURL.RawQuery = q.Encode()
+
+		// Tavily uses the query param for auth, not headers.
+		transport = dsgo.NewMCPHTTPTransportWithTimeout(baseURL.String(), "", httpTimeout)
+	case "shell":
+		projectRoot, err := findProjectRoot()
+		if err != nil {
+			return nil, fmt.Errorf("failed to find project root: %w", err)
+		}
+		shellServer, err := dsgo.NewMCPShellServer(dsgo.MCPShellServerConfig{RootDir: projectRoot})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create shell MCP server: %w", err)
+		}
+		transport = dsgo.NewMCPLocalTransport(shellServer)
 	case "custom":
-		transport := dsgo.NewMCPHTTPTransport(spec.URL, apiKey)
-		client, err = dsgo.NewMCPClient(dsgo.MCPClientConfig{Transport: transport})
+		transport = dsgo.NewMCPHTTPTransportWithTimeout(spec.URL, apiKey, httpTimeout)
 	default:
 		return nil, fmt.Errorf("unsupported MCP type: %s", spec.Type)
 	}
 
+	client, err := dsgo.NewMCPClient(dsgo.MCPClientConfig{Transport: transport})
 	if err != nil {
 		return nil, err
 	}

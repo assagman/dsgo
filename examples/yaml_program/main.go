@@ -50,6 +50,21 @@ func main() {
 	fmt.Printf("   Pipeline steps: %d\n", len(config.Pipeline))
 	fmt.Println()
 
+	// Apply timeout overrides from YAML (if any)
+	timeouts := config.EffectiveTimeouts()
+	if timeouts.LMHTTP.Duration > 0 {
+		if err := os.Setenv("DSGO_HTTP_TIMEOUT_MS", fmt.Sprintf("%d", timeouts.LMHTTP.Milliseconds())); err != nil {
+			log.Fatalf("❌ Failed to set DSGO_HTTP_TIMEOUT_MS: %v", err)
+		}
+	}
+
+	pipelineTimeout := defaultTimeout
+	if timeouts.Pipeline.Duration > 0 {
+		pipelineTimeout = timeouts.Pipeline.Duration
+	}
+	fmt.Printf("⏱️  Pipeline timeout: %v\n", pipelineTimeout)
+	fmt.Println()
+
 	// Initialize LM
 	modelName := getModelName(config)
 	fmt.Printf("🤖 Initializing LM: %s\n", modelName)
@@ -61,14 +76,9 @@ func main() {
 	fmt.Println("✅ LM initialized successfully")
 	fmt.Println()
 
-	// LM provider for module-level models
-	lmProvider := func(ctx context.Context, model string) (dsgo.LM, error) {
-		return dsgo.NewLM(ctx, model)
-	}
-
 	// Build program from YAML
 	fmt.Println("🔧 Building program from YAML configuration...")
-	builder, err := NewProgramBuilder(ctx, config, lm, lmProvider)
+	builder, err := NewProgramBuilder(ctx, config, modelName, lm)
 	if err != nil {
 		log.Fatalf("❌ Failed to create program builder: %v", err)
 	}
@@ -100,7 +110,7 @@ func main() {
 	fmt.Println("🚀 Executing pipeline...")
 	fmt.Println()
 
-	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(ctx, pipelineTimeout)
 	defer cancel()
 
 	startTime := time.Now()

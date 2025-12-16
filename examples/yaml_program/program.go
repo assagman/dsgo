@@ -16,7 +16,7 @@ type ProgramBuilder struct {
 }
 
 // NewProgramBuilder creates a new program builder from configuration
-func NewProgramBuilder(ctx context.Context, config *PipelineConfig, lm dsgo.LM, lmProvider LMProvider) (*ProgramBuilder, error) {
+func NewProgramBuilder(ctx context.Context, config *PipelineConfig, defaultModel string, lm dsgo.LM) (*ProgramBuilder, error) {
 	// Create signature registry
 	sigRegistry, err := NewSignatureRegistry(config.Signatures)
 	if err != nil {
@@ -26,7 +26,7 @@ func NewProgramBuilder(ctx context.Context, config *PipelineConfig, lm dsgo.LM, 
 	// Create MCP client registry (if any MCP configs exist)
 	var mcpRegistry *MCPClientRegistry
 	if len(config.MCP) > 0 {
-		mcpRegistry, err = NewMCPClientRegistry(ctx, config.MCP)
+		mcpRegistry, err = NewMCPClientRegistry(ctx, config.MCP, config.EffectiveTimeouts())
 		if err != nil {
 			return nil, fmt.Errorf("failed to create MCP client registry: %w", err)
 		}
@@ -39,7 +39,7 @@ func NewProgramBuilder(ctx context.Context, config *PipelineConfig, lm dsgo.LM, 
 	}
 
 	// Create module factory and registry
-	factory := NewModuleFactory(ctx, lm, config.Model, lmProvider, sigRegistry, toolRegistry, config.Settings)
+	factory := NewModuleFactory(ctx, defaultModel, lm, sigRegistry, toolRegistry, config.EffectiveModelSettings())
 	moduleRegistry, err := NewModuleRegistry(factory, config.Modules)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create module registry: %w", err)
