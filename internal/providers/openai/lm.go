@@ -537,6 +537,7 @@ func (o *openAI) Stream(ctx context.Context, messages []core.Message, options *c
 		}
 
 		stream := o.Client.Chat.Completions.NewStreaming(ctx, params, reqOpts...)
+		defer func() { _ = stream.Close() }()
 
 		for stream.Next() {
 			chunk := stream.Current()

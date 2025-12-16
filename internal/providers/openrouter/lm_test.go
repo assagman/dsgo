@@ -400,6 +400,106 @@ func TestOpenRouter_BuildParams(t *testing.T) {
 	})
 }
 
+func TestOpenRouter_BuildParams_AmazonToolChoice(t *testing.T) {
+	t.Parallel()
+
+	t.Run("amazon model does not send tool_choice none", func(t *testing.T) {
+		lm := &openRouter{Model: "amazon/nova-pro-v1"}
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{
+			Tools:      []core.Tool{*core.NewTool("test_tool", "A test tool", nil)},
+			ToolChoice: "none",
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+
+		if _, ok := m["tool_choice"]; ok {
+			t.Errorf("expected tool_choice to be omitted for Amazon model with 'none', got %v", m["tool_choice"])
+		}
+	})
+
+	t.Run("amazon model with tool content forces auto", func(t *testing.T) {
+		lm := &openRouter{Model: "amazon/bedrock-claude"}
+		messages := []core.Message{
+			{Role: "user", Content: "test"},
+			{Role: "assistant", ToolCalls: []core.ToolCall{{ID: "call_1", Name: "test_tool", Arguments: map[string]any{}}}},
+			{Role: "tool", Content: "result", ToolID: "call_1"},
+		}
+		options := &core.GenerateOptions{
+			Tools: []core.Tool{*core.NewTool("test_tool", "A test tool", nil)},
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+
+		if m["tool_choice"] != "auto" {
+			t.Errorf("expected tool_choice 'auto' for Amazon model with tool content, got %v", m["tool_choice"])
+		}
+	})
+
+	t.Run("non-amazon model sends tool_choice none", func(t *testing.T) {
+		lm := &openRouter{Model: "openai/gpt-4"}
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{
+			Tools:      []core.Tool{*core.NewTool("test_tool", "A test tool", nil)},
+			ToolChoice: "none",
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+
+		if m["tool_choice"] != "none" {
+			t.Errorf("expected tool_choice 'none' for non-Amazon model, got %v", m["tool_choice"])
+		}
+	})
+}
+
+func TestOpenRouter_BuildParams_ZAIToolChoice(t *testing.T) {
+	t.Parallel()
+
+	t.Run("z-ai model with tools forces auto even with none requested", func(t *testing.T) {
+		lm := &openRouter{Model: "z-ai/some-model"}
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{
+			Tools:      []core.Tool{*core.NewTool("test_tool", "A test tool", nil)},
+			ToolChoice: "none",
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+
+		if m["tool_choice"] != "auto" {
+			t.Errorf("expected tool_choice 'auto' for Z.AI model with tools (overrides 'none'), got %v", m["tool_choice"])
+		}
+	})
+
+	t.Run("z-ai model with tools forces auto", func(t *testing.T) {
+		lm := &openRouter{Model: "z-ai/some-model"}
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{
+			Tools: []core.Tool{*core.NewTool("test_tool", "A test tool", nil)},
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+
+		if m["tool_choice"] != "auto" {
+			t.Errorf("expected tool_choice 'auto' for Z.AI model with tools, got %v", m["tool_choice"])
+		}
+	})
+}
+
 func TestOpenRouter_ConvertMessages(t *testing.T) {
 	t.Parallel()
 	lm := &openRouter{}
