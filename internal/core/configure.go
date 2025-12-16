@@ -83,6 +83,14 @@ func WithTracing(enable bool) Option {
 	}
 }
 
+// WithSkipModelValidation enables or disables strict model validation in NewLM.
+// Use this as an escape hatch for using models not yet in the catalog.
+func WithSkipModelValidation(skip bool) Option {
+	return func(s *Settings) {
+		s.SkipModelValidation = skip
+	}
+}
+
 // WithCollector sets the default collector for LM observability.
 func WithCollector(collector Collector) Option {
 	return func(s *Settings) {

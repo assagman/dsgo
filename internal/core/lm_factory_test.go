@@ -2,7 +2,10 @@ package core
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"github.com/assagman/dsgo/internal/modelcatalog"
 )
 
 func TestRegisterLM(t *testing.T) {
@@ -81,6 +84,14 @@ func TestNewLM(t *testing.T) {
 		return &mockLM{}
 	})
 
+	// Authoritative model catalog requires explicit registration.
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "testprovider/test-model", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Test Model", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(testprovider/test-model) err = %v", err)
+	}
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "provider2/model-2", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Model 2", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(provider2/model-2) err = %v", err)
+	}
+
 	ctx := context.Background()
 
 	t.Run("Success", func(t *testing.T) {
@@ -129,7 +140,7 @@ func TestNewLM(t *testing.T) {
 		if err == nil {
 			t.Error("expected error when model string is empty")
 		}
-		if err.Error() != "model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")" {
+		if !strings.Contains(err.Error(), "model string is required") {
 			t.Errorf("unexpected error message: %v", err)
 		}
 	})
@@ -143,6 +154,61 @@ func TestNewLM(t *testing.T) {
 		errMsg := err.Error()
 		if errMsg == "" {
 			t.Error("expected non-empty error message")
+		}
+		if !strings.Contains(errMsg, "unknownprovider") {
+			t.Errorf("expected error to mention the missing provider, got: %s", errMsg)
+		}
+	})
+
+	t.Run("MixedCaseProviderRegistration", func(t *testing.T) {
+		// Register with mixed case
+		RegisterLM("MixedCaseProvider", func(model string) LM {
+			return &mockLM{}
+		})
+
+		// Should be able to look up with lowercase
+		lm, err := NewLM(ctx, "mixedcaseprovider/some-model")
+		if err == nil {
+			// This fails if model validation is strict and model not in catalog
+			// But for this test we mainly care that provider lookup succeeded.
+			// However, NewLM will fail on model validation.
+			// So we must register the model too or check error type.
+			// Let's check error. If it says "provider not registered", test fails.
+			// If it says "model not supported", test passes (provider found).
+			_ = lm // Silence unused variable error
+		}
+
+		if err != nil && strings.Contains(err.Error(), "provider 'mixedcaseprovider' not registered") {
+			t.Errorf("expected provider to be found, but got error: %v", err)
+		}
+	})
+
+	t.Run("SkipModelValidation", func(t *testing.T) {
+		// Enable skip validation
+		Configure(WithSkipModelValidation(true))
+
+		// Register provider
+		RegisterLM("skipprovider", func(model string) LM {
+			// Use mockLM (no fields) as simple mock
+			return &mockLM{}
+		})
+
+		// Try to create unknown model
+		lm, err := NewLM(ctx, "skipprovider/unknown-model")
+		if err != nil {
+			t.Errorf("expected success when skipping validation, got error: %v", err)
+		}
+		if lm == nil {
+			t.Error("expected LM to be created")
+		}
+
+		// Reset config
+		Configure(WithSkipModelValidation(false))
+
+		// Should fail now
+		_, err = NewLM(ctx, "skipprovider/unknown-model-2")
+		if err == nil {
+			t.Error("expected error when validation is enabled")
 		}
 	})
 
@@ -259,6 +325,9 @@ func TestLMFactory_WithCollector(t *testing.T) {
 	}
 	RegisterLM("test-provider", testLMFactory)
 	RegisterLM("openrouter", testLMFactory)
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Test Model", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(test-provider/test-model) err = %v", err)
+	}
 
 	ctx := context.Background()
 	collector := NewMemoryCollector(10)
@@ -318,6 +387,9 @@ func TestLMFactory_WithoutCollector(t *testing.T) {
 	}
 	RegisterLM("test-provider", testLMFactory)
 	RegisterLM("openrouter", testLMFactory)
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Test Model", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(test-provider/test-model) err = %v", err)
+	}
 
 	ctx := context.Background()
 
@@ -369,6 +441,9 @@ func TestNewLM_WithCache(t *testing.T) {
 	RegisterLM("openrouter", func(model string) LM {
 		return NewMockLM()
 	})
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Test Model", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(test-provider/test-model) err = %v", err)
+	}
 
 	ctx := context.Background()
 
@@ -425,9 +500,9 @@ func TestNewLM_WithModelStringArg(t *testing.T) {
 		model     string
 		wantError bool
 	}{
-		{"explicit openai gpt-4", "openai/gpt-4", false},
-		{"explicit openai gpt-4-turbo", "openai/gpt-4-turbo", false},
-		{"explicit meta model via openrouter", "openrouter/meta-llama/llama-3.3-70b-instruct", false},
+		{"explicit openai gpt-4o", "openai/gpt-4o", false},
+		{"explicit openai gpt-4o-mini", "openai/gpt-4o-mini", false},
+		{"explicit meta model via openrouter", "openrouter/meta-llama/llama-3.3-70b-instruct:free", false},
 		{"explicit unknown model", "unknownprovider/model", true},
 	}
 

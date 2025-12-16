@@ -34,7 +34,7 @@ const (
 	FieldNextSteps   = "next_steps"
 
 	// Model
-	ModelName = "openrouter/amazon/nova-2-lite-v1"
+	ModelName = "openrouter/minimax/minimax-m2"
 )
 
 func main() {

@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	DefaultModel = "openrouter/google/gemini-2.5-flash"
+	DefaultModel = "openrouter/minimax/minimax-m2"
 	DefaultTopic = "Snowflake Data Cloud Platform"
 	Timeout      = 15 * time.Minute
 )

@@ -24,7 +24,6 @@ import (
 // Tool call ID constraints across providers:
 // - OpenAI: max 40 characters
 // - Azure: max 64 characters
-// - Amazon Bedrock: max 64 characters, pattern [a-zA-Z0-9_-]+
 // - Anthropic: pattern ^[a-zA-Z0-9_-]+$
 // We use the most restrictive: max 40 chars, alphanumeric + underscore + hyphen only
 const maxToolCallIDLength = 40
@@ -263,7 +262,6 @@ func (o *openRouter) buildParams(messages []core.Message, options *core.Generate
 	}
 
 	// Detect provider-specific models that don't support tool_choice: "none"
-	isAmazonModel := strings.Contains(o.Model, "amazon/") || strings.Contains(o.Model, "bedrock")
 	isZAIModel := strings.Contains(o.Model, "z-ai/")
 
 	if len(options.Tools) > 0 {
@@ -276,7 +274,7 @@ func (o *openRouter) buildParams(messages []core.Message, options *core.Generate
 
 		if options.ToolChoice != "" && options.ToolChoice != "auto" {
 			if options.ToolChoice == "none" {
-				if !isAmazonModel && !isZAIModel {
+				if !isZAIModel {
 					params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
 						OfAuto: openai.String("none"),
 					}
@@ -291,9 +289,9 @@ func (o *openRouter) buildParams(messages []core.Message, options *core.Generate
 		}
 	}
 
-	// Handle Amazon Bedrock and Z.AI specific requirements
+	// Handle Z.AI specific requirements
 	hasToolContent := false
-	if isAmazonModel || isZAIModel {
+	if isZAIModel {
 		for _, msg := range messages {
 			if msg.Role == "tool" || (msg.Role == "assistant" && len(msg.ToolCalls) > 0) {
 				hasToolContent = true
@@ -302,7 +300,7 @@ func (o *openRouter) buildParams(messages []core.Message, options *core.Generate
 		}
 	}
 
-	if (isAmazonModel && hasToolContent) || (isZAIModel && len(options.Tools) > 0) {
+	if isZAIModel && (len(options.Tools) > 0 || hasToolContent) {
 		params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
 			OfAuto: openai.String("auto"),
 		}
@@ -348,7 +346,7 @@ func (o *openRouter) convertMessages(messages []core.Message) []openai.ChatCompl
 				assistantMsg := &openai.ChatCompletionAssistantMessageParam{
 					ToolCalls: toolCalls,
 				}
-				// Only set content if non-empty - Amazon Bedrock rejects empty text fields
+				// Only set content if non-empty to avoid empty text field issues
 				if msg.Content != "" {
 					assistantMsg.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(msg.Content)}
 				}

@@ -400,49 +400,10 @@ func TestOpenRouter_BuildParams(t *testing.T) {
 	})
 }
 
-func TestOpenRouter_BuildParams_AmazonToolChoice(t *testing.T) {
+func TestOpenRouter_BuildParams_ToolChoice(t *testing.T) {
 	t.Parallel()
 
-	t.Run("amazon model does not send tool_choice none", func(t *testing.T) {
-		lm := &openRouter{Model: "amazon/nova-pro-v1"}
-		messages := []core.Message{{Role: "user", Content: "test"}}
-		options := &core.GenerateOptions{
-			Tools:      []core.Tool{*core.NewTool("test_tool", "A test tool", nil)},
-			ToolChoice: "none",
-		}
-		params := lm.buildParams(messages, options)
-
-		data, _ := json.Marshal(params)
-		var m map[string]any
-		_ = json.Unmarshal(data, &m)
-
-		if _, ok := m["tool_choice"]; ok {
-			t.Errorf("expected tool_choice to be omitted for Amazon model with 'none', got %v", m["tool_choice"])
-		}
-	})
-
-	t.Run("amazon model with tool content forces auto", func(t *testing.T) {
-		lm := &openRouter{Model: "amazon/bedrock-claude"}
-		messages := []core.Message{
-			{Role: "user", Content: "test"},
-			{Role: "assistant", ToolCalls: []core.ToolCall{{ID: "call_1", Name: "test_tool", Arguments: map[string]any{}}}},
-			{Role: "tool", Content: "result", ToolID: "call_1"},
-		}
-		options := &core.GenerateOptions{
-			Tools: []core.Tool{*core.NewTool("test_tool", "A test tool", nil)},
-		}
-		params := lm.buildParams(messages, options)
-
-		data, _ := json.Marshal(params)
-		var m map[string]any
-		_ = json.Unmarshal(data, &m)
-
-		if m["tool_choice"] != "auto" {
-			t.Errorf("expected tool_choice 'auto' for Amazon model with tool content, got %v", m["tool_choice"])
-		}
-	})
-
-	t.Run("non-amazon model sends tool_choice none", func(t *testing.T) {
+	t.Run("non-zai model sends tool_choice none", func(t *testing.T) {
 		lm := &openRouter{Model: "openai/gpt-4"}
 		messages := []core.Message{{Role: "user", Content: "test"}}
 		options := &core.GenerateOptions{
@@ -456,7 +417,7 @@ func TestOpenRouter_BuildParams_AmazonToolChoice(t *testing.T) {
 		_ = json.Unmarshal(data, &m)
 
 		if m["tool_choice"] != "none" {
-			t.Errorf("expected tool_choice 'none' for non-Amazon model, got %v", m["tool_choice"])
+			t.Errorf("expected tool_choice 'none' for non-ZAI model, got %v", m["tool_choice"])
 		}
 	})
 }
@@ -745,18 +706,19 @@ func TestInit_RegistersLM(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
+	// Use a model that's registered in the catalog
 	core.Configure(
 		core.WithProvider("openrouter"),
-		core.WithModel("test-model"),
+		core.WithModel("google/gemini-2.5-flash"),
 	)
 
-	lm, err := core.NewLM(ctx, "openrouter/test-model")
+	lm, err := core.NewLM(ctx, "openrouter/google/gemini-2.5-flash")
 	if err != nil {
 		t.Fatalf("expected LM to be created, got error: %v", err)
 	}
 
-	if lm.Name() != "test-model" {
-		t.Errorf("expected model name test-model, got %s", lm.Name())
+	if lm.Name() != "google/gemini-2.5-flash" {
+		t.Errorf("expected model name google/gemini-2.5-flash, got %s", lm.Name())
 	}
 }
 

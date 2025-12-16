@@ -17,7 +17,7 @@ func getModelName() string {
 	if model := os.Getenv("EXAMPLES_DEFAULT_MODEL"); model != "" {
 		return model
 	}
-	return "openrouter/amazon/nova-2-lite-v1"
+	return "openrouter/google/gemini-2.5-flash-lite-preview-09-2025"
 }
 
 // SentimentInput defines input for sentiment classification

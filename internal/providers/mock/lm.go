@@ -14,12 +14,23 @@ import (
 
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/jsonutil"
+	"github.com/assagman/dsgo/internal/modelcatalog"
 )
 
 func init() {
 	core.RegisterLM("mock", func(model string) core.LM {
 		return newMockHTTP(model)
 	})
+
+	// Register mock provider models for testing
+	mockModels := []modelcatalog.Model{
+		{ID: "mock/gpt-4o"},
+		{ID: "mock/gpt-4o-mini"},
+		{ID: "mock/test-model"},
+	}
+	for _, m := range mockModels {
+		_ = modelcatalog.RegisterModel(m)
+	}
 }
 
 const (

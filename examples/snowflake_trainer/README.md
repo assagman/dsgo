@@ -34,7 +34,7 @@ export EXA_API_KEY="..."
 export TAVILY_API_KEY="..."
 
 # Optional Configuration
-export TRAINER_MODEL="openrouter/anthropic/claude-3.5-sonnet"
+export TRAINER_MODEL="openrouter/google/gemini-2.5-flash-lite-preview-09-2025"
 export TRAINER_MAX_WORKERS="6"
 export TRAINER_TOPIC="Snowflake Data Cloud"
 ```

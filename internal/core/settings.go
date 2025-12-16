@@ -84,6 +84,12 @@ type Settings struct {
 	// EnableTracing enables detailed tracing and diagnostics.
 	EnableTracing bool
 
+	// SkipModelValidation disables the strict model catalog validation in NewLM.
+	//
+	// If true, NewLM will accept any model string as long as it has a provider prefix,
+	// bypassing the IsValidCanonical check.
+	SkipModelValidation bool
+
 	// Collector is the default collector for LM observability.
 	Collector Collector
 
@@ -110,13 +116,14 @@ var (
 
 // globalSettings is the singleton instance of Settings.
 var globalSettings = &Settings{
-	DefaultTimeout: 30 * time.Second,
-	APIKey:         make(map[string]string),
-	MaxRetries:     3,
-	EnableTracing:  false,
-	CacheTTL:       0, // No expiry by default
-	CacheConfig:    DefaultCacheConfiguration(),
-	Logger:         nil, // Will be set by logging package initialization
+	DefaultTimeout:      30 * time.Second,
+	APIKey:              make(map[string]string),
+	MaxRetries:          3,
+	EnableTracing:       false,
+	SkipModelValidation: false,
+	CacheTTL:            0, // No expiry by default
+	CacheConfig:         DefaultCacheConfiguration(),
+	Logger:              nil, // Will be set by logging package initialization
 	StructuredOutput: StructuredOutputConfig{
 		Enabled:     true, // Structured outputs enabled by default
 		MaxAttempts: 3,    // 1 initial + up to 2 retries
@@ -192,19 +199,20 @@ func GetSettings() Settings {
 	maps.Copy(apiKeyCopy, globalSettings.APIKey)
 
 	return Settings{
-		DefaultLM:        globalSettings.DefaultLM,
-		DefaultProvider:  globalSettings.DefaultProvider,
-		DefaultModel:     globalSettings.DefaultModel,
-		DefaultTimeout:   globalSettings.DefaultTimeout,
-		APIKey:           apiKeyCopy,
-		MaxRetries:       globalSettings.MaxRetries,
-		EnableTracing:    globalSettings.EnableTracing,
-		Collector:        globalSettings.Collector,
-		DefaultCache:     globalSettings.DefaultCache,
-		CacheTTL:         globalSettings.CacheTTL,
-		CacheConfig:      globalSettings.CacheConfig,
-		Logger:           globalSettings.Logger,
-		StructuredOutput: globalSettings.StructuredOutput,
+		DefaultLM:           globalSettings.DefaultLM,
+		DefaultProvider:     globalSettings.DefaultProvider,
+		DefaultModel:        globalSettings.DefaultModel,
+		DefaultTimeout:      globalSettings.DefaultTimeout,
+		APIKey:              apiKeyCopy,
+		MaxRetries:          globalSettings.MaxRetries,
+		EnableTracing:       globalSettings.EnableTracing,
+		SkipModelValidation: globalSettings.SkipModelValidation,
+		Collector:           globalSettings.Collector,
+		DefaultCache:        globalSettings.DefaultCache,
+		CacheTTL:            globalSettings.CacheTTL,
+		CacheConfig:         globalSettings.CacheConfig,
+		Logger:              globalSettings.Logger,
+		StructuredOutput:    globalSettings.StructuredOutput,
 	}
 }
 
@@ -268,6 +276,13 @@ func (s *Settings) SetEnableTracing(enable bool) {
 	s.EnableTracing = enable
 }
 
+// SetSkipModelValidation enables or disables strict model validation.
+func (s *Settings) SetSkipModelValidation(skip bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.SkipModelValidation = skip
+}
+
 // SetCollector sets the default collector for LM observability.
 func (s *Settings) SetCollector(collector Collector) {
 	s.mu.Lock()
@@ -325,6 +340,7 @@ func (s *Settings) Reset() {
 	s.APIKey = make(map[string]string)
 	s.MaxRetries = 3
 	s.EnableTracing = false
+	s.SkipModelValidation = false
 	s.Collector = nil
 	s.CacheTTL = 0
 	s.CacheConfig = DefaultCacheConfiguration()

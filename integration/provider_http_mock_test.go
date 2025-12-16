@@ -426,9 +426,10 @@ func TestCostCalculation_OpenAI(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Check if pricing is available
-			pricing, ok := calc.GetPricing(tt.provider, tt.model)
+			modelKey := tt.provider + "/" + tt.model
+			pricing, ok := calc.GetPricing(modelKey)
 			if !ok {
-				t.Skipf("pricing not available for model %s/%s", tt.provider, tt.model)
+				t.Skipf("pricing not available for model %s", modelKey)
 			}
 
 			// Calculate cost - just verify it's positive for these tokens
@@ -473,9 +474,10 @@ func TestCostCalculation_OpenRouter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pricing, ok := calc.GetPricing(tt.provider, tt.model)
+			modelKey := tt.provider + "/" + tt.model
+			pricing, ok := calc.GetPricing(modelKey)
 			if !ok {
-				t.Skipf("pricing not available for model %s/%s", tt.provider, tt.model)
+				t.Skipf("pricing not available for model %s", modelKey)
 			}
 
 			// Cost should be calculable (even if > 0)
@@ -1210,7 +1212,7 @@ func (o *openrouterProvider_internal) IsOpenAI() bool            { return false 
 func (o *openrouterProvider_internal) SetCache(cache dsgo.Cache) { o.Cache = cache }
 
 // calculateCost calculates the cost based on model pricing and token counts
-func calculateCost(pricing *cost.ModelPricing, promptTokens, completionTokens int) float64 {
+func calculateCost(pricing *cost.Pricing, promptTokens, completionTokens int) float64 {
 	if pricing == nil {
 		return 0
 	}

@@ -92,7 +92,7 @@ func TestCacheIntegration_MockProvider_CacheHitAvoidsSecondRequest(t *testing.T)
 	t.Cleanup(globalConfigMu.Unlock)
 	t.Cleanup(dsgo.ResetConfig)
 
-	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
+	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4o"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, `{
 			"id":"test",
@@ -112,7 +112,7 @@ func TestCacheIntegration_MockProvider_CacheHitAvoidsSecondRequest(t *testing.T)
 	// Wire mock provider to server.
 	t.Setenv("DSGO_MOCK_BASE_URL", server.URL)
 
-	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4")
+	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4o")
 	if err != nil {
 		t.Fatalf("failed to create mock LM: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestCacheIntegration_MockProvider_CacheTTLExpires(t *testing.T) {
 	t.Cleanup(globalConfigMu.Unlock)
 	t.Cleanup(dsgo.ResetConfig)
 
-	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
+	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4o"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, `{
 			"id":"test",
@@ -171,7 +171,7 @@ func TestCacheIntegration_MockProvider_CacheTTLExpires(t *testing.T) {
 		t.Fatal("expected DefaultCache to be configured")
 	}
 
-	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4")
+	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4o")
 	if err != nil {
 		t.Fatalf("failed to create mock LM: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestCacheIntegration_MockProvider_CacheClearForcesRefetch(t *testing.T) {
 	t.Cleanup(globalConfigMu.Unlock)
 	t.Cleanup(dsgo.ResetConfig)
 
-	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
+	server, recorder := newValidatedMockServer(t, validateChatCompletionRequest("gpt-4o"), func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, `{
 			"id":"test",
@@ -221,7 +221,7 @@ func TestCacheIntegration_MockProvider_CacheClearForcesRefetch(t *testing.T) {
 		t.Fatal("expected DefaultCache to be configured")
 	}
 
-	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4")
+	lm, err := dsgo.NewLM(context.Background(), "mock/gpt-4o")
 	if err != nil {
 		t.Fatalf("failed to create mock LM: %v", err)
 	}

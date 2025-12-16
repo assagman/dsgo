@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/assagman/dsgo/internal/modelcatalog"
 )
 
 // LMFactory is a function that creates an LM instance for a given model.
@@ -20,6 +22,12 @@ var (
 func RegisterLM(provider string, factory LMFactory) {
 	registryLock.Lock()
 	defer registryLock.Unlock()
+
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == "" {
+		return
+	}
+
 	lmRegistry[provider] = factory
 }
 
@@ -36,16 +44,16 @@ func RegisterLM(provider string, factory LMFactory) {
 //   - NewLM(ctx, "openrouter/meta-llama/llama-3.3-70b-instruct") -> uses openrouter provider with model "meta-llama/llama-3.3-70b-instruct"
 func NewLM(ctx context.Context, model string) (LM, error) {
 	if model == "" {
-		return nil, fmt.Errorf("model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")")
+		return nil, fmt.Errorf("model string is required - provide a valid model like 'openai/gpt-4o' or 'openrouter/google/gemini-2.5-flash'. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")")
 	}
 
 	// Parse provider and model from model string
 	parts := strings.SplitN(model, "/", 2)
 	if len(parts) < 2 {
-		return nil, fmt.Errorf("model string must include provider: format 'provider/model' (e.g., 'openai/gpt-4o' or 'openrouter/z-ai/glm-4.6'). Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")")
+		return nil, fmt.Errorf("model string must include provider: format 'provider/model' (e.g., 'openai/gpt-4o' or 'openrouter/google/gemini-2.5-flash'). Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")")
 	}
 
-	provider := parts[0]
+	provider := strings.ToLower(parts[0])
 	targetModel := parts[1]
 
 	// Get factory for provider
@@ -55,6 +63,25 @@ func NewLM(ctx context.Context, model string) (LM, error) {
 
 	if !ok {
 		return nil, fmt.Errorf("provider '%s' not registered for model '%s'. Available providers: %v. Example: dsgo.NewLM(ctx, \"openai/gpt-4o\")", provider, targetModel, getRegisteredProviders())
+	}
+
+	canonicalModel := provider + "/" + targetModel
+
+	// Check if model is valid (unless validation is skipped)
+	if !GetSettings().SkipModelValidation && !modelcatalog.IsValidCanonical(canonicalModel) {
+		candidates := modelcatalog.ListModelsByProvider(provider)
+		if len(candidates) > 0 {
+			max := 5
+			if len(candidates) < max {
+				max = len(candidates)
+			}
+			examples := make([]string, 0, max)
+			for i := 0; i < max; i++ {
+				examples = append(examples, candidates[i].ID)
+			}
+			return nil, fmt.Errorf("model '%s' is not supported. Use dsgo.ListModels() to see supported models. Examples for provider '%s': %v", canonicalModel, provider, examples)
+		}
+		return nil, fmt.Errorf("model '%s' is not supported. Use dsgo.RegisterModel() to add custom models, or dsgo.ListModels() to see supported models", canonicalModel)
 	}
 
 	// Create base LM

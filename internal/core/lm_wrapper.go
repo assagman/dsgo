@@ -183,23 +183,21 @@ func (w *lmWrapper) Stream(ctx context.Context, messages []Message, options *Gen
 	return outChunkChan, outErrChan
 }
 
-func (w *lmWrapper) calculateCost(ctx context.Context, provider, modelName string, promptTokens, completionTokens int) float64 {
+func (w *lmWrapper) calculateCost(ctx context.Context, canonicalModel string, promptTokens, completionTokens int) float64 {
 	if promptTokens == 0 && completionTokens == 0 {
 		return 0
 	}
 
-	calculatedCost, ok := w.calculator.CalculateIfKnown(provider, modelName, promptTokens, completionTokens)
-	if ok {
-		return calculatedCost
+	// Check if we have pricing for this model
+	if w.calculator.HasPricing(canonicalModel) {
+		return w.calculator.Calculate(canonicalModel, promptTokens, completionTokens)
 	}
 
-	// Use provider/model as the warning key to avoid duplicate warnings per provider
-	warnKey := provider + "/" + modelName
-	if _, loaded := missingPricingWarned.LoadOrStore(warnKey, struct{}{}); !loaded {
+	// Use canonical model as the warning key to avoid duplicate warnings
+	if _, loaded := missingPricingWarned.LoadOrStore(canonicalModel, struct{}{}); !loaded {
 		logging.GetLogger().Warn(ctx, "No pricing information for model", map[string]any{
 			"module":            "cost",
-			"provider":          provider,
-			"model":             modelName,
+			"model":             canonicalModel,
 			"prompt_tokens":     promptTokens,
 			"completion_tokens": completionTokens,
 		})
@@ -269,8 +267,8 @@ func (w *lmWrapper) buildHistoryEntry(
 
 		// Calculate cost (best-effort)
 		provider := w.getProvider()
-		modelName := w.lm.Name()
-		entry.Usage.Cost = w.calculateCost(ctx, provider, modelName, result.Usage.PromptTokens, result.Usage.CompletionTokens)
+		canonicalModel := canonicalModelID(provider, w.lm.Name())
+		entry.Usage.Cost = w.calculateCost(ctx, canonicalModel, result.Usage.PromptTokens, result.Usage.CompletionTokens)
 
 		// Wire provider-specific metadata
 		if result.Metadata != nil {
@@ -359,4 +357,16 @@ func (w *lmWrapper) extractProviderFromModel() string {
 
 	// Default to unknown
 	return "unknown"
+}
+
+func canonicalModelID(provider, name string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	name = strings.ToLower(strings.TrimSpace(name))
+	if provider == "" {
+		return name
+	}
+	if strings.HasPrefix(name, provider+"/") {
+		return name
+	}
+	return provider + "/" + name
 }

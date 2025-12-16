@@ -6,9 +6,11 @@ package dsgo
 
 import (
 	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/cost"
 	"github.com/assagman/dsgo/internal/env"
 	"github.com/assagman/dsgo/internal/logging"
 	"github.com/assagman/dsgo/internal/mcp"
+	"github.com/assagman/dsgo/internal/modelcatalog"
 	"github.com/assagman/dsgo/internal/module"
 	signature_typed "github.com/assagman/dsgo/internal/signature_typed"
 
@@ -67,6 +69,17 @@ type (
 	CacheMeta             = core.CacheMeta
 	CacheStats            = core.CacheStats
 	ToolParameter         = core.ToolParameter
+)
+
+// Re-export model catalog and cost types
+type (
+	Model          = modelcatalog.Model
+	Pricing        = modelcatalog.Pricing
+	Limits         = modelcatalog.Limits
+	Capabilities   = modelcatalog.Capabilities
+	Modalities     = modelcatalog.Modalities
+	Metadata       = modelcatalog.Metadata
+	CostCalculator = cost.Calculator
 )
 
 // Re-export module types
@@ -163,6 +176,7 @@ var (
 	WithModel                       = core.WithModel
 	WithTimeout                     = core.WithTimeout
 	WithLM                          = core.WithLM
+	WithSkipModelValidation         = core.WithSkipModelValidation
 	WithAPIKey                      = core.WithAPIKey
 	WithMaxRetries                  = core.WithMaxRetries
 	WithTracing                     = core.WithTracing
@@ -196,6 +210,20 @@ var (
 	DefaultCacheConfiguration       = core.DefaultCacheConfiguration
 	DefaultGenerateOptions          = core.DefaultGenerateOptions
 	StripMarkers                    = core.StripMarkers
+)
+
+// Re-export model catalog and cost functions
+var (
+	RegisterModel         = modelcatalog.RegisterModel
+	RegisterAlias         = modelcatalog.RegisterAlias
+	ResolveModel          = modelcatalog.Resolve
+	IsValidModel          = modelcatalog.IsValid
+	IsValidCanonicalModel = modelcatalog.IsValidCanonical
+	ListModels            = modelcatalog.ListModels
+	ListModelsByProvider  = modelcatalog.ListModelsByProvider
+	GetModel              = modelcatalog.GetModel
+	DefaultCostCalculator = cost.DefaultCalculator
+	CalculateCost         = cost.Calculate
 )
 
 // Re-export module functions
