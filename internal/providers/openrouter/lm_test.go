@@ -350,7 +350,13 @@ func TestOpenRouter_BuildParams(t *testing.T) {
 			Temperature: 0.7,
 			ProviderParams: map[string]any{
 				"top_k":       50,
-				"temperature": 1.2, // should be ignored
+				"temperature": 1.2,    // should be ignored
+				"n":           5,      // should be ignored
+				"stream":      true,   // should be ignored
+				"model":       "evil", // should be ignored
+				"reasoning": map[string]any{
+					"effort": "high",
+				},
 			},
 		}
 		params := lm.buildParams(messages, options)
@@ -362,8 +368,20 @@ func TestOpenRouter_BuildParams(t *testing.T) {
 		if topK, ok := m["top_k"].(float64); !ok || int(topK) != 50 {
 			t.Errorf("expected top_k 50, got %v", m["top_k"])
 		}
+		if reasoning, ok := m["reasoning"].(map[string]any); !ok || reasoning["effort"] != "high" {
+			t.Errorf("expected reasoning.effort high, got %v", m["reasoning"])
+		}
 		if temp, ok := m["temperature"].(float64); !ok || temp != 0.7 {
 			t.Errorf("expected temperature 0.7 (DSGo-managed), got %v", m["temperature"])
+		}
+		if model, ok := m["model"].(string); !ok || model != "gpt-4" {
+			t.Errorf("expected model gpt-4 (DSGo-managed), got %v", m["model"])
+		}
+		if _, ok := m["n"]; ok {
+			t.Errorf("expected ProviderParams.n to be ignored, got %v", m["n"])
+		}
+		if _, ok := m["stream"]; ok {
+			t.Errorf("expected ProviderParams.stream to be ignored, got %v", m["stream"])
 		}
 	})
 
@@ -759,5 +777,30 @@ func TestSanitizeToolCallID_UniqueHash(t *testing.T) {
 
 	if result1 == result2 {
 		t.Errorf("different inputs with same prefix produced same output: %q", result1)
+	}
+}
+
+func TestSanitizeToolCallIDWithFallback_EmptyIDUnique(t *testing.T) {
+	t.Parallel()
+
+	id1 := sanitizeToolCallIDWithFallback("", "seed_one")
+	id2 := sanitizeToolCallIDWithFallback("", "seed_two")
+
+	if id1 == "" || id2 == "" {
+		t.Fatal("expected non-empty sanitized IDs")
+	}
+	if id1 == id2 {
+		t.Fatalf("expected different outputs for different seeds: %q", id1)
+	}
+	if len(id1) > maxToolCallIDLength || len(id2) > maxToolCallIDLength {
+		t.Fatalf("sanitized ID exceeds max length")
+	}
+	if toolCallIDPattern.MatchString(id1) || toolCallIDPattern.MatchString(id2) {
+		t.Fatalf("sanitized ID contains invalid characters")
+	}
+
+	id1Again := sanitizeToolCallIDWithFallback("", "seed_one")
+	if id1 != id1Again {
+		t.Fatalf("expected deterministic output for same seed: %q vs %q", id1, id1Again)
 	}
 }

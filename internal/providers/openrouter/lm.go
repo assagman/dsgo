@@ -15,6 +15,7 @@ import (
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/jsonutil"
 	"github.com/assagman/dsgo/internal/logging"
+	"github.com/assagman/dsgo/internal/providers/util"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/shared"
@@ -307,40 +308,15 @@ func (o *openRouter) buildParams(messages []core.Message, options *core.Generate
 		}
 	}
 
-	applyProviderParams(&params, options.ProviderParams)
+	util.ApplyChatCompletionProviderParams(&params, options.ProviderParams)
 
 	return params
-}
-
-func applyProviderParams(params *openai.ChatCompletionNewParams, providerParams map[string]any) {
-	if len(providerParams) == 0 {
-		return
-	}
-
-	extra := make(map[string]any, len(providerParams))
-	for key, value := range providerParams {
-		// Don't override DSGo-managed keys to maintain consistency.
-		switch key {
-		case "model", "messages", "temperature", "max_tokens", "top_p", "stop",
-			"response_format", "frequency_penalty", "presence_penalty", "tools", "tool_choice":
-			continue
-		default:
-			extra[key] = value
-		}
-	}
-
-	if len(extra) == 0 {
-		return
-	}
-
-	// For security reasons, only use with trusted input.
-	params.SetExtraFields(extra)
 }
 
 func (o *openRouter) convertMessages(messages []core.Message) []openai.ChatCompletionMessageParamUnion {
 	converted := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
 
-	for _, msg := range messages {
+	for msgIndex, msg := range messages {
 		switch msg.Role {
 		case "system":
 			converted = append(converted, openai.SystemMessage(msg.Content))
@@ -349,10 +325,13 @@ func (o *openRouter) convertMessages(messages []core.Message) []openai.ChatCompl
 		case "assistant":
 			if len(msg.ToolCalls) > 0 {
 				toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(msg.ToolCalls))
-				for _, tc := range msg.ToolCalls {
+				for tcIndex, tc := range msg.ToolCalls {
 					argsBytes, _ := json.Marshal(tc.Arguments)
-					// Sanitize tool call ID to meet provider constraints
-					sanitizedID := sanitizeToolCallID(tc.ID)
+					// Sanitize tool call ID to meet provider constraints.
+					// If the provider returns an empty/whitespace ID, we deterministically derive
+					// a collision-resistant ID from call index + content.
+					fallback := fmt.Sprintf("dsgo_toolcall_%d_%d_%s_%s", msgIndex, tcIndex, tc.Name, string(argsBytes))
+					sanitizedID := sanitizeToolCallIDWithFallback(tc.ID, fallback)
 					toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{
 						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
 							ID:   sanitizedID,
@@ -379,7 +358,8 @@ func (o *openRouter) convertMessages(messages []core.Message) []openai.ChatCompl
 			}
 		case "tool":
 			// Sanitize tool call ID to meet provider constraints
-			sanitizedToolID := sanitizeToolCallID(msg.ToolID)
+			fallback := fmt.Sprintf("dsgo_tool_message_%d_%s", msgIndex, msg.Content)
+			sanitizedToolID := sanitizeToolCallIDWithFallback(msg.ToolID, fallback)
 			// Note: ToolMessage signature is (content, toolCallID) - not (toolCallID, content)
 			converted = append(converted, openai.ToolMessage(msg.Content, sanitizedToolID))
 		default:
@@ -497,13 +477,16 @@ func (o *openRouter) parseResponse(resp *openai.ChatCompletion) (*core.GenerateR
 
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]core.ToolCall, 0, len(choice.Message.ToolCalls))
-		for _, tc := range choice.Message.ToolCalls {
+		for tcIndex, tc := range choice.Message.ToolCalls {
 			args, err := parseToolArguments(o.Model, resp.ID, string(choice.FinishReason), tc)
 			if err != nil {
 				return nil, err
 			}
-			// Sanitize tool call ID to meet provider constraints
-			sanitizedID := sanitizeToolCallID(tc.ID)
+			// Sanitize tool call ID to meet provider constraints.
+			// If the provider returns an empty/whitespace ID, derive a stable ID based on
+			// tool index + name + arguments.
+			fallback := fmt.Sprintf("dsgo_response_toolcall_%d_%s_%s", tcIndex, tc.Function.Name, tc.Function.Arguments)
+			sanitizedID := sanitizeToolCallIDWithFallback(tc.ID, fallback)
 			result.ToolCalls = append(result.ToolCalls, core.ToolCall{
 				ID:        sanitizedID,
 				Name:      tc.Function.Name,
@@ -620,8 +603,16 @@ func debugEnabled() bool {
 // It handles IDs that are too long or contain invalid characters by creating
 // a deterministic hash-based ID that preserves uniqueness.
 func sanitizeToolCallID(id string) string {
+	return sanitizeToolCallIDWithFallback(id, "")
+}
+
+func sanitizeToolCallIDWithFallback(id, fallback string) string {
 	if strings.TrimSpace(id) == "" {
-		hash := sha256.Sum256([]byte("dsgo_empty_tool_call_id"))
+		seed := strings.TrimSpace(fallback)
+		if seed == "" {
+			seed = "dsgo_empty_tool_call_id"
+		}
+		hash := sha256.Sum256([]byte(seed))
 		return "toolcall_" + hex.EncodeToString(hash[:])[:16]
 	}
 
