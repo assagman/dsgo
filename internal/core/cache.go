@@ -34,6 +34,80 @@ type Cache interface {
 	Stats() CacheStats
 }
 
+// LazyCache defers initializing the underlying cache until first use.
+// This avoids creating disk cache directories/files until an actual LM call happens.
+//
+// If initialization fails, it permanently falls back to a no-op cache.
+type LazyCache struct {
+	initOnce sync.Once
+	initFn   func() Cache
+	cache    Cache
+}
+
+func NewLazyCache(initFn func() Cache) *LazyCache {
+	if initFn == nil {
+		initFn = func() Cache { return nil }
+	}
+	return &LazyCache{initFn: initFn}
+}
+
+func (c *LazyCache) init() {
+	if c == nil {
+		return
+	}
+	c.initOnce.Do(func() {
+		c.cache = c.initFn()
+	})
+}
+
+func (c *LazyCache) Get(key string) (*GenerateResult, bool) {
+	c.init()
+	if c.cache == nil {
+		return nil, false
+	}
+	return c.cache.Get(key)
+}
+
+func (c *LazyCache) Set(key string, result *GenerateResult) {
+	c.init()
+	if c.cache == nil {
+		return
+	}
+	c.cache.Set(key, result)
+}
+
+func (c *LazyCache) Clear() {
+	c.init()
+	if c.cache == nil {
+		return
+	}
+	c.cache.Clear()
+}
+
+func (c *LazyCache) Size() int {
+	c.init()
+	if c.cache == nil {
+		return 0
+	}
+	return c.cache.Size()
+}
+
+func (c *LazyCache) Capacity() int {
+	c.init()
+	if c.cache == nil {
+		return 0
+	}
+	return c.cache.Capacity()
+}
+
+func (c *LazyCache) Stats() CacheStats {
+	c.init()
+	if c.cache == nil {
+		return CacheStats{}
+	}
+	return c.cache.Stats()
+}
+
 // CacheStats holds cache performance metrics
 type CacheStats struct {
 	Hits   int64
@@ -298,6 +372,10 @@ func GenerateCacheKey(lmName string, messages []Message, options *GenerateOption
 // GenerateCacheKeyWithIgnored creates a cache key while ignoring specified fields.
 // This allows customization of which fields are excluded from the cache key.
 func GenerateCacheKeyWithIgnored(lmName string, messages []Message, options *GenerateOptions, ignoredArgs []string) string {
+	if options == nil {
+		options = DefaultGenerateOptions()
+	}
+
 	// Build a deterministic representation
 	keyData := struct {
 		LMName           string

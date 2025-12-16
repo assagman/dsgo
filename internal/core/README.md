@@ -30,7 +30,11 @@ flowchart TD
 |---|---|
 | `DSGO_TIMEOUT` | Request timeout |
 | `DSGO_MAX_RETRIES` | Retry attempts |
-| `DSGO_CACHE_SIZE` | Cache size |
+| `DSGO_CACHE` | Enable/disable caching |
+| `DSGO_CACHE_MEMORY` | Memory cache capacity |
+| `DSGO_CACHE_DISK` | Enable/disable disk cache |
+| `DSGO_CACHEDIR` | Disk cache directory |
+| `DSGO_CACHE_LIMIT` | Disk cache size limit |
 | `DSGO_CACHE_TTL` | Cache TTL |
 | `DSGO_COLLECTOR` | Collector selection |
 | `DSGO_REQUEST_ID_HEADER` | Request id header name |

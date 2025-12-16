@@ -14,10 +14,12 @@ import (
 //   - DSGO_TIMEOUT: Default timeout in seconds (e.g., "30")
 //   - DSGO_MAX_RETRIES: Default number of retries (e.g., "3")
 //   - DSGO_TRACING: Enable tracing ("true" or "false")
+//   - DSGO_CACHE: Enable/disable caching ("true"/"false")
 //   - DSGO_CACHE_TTL: Cache time-to-live duration (e.g., "5m", "1h", "30s")
-//   - DSGO_CACHEDIR: Disk cache directory (default: ~/.dsgo_cache)
+//   - DSGO_CACHE_MEMORY: Memory cache capacity in entries
+//   - DSGO_CACHEDIR: Disk cache directory (default: ~/.dsgo_cache/proj_<hash>/)
 //   - DSGO_CACHE_LIMIT: Disk cache size limit in bytes (default: 30GB)
-//   - DSGO_CACHE_DISK: Enable disk caching ("true" or "false", default "false")
+//   - DSGO_CACHE_DISK: Enable disk caching ("true" or "false", default "true")
 //   - DSGO_OPENAI_API_KEY: OpenAI API key
 //   - DSGO_OPENROUTER_API_KEY: OpenRouter API key
 //   - DSGO_STRUCTURED_OUTPUTS: Enable structured outputs ("true" or "false", default "true")
@@ -40,6 +42,13 @@ func loadEnv() {
 	if tracingStr := os.Getenv("DSGO_TRACING"); tracingStr != "" {
 		if tracing, err := strconv.ParseBool(tracingStr); err == nil {
 			globalSettings.EnableTracing = tracing
+		}
+	}
+
+	// Parse DSGO_CACHE (enable/disable caching)
+	if cacheStr := os.Getenv("DSGO_CACHE"); cacheStr != "" {
+		if enabled, err := strconv.ParseBool(cacheStr); err == nil && !enabled {
+			globalSettings.DefaultCache = nil
 		}
 	}
 
@@ -67,6 +76,13 @@ func loadEnv() {
 	if ttlStr := os.Getenv("DSGO_CACHE_TTL"); ttlStr != "" {
 		if ttl, err := time.ParseDuration(ttlStr); err == nil {
 			globalSettings.CacheTTL = ttl
+		}
+	}
+
+	// Parse DSGO_CACHE_MEMORY (memory cache capacity)
+	if memStr := os.Getenv("DSGO_CACHE_MEMORY"); memStr != "" {
+		if mem, err := strconv.Atoi(memStr); err == nil && mem > 0 {
+			globalSettings.CacheConfig.MemoryCapacity = mem
 		}
 	}
 

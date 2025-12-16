@@ -293,12 +293,9 @@ func globalConfigExample(ctx context.Context) {
 	}
 
 	fmt.Println("\n📋 Alternative Configuration Options:")
-	fmt.Println("   • dsgo.WithCache(1000)              - Memory-only cache")
-	fmt.Println("   • dsgo.WithCacheTTL(5m)             - Set TTL for entries")
-	fmt.Println("   • dsgo.WithDiskCache(\"/path\")       - Enable disk caching")
-	fmt.Println("   • dsgo.WithDiskCacheSizeLimit(30GB) - Set disk limit")
-	fmt.Println("   • dsgo.WithMemoryCache(1000000)     - Set memory capacity")
-	fmt.Println("   • dsgo.WithTieredCache(opts)        - Full tiered config")
+	fmt.Println("   • dsgo.WithCache(1000)       - Memory-only cache")
+	fmt.Println("   • dsgo.WithCacheTTL(5m)      - Set TTL for entries")
+	fmt.Println("   • dsgo.WithTieredCache(opts) - Full tiered config")
 
 	fmt.Println("\n🔑 Environment Variables:")
 	fmt.Println("   • DSGO_CACHE_DISK=true/false - Enable/disable disk cache")

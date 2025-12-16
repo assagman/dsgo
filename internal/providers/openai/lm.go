@@ -114,9 +114,15 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 	// Log API request start
 	logging.LogAPIRequest(ctx, "provider.OpenAI", o.Model, promptLength)
 
+	if options == nil {
+		options = core.DefaultGenerateOptions()
+	}
+
+	cacheModelName := "openai/" + o.Model
+
 	// Check cache if available
 	if o.Cache != nil {
-		cacheKey := core.GenerateCacheKey(o.Model, messages, options)
+		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		if cached, ok := o.Cache.Get(cacheKey); ok {
 			// Mark as cache hit and clear usage (no API call was made)
 			return core.MarkCacheHit(cached), nil
@@ -206,7 +212,7 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 
 	// Store in cache if available
 	if o.Cache != nil {
-		cacheKey := core.GenerateCacheKey(o.Model, messages, options)
+		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		o.Cache.Set(cacheKey, result)
 	}
 
@@ -501,6 +507,10 @@ func (o *openAI) Stream(ctx context.Context, messages []core.Message, options *c
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		if options == nil {
+			options = core.DefaultGenerateOptions()
+		}
 
 		reqBody := o.buildRequest(messages, options)
 		reqBody["stream"] = true

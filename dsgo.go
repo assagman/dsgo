@@ -165,9 +165,6 @@ var (
 	WithStructuredOutputTemperature = core.WithStructuredOutputTemperature
 	WithCache                       = core.WithCache
 	WithCacheTTL                    = core.WithCacheTTL
-	WithDiskCache                   = core.WithDiskCache
-	WithDiskCacheSizeLimit          = core.WithDiskCacheSizeLimit
-	WithMemoryCache                 = core.WithMemoryCache
 	WithTieredCache                 = core.WithTieredCache
 	GenerateCacheKey                = core.GenerateCacheKey
 	GenerateCacheKeyWithIgnored     = core.GenerateCacheKeyWithIgnored

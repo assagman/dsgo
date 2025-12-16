@@ -289,6 +289,26 @@ func TestGenerateCacheKey(t *testing.T) {
 	}
 }
 
+func TestGenerateCacheKey_NilOptions(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "Hello"}}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("GenerateCacheKey panicked with nil options: %v", r)
+		}
+	}()
+
+	key1 := GenerateCacheKey("gpt-4", messages, nil)
+	key2 := GenerateCacheKey("gpt-4", messages, nil)
+
+	if key1 == "" {
+		t.Fatal("expected non-empty key")
+	}
+	if key1 != key2 {
+		t.Fatal("expected deterministic key for nil options")
+	}
+}
+
 func TestGenerateCacheKey_StopSequences(t *testing.T) {
 	messages := []Message{{Role: "user", Content: "test"}}
 	options1 := DefaultGenerateOptions()

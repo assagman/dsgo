@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/assagman/dsgo/internal/core"
@@ -125,6 +126,84 @@ func TestOpenAI_Generate_Success(t *testing.T) {
 	}
 	if result.Usage.PromptTokens != 10 {
 		t.Errorf("expected 10 prompt tokens, got %d", result.Usage.PromptTokens)
+	}
+}
+
+func TestOpenAI_Generate_NilOptions_Caches(t *testing.T) {
+	t.Parallel()
+	var reqCount int64
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&reqCount, 1)
+		resp := openAIResponse{
+			ID:      "test-id",
+			Object:  "chat.completion",
+			Created: 1234567890,
+			Model:   "gpt-4",
+			Choices: []struct {
+				Index        int           `json:"index"`
+				Message      openAIMessage `json:"message"`
+				FinishReason string        `json:"finish_reason"`
+			}{
+				{
+					Index: 0,
+					Message: openAIMessage{
+						Role:    "assistant",
+						Content: "Hello, world!",
+					},
+					FinishReason: "stop",
+				},
+			},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{
+				PromptTokens:     10,
+				CompletionTokens: 5,
+				TotalTokens:      15,
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	lm := &openAI{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  &http.Client{},
+		Cache:   core.NewLMCache(10),
+	}
+
+	messages := []core.Message{{Role: "user", Content: "Hello"}}
+
+	// First call: cache miss => real HTTP request.
+	result1, err := lm.Generate(context.Background(), messages, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result1.CacheHit {
+		t.Fatalf("expected CacheHit=false on first call")
+	}
+	if result1.Usage.TotalTokens == 0 {
+		t.Fatalf("expected non-zero usage on cache miss")
+	}
+
+	// Second call: cache hit => no additional HTTP request.
+	result2, err := lm.Generate(context.Background(), messages, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result2.CacheHit {
+		t.Fatalf("expected CacheHit=true on second call")
+	}
+	if result2.Usage.TotalTokens != 0 {
+		t.Fatalf("expected usage to be cleared on cache hit")
+	}
+
+	if got := atomic.LoadInt64(&reqCount); got != 1 {
+		t.Fatalf("expected 1 HTTP request, got %d", got)
 	}
 }
 
@@ -803,7 +882,7 @@ func TestOpenAI_Generate_CacheHit(t *testing.T) {
 
 	messages := []core.Message{{Role: "user", Content: "test"}}
 	options := core.DefaultGenerateOptions()
-	cacheKey := core.GenerateCacheKey("gpt-4", messages, options)
+	cacheKey := core.GenerateCacheKey("openai/gpt-4", messages, options)
 
 	cache := &fakeCache{
 		data: map[string]*core.GenerateResult{
@@ -857,7 +936,7 @@ func TestOpenAI_Generate_CacheSet(t *testing.T) {
 	cache := &fakeCache{data: map[string]*core.GenerateResult{}}
 	messages := []core.Message{{Role: "user", Content: "test"}}
 	options := core.DefaultGenerateOptions()
-	expectedKey := core.GenerateCacheKey("gpt-4", messages, options)
+	expectedKey := core.GenerateCacheKey("openai/gpt-4", messages, options)
 
 	lm := &openAI{
 		APIKey:  "test-key",

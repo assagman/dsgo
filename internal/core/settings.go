@@ -1,8 +1,10 @@
 package core
 
 import (
+	"context"
 	"maps"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/assagman/dsgo/internal/logging"
@@ -101,6 +103,11 @@ type Settings struct {
 	StructuredOutput StructuredOutputConfig
 }
 
+var (
+	cacheDisabledExplicit atomic.Bool
+	cacheTTLOverride      atomic.Int64 // nanoseconds; 0 means unset
+)
+
 // globalSettings is the singleton instance of Settings.
 var globalSettings = &Settings{
 	DefaultTimeout: 30 * time.Second,
@@ -115,30 +122,32 @@ var globalSettings = &Settings{
 		MaxAttempts: 3,    // 1 initial + up to 2 retries
 		Temperature: 0.0,  // Deterministic
 	},
+
+	// Lazy by default: no disk writes until first LM call.
+	DefaultCache: NewLazyCache(defaultCacheInitializer),
 }
 
-func init() {
-	// Enable tiered caching by default (DSPy parity)
-	// Creates memory + disk cache automatically
-	// Users can disable with DSGO_CACHE=false or dsgo.Configure(dsgo.WithCache(0))
-	initDefaultCache()
-}
+func defaultCacheInitializer() Cache {
+	if cacheDisabledExplicit.Load() {
+		return nil
+	}
 
-// initDefaultCache creates the default tiered cache respecting environment variables:
-//   - DSGO_CACHE=false|0        - disable caching entirely
-//   - DSGO_CACHE_DISK=false|0   - disable disk cache (memory only)
-//   - DSGO_CACHEDIR=/path       - custom disk cache directory
-//   - DSGO_CACHE_LIMIT=bytes    - disk cache size limit
-//   - DSGO_CACHE_MEMORY=entries - memory cache capacity
-func initDefaultCache() {
-	// Check if caching is explicitly disabled
 	if cacheEnv := getEnv("DSGO_CACHE"); cacheEnv == "false" || cacheEnv == "0" {
-		return
+		return nil
 	}
 
 	opts := DefaultTieredCacheOptions()
 
-	// Check if disk cache is disabled
+	// TTL: prefer explicit Configure() value, otherwise env.
+	if ttlNanos := cacheTTLOverride.Load(); ttlNanos > 0 {
+		opts.MemoryTTL = time.Duration(ttlNanos)
+	} else if ttlStr := getEnv("DSGO_CACHE_TTL"); ttlStr != "" {
+		if ttl, err := time.ParseDuration(ttlStr); err == nil {
+			opts.MemoryTTL = ttl
+		}
+	}
+
+	// Disk enable/disable
 	if diskEnv := getEnv("DSGO_CACHE_DISK"); diskEnv == "false" || diskEnv == "0" {
 		opts.EnableDisk = false
 	}
@@ -162,14 +171,16 @@ func initDefaultCache() {
 		}
 	}
 
-	// Create tiered cache
 	cache, err := NewTieredCache(opts)
 	if err != nil {
-		// Fallback to memory-only cache if disk cache fails
-		globalSettings.DefaultCache = NewLMCache(opts.MemoryCapacity)
-		return
+		logging.GetLogger().Warn(context.Background(), "Failed to initialize tiered cache, falling back to memory-only", map[string]any{
+			"module": "core.settings",
+			"error":  err.Error(),
+		})
+		return NewLMCacheWithTTL(opts.MemoryCapacity, opts.MemoryTTL)
 	}
-	globalSettings.DefaultCache = cache
+
+	return cache
 }
 
 // GetSettings returns a copy of the current global settings.
@@ -303,6 +314,10 @@ func (s *Settings) SetStructuredOutputTemperature(temperature float32) {
 func (s *Settings) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	cacheDisabledExplicit.Store(false)
+	cacheTTLOverride.Store(0)
+
 	s.DefaultLM = nil
 	s.DefaultProvider = ""
 	s.DefaultModel = ""
@@ -311,7 +326,6 @@ func (s *Settings) Reset() {
 	s.MaxRetries = 3
 	s.EnableTracing = false
 	s.Collector = nil
-	s.DefaultCache = nil
 	s.CacheTTL = 0
 	s.CacheConfig = DefaultCacheConfiguration()
 	s.Logger = nil
@@ -321,10 +335,8 @@ func (s *Settings) Reset() {
 		Temperature: 0.0,
 	}
 
-	// Reinitialize default cache (must be done without lock)
-	s.mu.Unlock()
-	initDefaultCache()
-	s.mu.Lock()
+	// Lazy by default: no disk writes until first LM call.
+	s.DefaultCache = NewLazyCache(defaultCacheInitializer)
 }
 
 // SetCacheConfig sets the cache configuration.
