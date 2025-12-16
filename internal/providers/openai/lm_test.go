@@ -61,18 +61,53 @@ func TestOpenAI_IsOpenAI(t *testing.T) {
 
 func TestOpenAI_BuildParams_ReasoningModelsUseMaxCompletionTokens(t *testing.T) {
 	t.Parallel()
-	lm := &openAI{Model: "o1"}
 
-	params := lm.buildParams([]core.Message{{Role: "user", Content: "hi"}}, &core.GenerateOptions{MaxTokens: 123})
+	testCases := []struct {
+		name     string
+		model    string
+		expected bool // true = should use MaxCompletionTokens
+	}{
+		{"gpt-5.2 reasoning model", "gpt-5.2", true},
+		{"o1 reasoning model", "o1", true},
+		{"o1-mini reasoning model", "o1-mini", true},
+		{"o3 reasoning model", "o3", true},
+		{"gpt-5 reasoning model", "gpt-5", true},
+		{"gpt-5.1 reasoning model", "gpt-5.1", true},
+		{"codex-mini reasoning model", "codex-mini-latest", true},
+	}
 
-	if !params.MaxCompletionTokens.Valid() {
-		t.Fatal("expected MaxCompletionTokens to be set")
-	}
-	if params.MaxCompletionTokens.Value != 123 {
-		t.Errorf("expected MaxCompletionTokens 123, got %d", params.MaxCompletionTokens.Value)
-	}
-	if params.MaxTokens.Valid() {
-		t.Errorf("expected MaxTokens to be omitted for reasoning models, got %d", params.MaxTokens.Value)
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			lm := &openAI{Model: tc.model}
+
+			params := lm.buildParams([]core.Message{{Role: "user", Content: "hi"}}, &core.GenerateOptions{MaxTokens: 123})
+
+			if tc.expected {
+				// Should use MaxCompletionTokens
+				if !params.MaxCompletionTokens.Valid() {
+					t.Errorf("expected MaxCompletionTokens to be set for model %s", tc.model)
+				}
+				if params.MaxCompletionTokens.Value != 123 {
+					t.Errorf("expected MaxCompletionTokens 123 for model %s, got %d", tc.model, params.MaxCompletionTokens.Value)
+				}
+				if params.MaxTokens.Valid() {
+					t.Errorf("expected MaxTokens to be omitted for reasoning model %s, got %d", tc.model, params.MaxTokens.Value)
+				}
+			} else {
+				// Should use MaxTokens
+				if !params.MaxTokens.Valid() {
+					t.Errorf("expected MaxTokens to be set for model %s", tc.model)
+				}
+				if params.MaxTokens.Value != 123 {
+					t.Errorf("expected MaxTokens 123 for model %s, got %d", tc.model, params.MaxTokens.Value)
+				}
+				if params.MaxCompletionTokens.Valid() {
+					t.Errorf("expected MaxCompletionTokens to be omitted for non-reasoning model %s, got %d", tc.model, params.MaxCompletionTokens.Value)
+				}
+			}
+		})
 	}
 }
 
@@ -368,25 +403,50 @@ func TestOpenAI_IsReasoningModel(t *testing.T) {
 		model    string
 		expected bool
 	}{
+		// OpenAI reasoning models (Capabilities.Reasoning: true in catalog)
 		{"o1 basic", "o1", true},
 		{"o1 with dash", "o1-preview", true},
 		{"o1 mini", "o1-mini", true},
+		{"o1 pro", "o1-pro", true},
 		{"o3 basic", "o3", true},
-		{"o3 with dash", "o3-preview", true},
+		{"o3 deep research", "o3-deep-research", true},
 		{"o3 mini", "o3-mini", true},
-		{"o4 basic", "o4", true},
-		{"o4 mini", "o4-mini", true},
+		{"o3 pro", "o3-pro", true},
+		{"o4 basic", "o4-mini", true},
+		{"o4 mini deep research", "o4-mini-deep-research", true},
 		{"gpt-5 basic", "gpt-5", true},
-		{"gpt-5 with dash", "gpt-5-turbo", true},
+		{"gpt-5 chat", "gpt-5-chat-latest", true},
+		{"gpt-5 codex", "gpt-5-codex", true},
+		{"gpt-5 mini", "gpt-5-mini", true},
+		{"gpt-5 nano", "gpt-5-nano", true},
+		{"gpt-5 pro", "gpt-5-pro", true},
+		{"gpt-5.1", "gpt-5.1", true},
+		{"gpt-5.1 chat", "gpt-5.1-chat-latest", true},
+		{"gpt-5.1 codex", "gpt-5.1-codex", true},
+		{"gpt-5.1 codex max", "gpt-5.1-codex-max", true},
+		{"gpt-5.1 codex mini", "gpt-5.1-codex-mini", true},
+		{"gpt-5.2", "gpt-5.2", true},
+		{"gpt-5.2 chat", "gpt-5.2-chat-latest", true},
+		{"gpt-5.2 pro", "gpt-5.2-pro", true},
+		{"codex mini", "codex-mini-latest", true},
+
+		// OpenAI non-reasoning models
 		{"gpt-3.5-turbo", "gpt-3.5-turbo", false},
 		{"gpt-4", "gpt-4", false},
 		{"gpt-4-turbo", "gpt-4-turbo", false},
 		{"gpt-4o", "gpt-4o", false},
 		{"gpt-4o-mini", "gpt-4o-mini", false},
+		{"gpt-4.1", "gpt-4.1", false},
+		{"gpt-4.1-mini", "gpt-4.1-mini", false},
+		{"gpt-4.1-nano", "gpt-4.1-nano", false},
+
+		// Invalid models not in catalog
 		{"custom o1 model", "my-o1-custom", false},
 		{"o1 in middle", "model-o1-test", false},
+
+		// Case insensitivity
 		{"uppercase O1", "O1", true},
-		{"mixed case O3", "O3-pReViEw", true},
+		{"mixed case O3", "O3-pro", true},
 		{"uppercase GPT-5", "GPT-5", true},
 	}
 
