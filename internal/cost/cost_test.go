@@ -74,7 +74,7 @@ func TestSetModelPricing(t *testing.T) {
 	t.Parallel()
 	calc := NewCalculator()
 
-	customPricing := ModelPricing{
+	customPricing := Pricing{
 		PromptPrice:     10.0,
 		CompletionPrice: 20.0,
 	}
@@ -178,19 +178,27 @@ func TestCalculate_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestCalculator_NilMaps(t *testing.T) {
+func TestCalculator_NilOverrides(t *testing.T) {
 	t.Parallel()
 
-	calc := &Calculator{pricing: nil}
+	calc := &Calculator{overrides: nil}
 
+	// Should still work by falling back to catalog
 	cost := calc.Calculate("openai/gpt-4o", 1000, 500)
-	if cost != 0 {
-		t.Errorf("Calculate with nil pricing = %f, want 0", cost)
+	expected := 0.0075 // (1000 * 2.5 + 500 * 10) / 1M
+	if math.Abs(cost-expected) > 0.000001 {
+		t.Errorf("Calculate with nil overrides = %f, want %f", cost, expected)
 	}
 
 	ok := calc.HasPricing("openai/gpt-4o")
-	if ok {
-		t.Error("HasPricing with nil pricing = true, want false")
+	if !ok {
+		t.Error("HasPricing with nil overrides = false, want true (from catalog)")
+	}
+
+	// Unknown model should return 0
+	cost = calc.Calculate("unknown/model", 1000, 500)
+	if cost != 0 {
+		t.Errorf("Calculate unknown model = %f, want 0", cost)
 	}
 }
 
@@ -206,7 +214,7 @@ func TestConcurrentSetAndGet(t *testing.T) {
 		i := i
 		go func() {
 			defer wg.Done()
-			calc.SetModelPricing(fmt.Sprintf("concurrent/model-%d", i), ModelPricing{
+			calc.SetModelPricing(fmt.Sprintf("concurrent/model-%d", i), Pricing{
 				PromptPrice:     float64(i),
 				CompletionPrice: float64(i * 2),
 			})

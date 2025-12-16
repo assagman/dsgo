@@ -74,7 +74,7 @@ type (
 // Re-export model catalog and cost types
 type (
 	Model          = modelcatalog.Model
-	ModelPricing   = cost.ModelPricing
+	Pricing        = modelcatalog.Pricing
 	CostCalculator = cost.Calculator
 )
 

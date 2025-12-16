@@ -1212,7 +1212,7 @@ func (o *openrouterProvider_internal) IsOpenAI() bool            { return false 
 func (o *openrouterProvider_internal) SetCache(cache dsgo.Cache) { o.Cache = cache }
 
 // calculateCost calculates the cost based on model pricing and token counts
-func calculateCost(pricing *cost.ModelPricing, promptTokens, completionTokens int) float64 {
+func calculateCost(pricing *cost.Pricing, promptTokens, completionTokens int) float64 {
 	if pricing == nil {
 		return 0
 	}

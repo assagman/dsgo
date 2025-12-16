@@ -7,6 +7,12 @@ import (
 	"sync"
 )
 
+// Pricing represents model pricing in USD per 1M tokens.
+type Pricing struct {
+	PromptPrice     float64 // Price per 1M prompt tokens (USD)
+	CompletionPrice float64 // Price per 1M completion tokens (USD)
+}
+
 // Model describes a supported model identifier.
 //
 // ID must be in canonical form: "provider/model".
@@ -18,6 +24,7 @@ import (
 type Model struct {
 	ID      string
 	Aliases []string
+	Pricing Pricing
 }
 
 var (
@@ -159,6 +166,23 @@ func IsValidCanonical(modelID string) bool {
 func IsValid(idOrAlias string) bool {
 	_, ok := Resolve(idOrAlias)
 	return ok
+}
+
+// GetPricing returns the pricing for a model by canonical ID or alias.
+// Returns zero pricing and false if the model is not found.
+func GetPricing(idOrAlias string) (Pricing, bool) {
+	canonical, ok := Resolve(idOrAlias)
+	if !ok {
+		return Pricing{}, false
+	}
+
+	mu.RLock()
+	m, ok := models[canonical]
+	mu.RUnlock()
+	if !ok {
+		return Pricing{}, false
+	}
+	return m.Pricing, true
 }
 
 // ListModels returns all registered models, sorted by canonical ID.
