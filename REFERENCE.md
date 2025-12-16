@@ -17,7 +17,11 @@ Tables and quick lookups for DSGo.
 |---|---|
 | `DSGO_TIMEOUT` | Request timeout (e.g. `30s`) |
 | `DSGO_MAX_RETRIES` | Max retry attempts |
-| `DSGO_CACHE_SIZE` | LRU cache size |
+| `DSGO_CACHE` | Enable/disable caching (`true`/`false`) |
+| `DSGO_CACHE_MEMORY` | Memory cache capacity |
+| `DSGO_CACHE_DISK` | Enable/disable disk cache |
+| `DSGO_CACHEDIR` | Disk cache directory |
+| `DSGO_CACHE_LIMIT` | Disk cache size limit |
 | `DSGO_CACHE_TTL` | Cache TTL |
 
 ### Structured Outputs

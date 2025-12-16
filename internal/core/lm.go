@@ -57,6 +57,7 @@ type GenerateResult struct {
 	FinishReason string
 	Usage        Usage
 	Metadata     map[string]any // Provider-specific metadata (cache headers, rate limits, etc.)
+	CacheHit     bool           // True if this result was served from cache (DSPy parity)
 }
 
 // ToolCall represents a tool call made by the LM

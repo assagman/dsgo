@@ -4,6 +4,7 @@ Runnable examples for DSGo.
 
 | Folder | Goal | Run | Key concepts |
 |---|---|---|---|
+| `caching/` | Demonstrate memory, disk, and tiered caching | `cd examples/caching && go run main.go` | LMCache, DiskCache, TieredCache |
 | `codebase_analysis/` | Analyze a codebase with structured output | `cd examples/codebase_analysis && go run main.go` | Predict/CoT, signatures |
 | `modules/parallel/` | Show concurrent execution patterns | `cd examples/modules/parallel && go run main.go` | Parallel module |
 | `project_review/` | Multi-stage review pipeline | `cd examples/project_review && go run main.go` | Program composition |

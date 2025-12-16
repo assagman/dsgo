@@ -19,6 +19,11 @@ import (
 func newScriptedMockLMWithTransport(t *testing.T, steps ...mock.HTTPResponseStep) (dsgo.LM, *mock.ScriptedTransport) {
 	t.Helper()
 
+	// Disable caching for these tests to ensure mock responses are used
+	t.Setenv("DSGO_CACHE", "false")
+	dsgo.ResetConfig()
+	t.Cleanup(dsgo.ResetConfig)
+
 	transport := mock.NewScriptedTransport(steps...)
 	reset := mock.SetHTTPTransport(transport)
 	t.Cleanup(reset)

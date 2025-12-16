@@ -109,11 +109,18 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 	// Log API request start
 	logging.LogAPIRequest(ctx, "provider.OpenRouter", o.Model, promptLength)
 
+	if options == nil {
+		options = core.DefaultGenerateOptions()
+	}
+
+	cacheModelName := "openrouter/" + o.Model
+
 	// Check cache if available
 	if o.Cache != nil {
-		cacheKey := core.GenerateCacheKey(o.Model, messages, options)
+		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		if cached, ok := o.Cache.Get(cacheKey); ok {
-			return cached, nil
+			// Mark as cache hit and clear usage (no API call was made)
+			return core.MarkCacheHit(cached), nil
 		}
 	}
 
@@ -251,7 +258,7 @@ func (o *openRouter) Generate(ctx context.Context, messages []core.Message, opti
 
 	// Store in cache if available
 	if o.Cache != nil {
-		cacheKey := core.GenerateCacheKey(o.Model, messages, options)
+		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		o.Cache.Set(cacheKey, result)
 	}
 
@@ -613,6 +620,10 @@ func (o *openRouter) Stream(ctx context.Context, messages []core.Message, option
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
+
+		if options == nil {
+			options = core.DefaultGenerateOptions()
+		}
 
 		reqBody := o.buildRequest(messages, options)
 		reqBody["stream"] = true

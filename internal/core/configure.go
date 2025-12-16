@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -123,23 +124,68 @@ func WithStructuredOutputTemperature(temperature float32) Option {
 // WithCache enables caching with the specified capacity.
 // A cache with the given capacity will be created and auto-wired to all LM instances.
 // Uses the configured CacheTTL if set, otherwise no expiration.
+//
+// If capacity <= 0, caching is disabled entirely.
 func WithCache(capacity int) Option {
 	return func(s *Settings) {
+		if capacity <= 0 {
+			cacheDisabledExplicit.Store(true)
+			s.DefaultCache = nil
+			logging.GetLogger().Warn(context.Background(), "Caching disabled via WithCache(0)", map[string]any{
+				"module": "core.configure",
+			})
+			return
+		}
+
+		cacheDisabledExplicit.Store(false)
 		s.DefaultCache = NewLMCacheWithTTL(capacity, s.CacheTTL)
 	}
 }
 
 // WithCacheTTL sets the cache time-to-live for cached entries.
 // After the TTL expires, entries will be considered stale.
-// If a cache already exists, it will be recreated with the new TTL.
 func WithCacheTTL(ttl time.Duration) Option {
 	return func(s *Settings) {
 		s.CacheTTL = ttl
-		// Recreate cache if it already exists to apply new TTL
-		if s.DefaultCache != nil {
-			capacity := s.DefaultCache.Capacity()
-			s.DefaultCache = NewLMCacheWithTTL(capacity, ttl)
+		cacheTTLOverride.Store(int64(ttl))
+
+		// Only recreate memory-only caches; tiered caches are configured via WithTieredCache.
+		if lmCache, ok := s.DefaultCache.(*LMCache); ok {
+			s.DefaultCache = NewLMCacheWithTTL(lmCache.Capacity(), ttl)
 		}
+	}
+}
+
+// WithTieredCache creates a two-tier cache (memory + disk) with the given options.
+// This is the recommended way to configure caching for production use.
+// Memory cache provides fast access, disk cache provides persistence across restarts.
+func WithTieredCache(opts *TieredCacheOptions) Option {
+	return func(s *Settings) {
+		if opts == nil {
+			opts = DefaultTieredCacheOptions()
+		}
+
+		s.CacheConfig.EnableMemory = opts.EnableMemory
+		s.CacheConfig.MemoryCapacity = opts.MemoryCapacity
+		s.CacheConfig.EnableDisk = opts.EnableDisk
+		s.CacheConfig.DiskDir = opts.DiskDir
+		s.CacheConfig.DiskSizeLimit = opts.DiskSizeLimit
+		s.CacheConfig.DiskShards = opts.DiskShards
+
+		cacheDisabledExplicit.Store(false)
+
+		optsCopy := *opts
+		s.DefaultCache = NewLazyCache(func() Cache {
+			cache, err := NewTieredCache(&optsCopy)
+			if err != nil {
+				logging.GetLogger().Warn(context.Background(), "Failed to initialize tiered cache, falling back to memory-only", map[string]any{
+					"module": "core.configure",
+					"error":  err.Error(),
+				})
+				return NewLMCacheWithTTL(optsCopy.MemoryCapacity, optsCopy.MemoryTTL)
+			}
+			return cache
+		})
 	}
 }
 

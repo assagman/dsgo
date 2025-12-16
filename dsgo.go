@@ -56,6 +56,11 @@ type (
 	JSONLCollector        = core.JSONLCollector
 	CompositeCollector    = core.CompositeCollector
 	LMCache               = core.LMCache
+	DiskCache             = core.DiskCache
+	TieredCache           = core.TieredCache
+	TieredCacheOptions    = core.TieredCacheOptions
+	TieredCacheStats      = core.TieredCacheStats
+	CacheConfiguration    = core.CacheConfiguration
 	RequestMeta           = core.RequestMeta
 	ResponseMeta          = core.ResponseMeta
 	ErrorMeta             = core.ErrorMeta
@@ -160,7 +165,10 @@ var (
 	WithStructuredOutputTemperature = core.WithStructuredOutputTemperature
 	WithCache                       = core.WithCache
 	WithCacheTTL                    = core.WithCacheTTL
+	WithTieredCache                 = core.WithTieredCache
 	GenerateCacheKey                = core.GenerateCacheKey
+	GenerateCacheKeyWithIgnored     = core.GenerateCacheKeyWithIgnored
+	MarkCacheHit                    = core.MarkCacheHit
 	NewFallbackAdapter              = core.NewFallbackAdapter
 	NewFallbackAdapterWithChain     = core.NewFallbackAdapterWithChain
 	NewJSONAdapter                  = core.NewJSONAdapter
@@ -172,9 +180,14 @@ var (
 	NewJSONLCollector               = core.NewJSONLCollector
 	NewCompositeCollector           = core.NewCompositeCollector
 	NewLMCache                      = core.NewLMCache
+	NewLMCacheWithTTL               = core.NewLMCacheWithTTL
+	NewDiskCache                    = core.NewDiskCache
+	NewDiskCacheWithShards          = core.NewDiskCacheWithShards
+	NewTieredCache                  = core.NewTieredCache
+	DefaultTieredCacheOptions       = core.DefaultTieredCacheOptions
+	DefaultCacheConfiguration       = core.DefaultCacheConfiguration
 	DefaultGenerateOptions          = core.DefaultGenerateOptions
 	StripMarkers                    = core.StripMarkers
-	NewLMCacheWithTTL               = core.NewLMCacheWithTTL
 )
 
 // Re-export module functions

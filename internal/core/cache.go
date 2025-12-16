@@ -34,6 +34,80 @@ type Cache interface {
 	Stats() CacheStats
 }
 
+// LazyCache defers initializing the underlying cache until first use.
+// This avoids creating disk cache directories/files until an actual LM call happens.
+//
+// If initialization fails, it permanently falls back to a no-op cache.
+type LazyCache struct {
+	initOnce sync.Once
+	initFn   func() Cache
+	cache    Cache
+}
+
+func NewLazyCache(initFn func() Cache) *LazyCache {
+	if initFn == nil {
+		initFn = func() Cache { return nil }
+	}
+	return &LazyCache{initFn: initFn}
+}
+
+func (c *LazyCache) init() {
+	if c == nil {
+		return
+	}
+	c.initOnce.Do(func() {
+		c.cache = c.initFn()
+	})
+}
+
+func (c *LazyCache) Get(key string) (*GenerateResult, bool) {
+	c.init()
+	if c.cache == nil {
+		return nil, false
+	}
+	return c.cache.Get(key)
+}
+
+func (c *LazyCache) Set(key string, result *GenerateResult) {
+	c.init()
+	if c.cache == nil {
+		return
+	}
+	c.cache.Set(key, result)
+}
+
+func (c *LazyCache) Clear() {
+	c.init()
+	if c.cache == nil {
+		return
+	}
+	c.cache.Clear()
+}
+
+func (c *LazyCache) Size() int {
+	c.init()
+	if c.cache == nil {
+		return 0
+	}
+	return c.cache.Size()
+}
+
+func (c *LazyCache) Capacity() int {
+	c.init()
+	if c.cache == nil {
+		return 0
+	}
+	return c.cache.Capacity()
+}
+
+func (c *LazyCache) Stats() CacheStats {
+	c.init()
+	if c.cache == nil {
+		return CacheStats{}
+	}
+	return c.cache.Stats()
+}
+
 // CacheStats holds cache performance metrics
 type CacheStats struct {
 	Hits   int64
@@ -89,6 +163,17 @@ func NewLMCacheWithTTL(capacity int, ttl time.Duration) *LMCache {
 		items:    make(map[string]*list.Element),
 		lru:      list.New(),
 	}
+}
+
+// MarkCacheHit marks a result as served from cache and clears usage stats (following DSPy pattern).
+// This should be called on results returned from cache to accurately reflect that no API call was made.
+func MarkCacheHit(result *GenerateResult) *GenerateResult {
+	if result == nil {
+		return nil
+	}
+	result.CacheHit = true
+	result.Usage = Usage{} // Clear usage since no API call was made
+	return result
 }
 
 // Get retrieves a cached result by key
@@ -252,6 +337,17 @@ func (c *LMCache) Stats() CacheStats {
 	}
 }
 
+// DefaultIgnoredCacheKeyArgs are fields that are ignored when generating cache keys.
+// These match DSPy's default ignored fields for cache key generation.
+var DefaultIgnoredCacheKeyArgs = []string{
+	"api_key",
+	"api_base",
+	"base_url",
+	"apiKey",
+	"apiBase",
+	"baseUrl",
+}
+
 // GenerateCacheKey creates a deterministic cache key from LM request parameters
 //
 // Cache key components (all affect cache key generation):
@@ -262,11 +358,24 @@ func (c *LMCache) Stats() CacheStats {
 //   - Stop sequences (canonicalized/sorted)
 //   - Tools and ToolChoice (function calling)
 //   - FrequencyPenalty, PresencePenalty (repetition controls)
-//   - ProviderParams (provider-specific parameters)
+//   - ProviderParams (provider-specific parameters, excluding ignored fields)
 //
 // Maps (ResponseSchema, Tool.Parameters, ProviderParams) are canonicalized to ensure
 // deterministic key generation regardless of insertion order.
+//
+// By default, sensitive fields like api_key, api_base, base_url are ignored
+// (following DSPy's pattern) to ensure cache hits across different API configurations.
 func GenerateCacheKey(lmName string, messages []Message, options *GenerateOptions) string {
+	return GenerateCacheKeyWithIgnored(lmName, messages, options, DefaultIgnoredCacheKeyArgs)
+}
+
+// GenerateCacheKeyWithIgnored creates a cache key while ignoring specified fields.
+// This allows customization of which fields are excluded from the cache key.
+func GenerateCacheKeyWithIgnored(lmName string, messages []Message, options *GenerateOptions, ignoredArgs []string) string {
+	if options == nil {
+		options = DefaultGenerateOptions()
+	}
+
 	// Build a deterministic representation
 	keyData := struct {
 		LMName           string
@@ -322,11 +431,14 @@ func GenerateCacheKey(lmName string, messages []Message, options *GenerateOption
 		}
 	}
 
-	// Canonicalize ProviderParams map
+	// Canonicalize ProviderParams map (excluding ignored args)
 	if options.ProviderParams != nil {
-		canonical, err := canonicalizeMap(options.ProviderParams)
-		if err == nil {
-			keyData.ProviderParams = canonical
+		filteredParams := filterIgnoredArgs(options.ProviderParams, ignoredArgs)
+		if len(filteredParams) > 0 {
+			canonical, err := canonicalizeMap(filteredParams)
+			if err == nil {
+				keyData.ProviderParams = canonical
+			}
 		}
 	}
 
@@ -347,6 +459,26 @@ type canonicalTool struct {
 	Name        string
 	Description string
 	Parameters  []ToolParameter // Tool parameters (already deterministic)
+}
+
+// filterIgnoredArgs removes ignored keys from a map
+func filterIgnoredArgs(m map[string]any, ignoredArgs []string) map[string]any {
+	if m == nil || len(ignoredArgs) == 0 {
+		return m
+	}
+
+	ignored := make(map[string]bool, len(ignoredArgs))
+	for _, arg := range ignoredArgs {
+		ignored[arg] = true
+	}
+
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		if !ignored[k] {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 // canonicalizeMap converts a map to a deterministic JSON string
@@ -398,6 +530,7 @@ func deepCopyResult(r *GenerateResult) *GenerateResult {
 		Content:      r.Content,
 		FinishReason: r.FinishReason,
 		Usage:        r.Usage, // Usage is a value type, automatically copied
+		CacheHit:     r.CacheHit,
 	}
 
 	// Deep copy ToolCalls slice

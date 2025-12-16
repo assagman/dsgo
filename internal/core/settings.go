@@ -1,12 +1,47 @@
 package core
 
 import (
+	"context"
 	"maps"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/assagman/dsgo/internal/logging"
 )
+
+// CacheConfiguration holds advanced cache configuration options
+type CacheConfiguration struct {
+	// EnableMemory enables in-memory LRU caching (default: true)
+	EnableMemory bool
+
+	// MemoryCapacity is the maximum number of entries in memory cache
+	MemoryCapacity int
+
+	// EnableDisk enables persistent disk caching (default: false for backward compat)
+	EnableDisk bool
+
+	// DiskDir is the directory for disk cache (default: ~/.dsgo_cache)
+	DiskDir string
+
+	// DiskSizeLimit is the maximum size of disk cache in bytes (default: 30GB)
+	DiskSizeLimit int64
+
+	// DiskShards is the number of shards for concurrent disk access (default: 16)
+	DiskShards int
+}
+
+// DefaultCacheConfiguration returns sensible defaults for cache configuration
+func DefaultCacheConfiguration() CacheConfiguration {
+	return CacheConfiguration{
+		EnableMemory:   true,
+		MemoryCapacity: 1000,
+		EnableDisk:     true,                    // Enabled by default (DSPy parity), use DSGO_CACHE_DISK=false to disable
+		DiskDir:        "",                      // Will use ~/.dsgo_cache
+		DiskSizeLimit:  30 * 1024 * 1024 * 1024, // 30GB like DSPy
+		DiskShards:     16,
+	}
+}
 
 // StructuredOutputConfig holds configuration for structured output enforcement.
 type StructuredOutputConfig struct {
@@ -58,6 +93,9 @@ type Settings struct {
 	// CacheTTL is the cache time-to-live (0 = no expiry).
 	CacheTTL time.Duration
 
+	// CacheConfig holds advanced cache configuration options
+	CacheConfig CacheConfiguration
+
 	// Logger is the global logger instance.
 	Logger logging.Logger
 
@@ -65,19 +103,84 @@ type Settings struct {
 	StructuredOutput StructuredOutputConfig
 }
 
+var (
+	cacheDisabledExplicit atomic.Bool
+	cacheTTLOverride      atomic.Int64 // nanoseconds; 0 means unset
+)
+
 // globalSettings is the singleton instance of Settings.
 var globalSettings = &Settings{
 	DefaultTimeout: 30 * time.Second,
 	APIKey:         make(map[string]string),
 	MaxRetries:     3,
 	EnableTracing:  false,
-	CacheTTL:       0,   // No expiry by default
+	CacheTTL:       0, // No expiry by default
+	CacheConfig:    DefaultCacheConfiguration(),
 	Logger:         nil, // Will be set by logging package initialization
 	StructuredOutput: StructuredOutputConfig{
 		Enabled:     true, // Structured outputs enabled by default
 		MaxAttempts: 3,    // 1 initial + up to 2 retries
 		Temperature: 0.0,  // Deterministic
 	},
+
+	// Lazy by default: no disk writes until first LM call.
+	DefaultCache: NewLazyCache(defaultCacheInitializer),
+}
+
+func defaultCacheInitializer() Cache {
+	if cacheDisabledExplicit.Load() {
+		return nil
+	}
+
+	if cacheEnv := getEnv("DSGO_CACHE"); cacheEnv == "false" || cacheEnv == "0" {
+		return nil
+	}
+
+	opts := DefaultTieredCacheOptions()
+
+	// TTL: prefer explicit Configure() value, otherwise env.
+	if ttlNanos := cacheTTLOverride.Load(); ttlNanos > 0 {
+		opts.MemoryTTL = time.Duration(ttlNanos)
+	} else if ttlStr := getEnv("DSGO_CACHE_TTL"); ttlStr != "" {
+		if ttl, err := time.ParseDuration(ttlStr); err == nil {
+			opts.MemoryTTL = ttl
+		}
+	}
+
+	// Disk enable/disable
+	if diskEnv := getEnv("DSGO_CACHE_DISK"); diskEnv == "false" || diskEnv == "0" {
+		opts.EnableDisk = false
+	}
+
+	// Custom cache directory
+	if cacheDir := getEnv("DSGO_CACHEDIR"); cacheDir != "" {
+		opts.DiskDir = cacheDir
+	}
+
+	// Custom disk size limit
+	if limitStr := getEnv("DSGO_CACHE_LIMIT"); limitStr != "" {
+		if limit := parseInt(limitStr); limit > 0 {
+			opts.DiskSizeLimit = int64(limit)
+		}
+	}
+
+	// Custom memory capacity
+	if memStr := getEnv("DSGO_CACHE_MEMORY"); memStr != "" {
+		if mem := parseInt(memStr); mem > 0 {
+			opts.MemoryCapacity = mem
+		}
+	}
+
+	cache, err := NewTieredCache(opts)
+	if err != nil {
+		logging.GetLogger().Warn(context.Background(), "Failed to initialize tiered cache, falling back to memory-only", map[string]any{
+			"module": "core.settings",
+			"error":  err.Error(),
+		})
+		return NewLMCacheWithTTL(opts.MemoryCapacity, opts.MemoryTTL)
+	}
+
+	return cache
 }
 
 // GetSettings returns a copy of the current global settings.
@@ -99,6 +202,7 @@ func GetSettings() Settings {
 		Collector:        globalSettings.Collector,
 		DefaultCache:     globalSettings.DefaultCache,
 		CacheTTL:         globalSettings.CacheTTL,
+		CacheConfig:      globalSettings.CacheConfig,
 		Logger:           globalSettings.Logger,
 		StructuredOutput: globalSettings.StructuredOutput,
 	}
@@ -210,6 +314,10 @@ func (s *Settings) SetStructuredOutputTemperature(temperature float32) {
 func (s *Settings) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	cacheDisabledExplicit.Store(false)
+	cacheTTLOverride.Store(0)
+
 	s.DefaultLM = nil
 	s.DefaultProvider = ""
 	s.DefaultModel = ""
@@ -218,12 +326,22 @@ func (s *Settings) Reset() {
 	s.MaxRetries = 3
 	s.EnableTracing = false
 	s.Collector = nil
-	s.DefaultCache = nil
 	s.CacheTTL = 0
+	s.CacheConfig = DefaultCacheConfiguration()
 	s.Logger = nil
 	s.StructuredOutput = StructuredOutputConfig{
 		Enabled:     true,
 		MaxAttempts: 3,
 		Temperature: 0.0,
 	}
+
+	// Lazy by default: no disk writes until first LM call.
+	s.DefaultCache = NewLazyCache(defaultCacheInitializer)
+}
+
+// SetCacheConfig sets the cache configuration.
+func (s *Settings) SetCacheConfig(config CacheConfiguration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.CacheConfig = config
 }

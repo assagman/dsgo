@@ -114,9 +114,11 @@ func (m *mockHTTP) Generate(ctx context.Context, messages []core.Message, option
 		options = core.DefaultGenerateOptions()
 	}
 
+	cacheModelName := "mock/" + m.model
+
 	// Check cache if available.
 	if m.cache != nil {
-		cacheKey := core.GenerateCacheKey(m.model, messages, options)
+		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		if cached, ok := m.cache.Get(cacheKey); ok {
 			return cached, nil
 		}
@@ -167,7 +169,7 @@ func (m *mockHTTP) Generate(ctx context.Context, messages []core.Message, option
 
 	// Store in cache if available.
 	if m.cache != nil {
-		cacheKey := core.GenerateCacheKey(m.model, messages, options)
+		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		m.cache.Set(cacheKey, result)
 	}
 
