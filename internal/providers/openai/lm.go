@@ -274,10 +274,12 @@ func (o *openAI) convertMessages(messages []core.Message) []openai.ChatCompletio
 				toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(msg.ToolCalls))
 				for tcIndex, tc := range msg.ToolCalls {
 					argsBytes, _ := json.Marshal(tc.Arguments)
+					argsHash := sha256.Sum256(argsBytes)
+					argsHashStr := hex.EncodeToString(argsHash[:])[:16]
 					// Sanitize tool call ID to meet provider constraints.
 					// If the provider returns an empty/whitespace ID, we deterministically derive
-					// a collision-resistant ID from call index + content.
-					fallback := fmt.Sprintf("dsgo_toolcall_%d_%d_%s_%s", msgIndex, tcIndex, tc.Name, string(argsBytes))
+					// a collision-resistant ID from call index + a short hash of arguments.
+					fallback := fmt.Sprintf("dsgo_toolcall_%d_%d_%s_%s", msgIndex, tcIndex, tc.Name, argsHashStr)
 					sanitizedID := sanitizeToolCallIDWithFallback(tc.ID, fallback)
 					toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{
 						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
@@ -304,8 +306,10 @@ func (o *openAI) convertMessages(messages []core.Message) []openai.ChatCompletio
 				converted = append(converted, openai.AssistantMessage(msg.Content))
 			}
 		case "tool":
-			// Sanitize tool call ID to meet provider constraints
-			fallback := fmt.Sprintf("dsgo_tool_message_%d_%s", msgIndex, msg.Content)
+			// Sanitize tool call ID to meet provider constraints.
+			contentHash := sha256.Sum256([]byte(msg.Content))
+			contentHashStr := hex.EncodeToString(contentHash[:])[:16]
+			fallback := fmt.Sprintf("dsgo_tool_message_%d_%s", msgIndex, contentHashStr)
 			sanitizedToolID := sanitizeToolCallIDWithFallback(msg.ToolID, fallback)
 			// Note: ToolMessage signature is (content, toolCallID) - not (toolCallID, content)
 			converted = append(converted, openai.ToolMessage(msg.Content, sanitizedToolID))
@@ -406,8 +410,10 @@ func (o *openAI) parseResponse(resp *openai.ChatCompletion) (*core.GenerateResul
 			}
 			// Sanitize tool call ID to meet provider constraints.
 			// If the provider returns an empty/whitespace ID, derive a stable ID based on
-			// tool index + name + arguments.
-			fallback := fmt.Sprintf("dsgo_response_toolcall_%d_%s_%s", tcIndex, tc.Function.Name, tc.Function.Arguments)
+			// tool index + name + a short hash of arguments.
+			argHash := sha256.Sum256([]byte(tc.Function.Arguments))
+			argHashStr := hex.EncodeToString(argHash[:])[:16]
+			fallback := fmt.Sprintf("dsgo_response_toolcall_%d_%s_%s", tcIndex, tc.Function.Name, argHashStr)
 			sanitizedID := sanitizeToolCallIDWithFallback(tc.ID, fallback)
 			result.ToolCalls = append(result.ToolCalls, core.ToolCall{
 				ID:        sanitizedID,

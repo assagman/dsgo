@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/assagman/dsgo/internal/core"
@@ -557,6 +558,64 @@ func TestOpenRouter_Stream_Success(t *testing.T) {
 	}
 	if finalUsage.TotalTokens != 13 {
 		t.Errorf("expected 13 total tokens, got %d", finalUsage.TotalTokens)
+	}
+}
+
+func TestOpenRouter_Stream_RespectsBaseURLOverride(t *testing.T) {
+	t.Parallel()
+
+	var serverHit atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHit.Store(true)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		chunks := []string{
+			`data: {"id":"test","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}`,
+			`data: [DONE]`,
+		}
+
+		for _, chunk := range chunks {
+			_, _ = w.Write([]byte(chunk + "\n\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	client := openai.NewClient(
+		option.WithAPIKey("test-key"),
+		option.WithBaseURL("http://127.0.0.1:1"),
+	)
+
+	lm := &openRouter{
+		APIKey:  "test-key",
+		Model:   "gpt-4",
+		BaseURL: server.URL,
+		Client:  client,
+	}
+
+	chunkChan, errChan := lm.Stream(context.Background(), []core.Message{{Role: "user", Content: "Hello"}}, core.DefaultGenerateOptions())
+
+	var content string
+	for chunk := range chunkChan {
+		content += chunk.Content
+	}
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	default:
+	}
+
+	if !serverHit.Load() {
+		t.Fatal("expected Stream() to use BaseURL override")
+	}
+	if content != "Hello" {
+		t.Fatalf("expected content 'Hello', got %q", content)
 	}
 }
 
