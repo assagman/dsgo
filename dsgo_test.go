@@ -527,5 +527,3 @@ func TestTypedGenericFunctionality(t *testing.T) {
 		}
 	})
 }
-
-// TestModelCatalog verifies model catalog and cost APIs

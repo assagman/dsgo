@@ -49,16 +49,36 @@ func WithModel(model string) Option {
 // WithPricingTier sets the pricing tier used for cost estimation for a provider.
 //
 // This impacts only Usage.Cost computation and observability; it does not change provider behavior.
+//
+// Valid tiers are: "standard", "batch", "priority", "flex". Invalid tiers are ignored.
 func WithPricingTier(provider string, tier cost.PricingTier) Option {
 	return func(s *Settings) {
 		provider = strings.ToLower(strings.TrimSpace(provider))
 		if provider == "" {
 			return
 		}
+
+		// Validate tier
+		t := strings.ToLower(strings.TrimSpace(string(tier)))
+		var validTier cost.PricingTier
+		switch t {
+		case "standard", "default":
+			validTier = cost.TierStandard
+		case "batch":
+			validTier = cost.TierBatch
+		case "priority":
+			validTier = cost.TierPriority
+		case "flex":
+			validTier = cost.TierFlex
+		default:
+			// Ignore invalid tiers to prevent confusion
+			return
+		}
+
 		if s.PricingTierByProvider == nil {
 			s.PricingTierByProvider = map[string]cost.PricingTier{}
 		}
-		s.PricingTierByProvider[provider] = cost.PricingTier(strings.ToLower(string(tier)))
+		s.PricingTierByProvider[provider] = validTier
 	}
 }
 
@@ -97,6 +117,14 @@ func WithMaxRetries(retries int) Option {
 func WithTracing(enable bool) Option {
 	return func(s *Settings) {
 		s.EnableTracing = enable
+	}
+}
+
+// WithSkipModelValidation enables or disables strict model validation in NewLM.
+// Use this as an escape hatch for using models not yet in the catalog.
+func WithSkipModelValidation(skip bool) Option {
+	return func(s *Settings) {
+		s.SkipModelValidation = skip
 	}
 }
 

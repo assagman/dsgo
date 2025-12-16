@@ -22,6 +22,12 @@ var (
 func RegisterLM(provider string, factory LMFactory) {
 	registryLock.Lock()
 	defer registryLock.Unlock()
+
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == "" {
+		return
+	}
+
 	lmRegistry[provider] = factory
 }
 
@@ -60,7 +66,9 @@ func NewLM(ctx context.Context, model string) (LM, error) {
 	}
 
 	canonicalModel := provider + "/" + targetModel
-	if !modelcatalog.IsValidCanonical(canonicalModel) {
+
+	// Check if model is valid (unless validation is skipped)
+	if !GetSettings().SkipModelValidation && !modelcatalog.IsValidCanonical(canonicalModel) {
 		candidates := modelcatalog.ListModelsByProvider(provider)
 		if len(candidates) > 0 {
 			max := 5

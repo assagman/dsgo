@@ -173,6 +173,7 @@ var (
 	WithModel                       = core.WithModel
 	WithTimeout                     = core.WithTimeout
 	WithLM                          = core.WithLM
+	WithSkipModelValidation         = core.WithSkipModelValidation
 	WithPricingTier                 = core.WithPricingTier
 	WithAPIKey                      = core.WithAPIKey
 	WithMaxRetries                  = core.WithMaxRetries

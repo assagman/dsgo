@@ -1360,3 +1360,26 @@ func TestLMWrapper_Generate_UnknownPricing_Warns(t *testing.T) {
 		t.Fatalf("Expected model field set, got %v", fields["model"])
 	}
 }
+
+func TestCanonicalModelID(t *testing.T) {
+	tests := []struct {
+		provider string
+		name     string
+		want     string
+	}{
+		{"openai", "gpt-4o", "openai/gpt-4o"},
+		{"openai", "openai/gpt-4o", "openai/gpt-4o"},
+		{"openrouter", "openai/gpt-4o", "openrouter/openai/gpt-4o"},
+		{"openrouter", "openrouter/openai/gpt-4o", "openrouter/openai/gpt-4o"},
+		{"mixedCase", "SomeModel", "mixedcase/somemodel"},
+		{"", "model", "model"},
+		{"provider", "", "provider/"},
+	}
+
+	for _, tt := range tests {
+		got := canonicalModelID(tt.provider, tt.name)
+		if got != tt.want {
+			t.Errorf("canonicalModelID(%q, %q) = %q, want %q", tt.provider, tt.name, got, tt.want)
+		}
+	}
+}
