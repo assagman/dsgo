@@ -17,5 +17,5 @@ Runnable examples for DSGo.
 | `yaml_program/` | Declarative pipeline builder | `cd examples/yaml_program && go run main.go` | YAML config, MCP |
 
 Notes:
-- Use provider-prefixed model IDs (e.g. `openai/gpt-4o-mini`, `openrouter/anthropic/claude-3-opus`).
+- Use provider-prefixed model IDs (e.g. `openai/gpt-4o-mini`, `openrouter/google/gemini-2.5-flash-lite-preview-09-2025`).
 - Most examples require `OPENAI_API_KEY` or `OPENROUTER_API_KEY`.

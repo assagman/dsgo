@@ -44,7 +44,7 @@ func TestPackageInit(t *testing.T) {
 		},
 		{
 			name:           "OpenRouter provider registered",
-			model:          "openrouter/anthropic/claude-3.5-sonnet",
+			model:          "openrouter/anthropic/claude-3.7-sonnet",
 			shouldWork:     true,
 			expectedError:  "",
 			skipIfNoAPIKey: true,

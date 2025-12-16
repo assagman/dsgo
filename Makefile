@@ -72,7 +72,7 @@ check-eof:
 
 clean:
 	rm -f coverage.out integration_coverage.out
-	go clean -testcache
+	go clean -cache -testcache
 
 install-hooks:
 	./scripts/install-hooks.sh

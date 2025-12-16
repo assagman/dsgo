@@ -62,7 +62,7 @@ func (c *Calculator) GetPricing(model string) (Pricing, bool) {
 	}
 	c.mu.RUnlock()
 
-	return modelcatalog.GetPricing(model)
+	return modelcatalog.GetPricing(modelKey)
 }
 
 // HasPricing checks if pricing is available for a model.

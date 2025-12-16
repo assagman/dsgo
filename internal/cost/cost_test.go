@@ -31,6 +31,13 @@ func TestCalculate(t *testing.T) {
 			wantCost:         0.0125, // (10000 * 0.5 + 5000 * 1.5) / 1M
 		},
 		{
+			name:             "gpt-4o-mini alias resolves",
+			model:            "gpt-4o-mini",
+			promptTokens:     1000,
+			completionTokens: 500,
+			wantCost:         0.00045, // (1000 * 0.15 + 500 * 0.6) / 1M
+		},
+		{
 			name:             "openrouter gemini",
 			model:            "openrouter/google/gemini-2.5-flash",
 			promptTokens:     1000,
@@ -86,6 +93,30 @@ func TestSetModelPricing(t *testing.T) {
 
 	if math.Abs(cost-expected) > 0.000001 {
 		t.Errorf("Calculate() = %f, want %f", cost, expected)
+	}
+}
+
+func TestSetModelPricing_OverrideTakesPrecedence(t *testing.T) {
+	t.Parallel()
+	calc := NewCalculator()
+
+	// Override an existing catalog model.
+	calc.SetModelPricing("openai/gpt-4o-mini", Pricing{PromptPrice: 100, CompletionPrice: 200})
+
+	cost := calc.Calculate("gpt-4o-mini", 1000, 500)
+	expected := 0.2 // (1000 * 100 + 500 * 200) / 1M
+	if math.Abs(cost-expected) > 0.000001 {
+		t.Errorf("Calculate() = %f, want %f", cost, expected)
+	}
+}
+
+func TestGetPricing_UnknownModel(t *testing.T) {
+	t.Parallel()
+	calc := NewCalculator()
+
+	_, ok := calc.GetPricing("unknown/model")
+	if ok {
+		t.Fatal("expected ok=false for unknown model")
 	}
 }
 

@@ -565,11 +565,19 @@ Supported models are validated via the built-in model catalog:
 fmt.Println(dsgo.IsValidModel("openai/gpt-4o-mini"))
 for _, m := range dsgo.ListModelsByProvider("openai") {
     pricing, ok := dsgo.DefaultCostCalculator.GetPricing(m.ID)
-    if ok {
-        fmt.Println(m.ID, pricing)
-    } else {
+    if !ok {
         fmt.Println(m.ID)
+        continue
     }
+
+    fmt.Printf("%s price=%+v ctx=%d out=%d tools=%v json=%v\n",
+        m.ID,
+        pricing,
+        m.Limits.ContextTokens,
+        m.Limits.OutputTokens,
+        m.Capabilities.ToolCall,
+        m.Capabilities.StructuredOutput,
+    )
 }
 ```
 

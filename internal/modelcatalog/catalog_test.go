@@ -26,10 +26,62 @@ func TestResolve_Defaults(t *testing.T) {
 	}
 }
 
+func TestOpenAIModelFields_Populated(t *testing.T) {
+	t.Parallel()
+
+	m, ok := GetModel("openai/gpt-4o-mini")
+	if !ok {
+		t.Fatal("expected openai/gpt-4o-mini to exist")
+	}
+
+	if m.Metadata.Name == "" {
+		t.Error("expected Metadata.Name to be populated")
+	}
+	if m.Limits.ContextTokens <= 0 {
+		t.Errorf("expected Limits.ContextTokens > 0, got %d", m.Limits.ContextTokens)
+	}
+	if m.Limits.OutputTokens <= 0 {
+		t.Errorf("expected Limits.OutputTokens > 0, got %d", m.Limits.OutputTokens)
+	}
+	if m.Pricing.PromptPrice <= 0 {
+		t.Errorf("expected Pricing.PromptPrice > 0, got %v", m.Pricing.PromptPrice)
+	}
+	if m.Pricing.CompletionPrice <= 0 {
+		t.Errorf("expected Pricing.CompletionPrice > 0, got %v", m.Pricing.CompletionPrice)
+	}
+	if len(m.Modalities.Input) == 0 {
+		t.Error("expected Modalities.Input to be populated")
+	}
+	if len(m.Modalities.Output) == 0 {
+		t.Error("expected Modalities.Output to be populated")
+	}
+}
+
+func TestNormalizeStringSlice(t *testing.T) {
+	t.Parallel()
+
+	got := normalizeStringSlice([]string{" Image ", "text", "TEXT", ""})
+	want := []string{"image", "text", "text"}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("[%d] = %q, want %q (got=%v)", i, got[i], want[i], got)
+		}
+	}
+}
+
 func TestRegisterModel_Idempotent(t *testing.T) {
 	t.Parallel()
 
-	m := Model{ID: "testprovider/test-model", Aliases: []string{"test-model"}}
+	m := Model{
+		ID:         "testprovider/test-model",
+		Aliases:    []string{"test-model"},
+		Limits:     Limits{ContextTokens: 1, OutputTokens: 1},
+		Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}},
+		Metadata:   Metadata{Name: "Test Model", Family: "test"},
+	}
 	if err := RegisterModel(m); err != nil {
 		t.Fatalf("RegisterModel err = %v", err)
 	}
@@ -51,7 +103,44 @@ func TestRegisterModel_EmptyID(t *testing.T) {
 		{"missing provider", Model{ID: "model-only"}, true},
 		{"missing model", Model{ID: "provider/"}, true},
 		{"slash only", Model{ID: "/"}, true},
-		{"valid model", Model{ID: "provider/model"}, false},
+		{"valid model", Model{ID: "provider/model", Limits: Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: Metadata{Name: "Valid Model", Family: "test"}}, false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := RegisterModel(tt.model)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("RegisterModel() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestRegisterModel_MissingRequiredFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		model   Model
+		wantErr bool
+	}{
+		{
+			name:    "missing context tokens",
+			model:   Model{ID: "req/context", Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: Metadata{Name: "X"}},
+			wantErr: true,
+		},
+		{
+			name:    "missing modalities",
+			model:   Model{ID: "req/modalities", Limits: Limits{ContextTokens: 1, OutputTokens: 1}, Metadata: Metadata{Name: "X"}},
+			wantErr: true,
+		},
+		{
+			name:    "missing metadata name",
+			model:   Model{ID: "req/metadata", Limits: Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}}},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -69,12 +158,12 @@ func TestRegisterModel_EmptyID(t *testing.T) {
 func TestRegisterModel_ConflictingAliases(t *testing.T) {
 	t.Parallel()
 
-	m1 := Model{ID: "provider1/model1", Aliases: []string{"shared-alias"}}
+	m1 := Model{ID: "provider1/model1", Aliases: []string{"shared-alias"}, Limits: Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: Metadata{Name: "Model 1", Family: "test"}}
 	if err := RegisterModel(m1); err != nil {
 		t.Fatalf("RegisterModel(m1) err = %v", err)
 	}
 
-	m2 := Model{ID: "provider2/model2", Aliases: []string{"shared-alias"}}
+	m2 := Model{ID: "provider2/model2", Aliases: []string{"shared-alias"}, Limits: Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: Metadata{Name: "Model 2", Family: "test"}}
 	err := RegisterModel(m2)
 	if err == nil {
 		t.Fatal("expected error registering conflicting alias")
@@ -84,7 +173,7 @@ func TestRegisterModel_ConflictingAliases(t *testing.T) {
 func TestRegisterAlias(t *testing.T) {
 	t.Parallel()
 
-	m := Model{ID: "provider/alias-test-model"}
+	m := Model{ID: "provider/alias-test-model", Limits: Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: Metadata{Name: "Alias Test Model", Family: "test"}}
 	if err := RegisterModel(m); err != nil {
 		t.Fatalf("RegisterModel err = %v", err)
 	}
@@ -206,8 +295,11 @@ func TestConcurrentRegistration(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < modelsPerGoroutine; j++ {
 				m := Model{
-					ID:      fmt.Sprintf("concurrent-test/model-%d-%d", i, j),
-					Aliases: []string{fmt.Sprintf("concurrent-alias-%d-%d", i, j)},
+					ID:         fmt.Sprintf("concurrent-test/model-%d-%d", i, j),
+					Aliases:    []string{fmt.Sprintf("concurrent-alias-%d-%d", i, j)},
+					Limits:     Limits{ContextTokens: 1, OutputTokens: 1},
+					Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}},
+					Metadata:   Metadata{Name: "Concurrent Test", Family: "test"},
 				}
 				_ = RegisterModel(m)
 			}
@@ -225,7 +317,7 @@ func TestConcurrentRegistration(t *testing.T) {
 func TestConcurrentResolve(t *testing.T) {
 	t.Parallel()
 
-	m := Model{ID: "concurrent-read/model", Aliases: []string{"concurrent-read-alias"}}
+	m := Model{ID: "concurrent-read/model", Aliases: []string{"concurrent-read-alias"}, Limits: Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: Metadata{Name: "Concurrent Read", Family: "test"}}
 	if err := RegisterModel(m); err != nil {
 		t.Fatalf("RegisterModel err = %v", err)
 	}

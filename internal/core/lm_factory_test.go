@@ -85,8 +85,12 @@ func TestNewLM(t *testing.T) {
 	})
 
 	// Authoritative model catalog requires explicit registration.
-	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "testprovider/test-model"})
-	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "provider2/model-2"})
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "testprovider/test-model", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Test Model", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(testprovider/test-model) err = %v", err)
+	}
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "provider2/model-2", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Model 2", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(provider2/model-2) err = %v", err)
+	}
 
 	ctx := context.Background()
 
@@ -321,7 +325,9 @@ func TestLMFactory_WithCollector(t *testing.T) {
 	}
 	RegisterLM("test-provider", testLMFactory)
 	RegisterLM("openrouter", testLMFactory)
-	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model"})
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Test Model", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(test-provider/test-model) err = %v", err)
+	}
 
 	ctx := context.Background()
 	collector := NewMemoryCollector(10)
@@ -381,7 +387,9 @@ func TestLMFactory_WithoutCollector(t *testing.T) {
 	}
 	RegisterLM("test-provider", testLMFactory)
 	RegisterLM("openrouter", testLMFactory)
-	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model"})
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Test Model", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(test-provider/test-model) err = %v", err)
+	}
 
 	ctx := context.Background()
 
@@ -433,7 +441,9 @@ func TestNewLM_WithCache(t *testing.T) {
 	RegisterLM("openrouter", func(model string) LM {
 		return NewMockLM()
 	})
-	_ = modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model"})
+	if err := modelcatalog.RegisterModel(modelcatalog.Model{ID: "test-provider/test-model", Limits: modelcatalog.Limits{ContextTokens: 1, OutputTokens: 1}, Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}}, Metadata: modelcatalog.Metadata{Name: "Test Model", Family: "test"}}); err != nil {
+		t.Fatalf("RegisterModel(test-provider/test-model) err = %v", err)
+	}
 
 	ctx := context.Background()
 
@@ -492,7 +502,7 @@ func TestNewLM_WithModelStringArg(t *testing.T) {
 	}{
 		{"explicit openai gpt-4o", "openai/gpt-4o", false},
 		{"explicit openai gpt-4o-mini", "openai/gpt-4o-mini", false},
-		{"explicit meta model via openrouter", "openrouter/meta-llama/llama-3.3-70b-instruct", false},
+		{"explicit meta model via openrouter", "openrouter/meta-llama/llama-3.3-70b-instruct:free", false},
 		{"explicit unknown model", "unknownprovider/model", true},
 	}
 

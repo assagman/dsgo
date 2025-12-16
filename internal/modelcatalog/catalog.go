@@ -8,9 +8,44 @@ import (
 )
 
 // Pricing represents model pricing in USD per 1M tokens.
+//
+// Note: not all models expose cache pricing; CacheReadPrice/CacheWritePrice will be zero in that case.
 type Pricing struct {
 	PromptPrice     float64 // Price per 1M prompt tokens (USD)
 	CompletionPrice float64 // Price per 1M completion tokens (USD)
+	CacheReadPrice  float64 // Price per 1M cached prompt tokens (USD)
+	CacheWritePrice float64 // Price per 1M tokens written to cache (USD)
+}
+
+// Limits represents token limits for a model.
+type Limits struct {
+	ContextTokens int
+	OutputTokens  int
+}
+
+// Capabilities describes a model's supported features.
+type Capabilities struct {
+	Attachment       bool
+	Reasoning        bool
+	ToolCall         bool
+	StructuredOutput bool
+	Temperature      bool
+}
+
+// Modalities describes supported input and output modalities.
+type Modalities struct {
+	Input  []string
+	Output []string
+}
+
+// Metadata contains additional information about a model.
+type Metadata struct {
+	Name        string
+	Family      string
+	Knowledge   string
+	ReleaseDate string
+	LastUpdated string
+	OpenWeights bool
 }
 
 // Model describes a supported model identifier.
@@ -22,9 +57,13 @@ type Pricing struct {
 // The catalog is authoritative for dsgo.NewLM/core.NewLM: models must be present
 // here to be considered valid.
 type Model struct {
-	ID      string
-	Aliases []string
-	Pricing Pricing
+	ID           string
+	Aliases      []string
+	Pricing      Pricing
+	Limits       Limits
+	Capabilities Capabilities
+	Modalities   Modalities
+	Metadata     Metadata
 }
 
 var (
@@ -34,6 +73,14 @@ var (
 )
 
 // RegisterModel registers a supported model.
+//
+// The catalog is authoritative for dsgo.NewLM/core.NewLM: models must be present
+// here to be considered valid.
+//
+// Required fields:
+// - Limits.ContextTokens must be positive.
+// - Modalities.Input and Modalities.Output must be populated.
+// - Metadata.Name must be populated.
 //
 // Registration is idempotent: re-registering the exact same model is allowed.
 // Attempting to re-register an existing model with different aliases returns an error.
@@ -55,6 +102,18 @@ func RegisterModel(m Model) error {
 	// Normalize stored form
 	m.ID = canonical
 	m.Aliases = aliases
+	m.Modalities.Input = normalizeStringSlice(m.Modalities.Input)
+	m.Modalities.Output = normalizeStringSlice(m.Modalities.Output)
+
+	if m.Limits.ContextTokens <= 0 {
+		return fmt.Errorf("model %q: Limits.ContextTokens must be positive", canonical)
+	}
+	if len(m.Modalities.Input) == 0 || len(m.Modalities.Output) == 0 {
+		return fmt.Errorf("model %q: Modalities.Input/Output must be populated", canonical)
+	}
+	if strings.TrimSpace(m.Metadata.Name) == "" {
+		return fmt.Errorf("model %q: Metadata.Name must be populated", canonical)
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -171,18 +230,27 @@ func IsValid(idOrAlias string) bool {
 // GetPricing returns the pricing for a model by canonical ID or alias.
 // Returns zero pricing and false if the model is not found.
 func GetPricing(idOrAlias string) (Pricing, bool) {
-	canonical, ok := Resolve(idOrAlias)
+	m, ok := GetModel(idOrAlias)
 	if !ok {
 		return Pricing{}, false
+	}
+	return m.Pricing, true
+}
+
+// GetModel returns the model by canonical ID or alias.
+func GetModel(idOrAlias string) (Model, bool) {
+	canonical, ok := Resolve(idOrAlias)
+	if !ok {
+		return Model{}, false
 	}
 
 	mu.RLock()
 	m, ok := models[canonical]
 	mu.RUnlock()
 	if !ok {
-		return Pricing{}, false
+		return Model{}, false
 	}
-	return m.Pricing, true
+	return m, true
 }
 
 // ListModels returns all registered models, sorted by canonical ID.
@@ -244,6 +312,27 @@ func modelsEquivalent(a, b Model) bool {
 	if a.ID != b.ID {
 		return false
 	}
+
+	if a.Pricing != b.Pricing {
+		return false
+	}
+	if a.Limits != b.Limits {
+		return false
+	}
+	if a.Capabilities != b.Capabilities {
+		return false
+	}
+	if a.Metadata != b.Metadata {
+		return false
+	}
+
+	if !stringSlicesEquivalentNormalized(a.Modalities.Input, b.Modalities.Input) {
+		return false
+	}
+	if !stringSlicesEquivalentNormalized(a.Modalities.Output, b.Modalities.Output) {
+		return false
+	}
+
 	if len(a.Aliases) != len(b.Aliases) {
 		return false
 	}
@@ -258,4 +347,31 @@ func modelsEquivalent(a, b Model) bool {
 		}
 	}
 	return true
+}
+
+func stringSlicesEquivalentNormalized(a, b []string) bool {
+	aNorm := normalizeStringSlice(a)
+	bNorm := normalizeStringSlice(b)
+	if len(aNorm) != len(bNorm) {
+		return false
+	}
+	for i := range aNorm {
+		if aNorm[i] != bNorm[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeStringSlice(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		v = strings.ToLower(strings.TrimSpace(v))
+		if v == "" {
+			continue
+		}
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
 }

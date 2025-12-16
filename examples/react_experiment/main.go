@@ -25,7 +25,6 @@ func main() {
 		"openrouter/openai/gpt-4.1-2025-04-14",
 		"openrouter/google/gemini-2.5-flash",
 		"openrouter/google/gemini-2.5-flash-lite-preview-09-2025",
-		"openrouter/anthropic/claude-haiku-4.5",
 		"openrouter/x-ai/grok-code-fast-1",
 		"openrouter/deepseek/deepseek-v3.2",
 		"openrouter/qwen/qwen3-next-80b-a3b-instruct",

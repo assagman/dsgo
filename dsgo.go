@@ -75,6 +75,10 @@ type (
 type (
 	Model          = modelcatalog.Model
 	Pricing        = modelcatalog.Pricing
+	Limits         = modelcatalog.Limits
+	Capabilities   = modelcatalog.Capabilities
+	Modalities     = modelcatalog.Modalities
+	Metadata       = modelcatalog.Metadata
 	CostCalculator = cost.Calculator
 )
 
@@ -217,6 +221,7 @@ var (
 	IsValidCanonicalModel = modelcatalog.IsValidCanonical
 	ListModels            = modelcatalog.ListModels
 	ListModelsByProvider  = modelcatalog.ListModelsByProvider
+	GetModel              = modelcatalog.GetModel
 	DefaultCostCalculator = cost.DefaultCalculator
 	CalculateCost         = cost.Calculate
 )
