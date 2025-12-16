@@ -1,15 +1,13 @@
 package openai
 
 import (
-	"bufio"
-	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -17,8 +15,17 @@ import (
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/jsonutil"
 	"github.com/assagman/dsgo/internal/logging"
-	"github.com/assagman/dsgo/internal/retry"
+	"github.com/assagman/dsgo/internal/providers/util"
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/shared"
 )
+
+// Tool call ID constraints:
+// - OpenAI: max 40 characters, alphanumeric + underscore + hyphen
+const maxToolCallIDLength = 40
+
+var toolCallIDPattern = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
 func init() {
 	core.RegisterLM("openai", func(model string) core.LM {
@@ -30,22 +37,19 @@ const (
 	defaultBaseURL = "https://api.openai.com/v1"
 )
 
-// openAI implements the LM interface for OpenAI models
+// openAI implements the LM interface for OpenAI models using the official SDK
 type openAI struct {
 	APIKey  string
 	Model   string
 	BaseURL string
-	Client  *http.Client
+	Client  openai.Client
 	Cache   core.Cache
 }
 
-// newOpenAI creates a new OpenAI LM
+// newOpenAI creates a new OpenAI LM using the official SDK
 func newOpenAI(model string) *openAI {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 
-	// Default timeout 300s (5 min) for LLM responses which can be slow with large outputs.
-	// Override via DSGO_HTTP_TIMEOUT_MS if needed.
-	// Note: This timeout includes body reading, so it must be long enough for streaming.
 	timeout := 300 * time.Second
 	if v := os.Getenv("DSGO_HTTP_TIMEOUT_MS"); v != "" {
 		if d, err := time.ParseDuration(v + "ms"); err == nil && d > 0 {
@@ -53,11 +57,17 @@ func newOpenAI(model string) *openAI {
 		}
 	}
 
+	client := openai.NewClient(
+		option.WithAPIKey(apiKey),
+		option.WithBaseURL(defaultBaseURL),
+		option.WithRequestTimeout(timeout),
+	)
+
 	return &openAI{
 		APIKey:  apiKey,
 		Model:   model,
 		BaseURL: defaultBaseURL,
-		Client:  &http.Client{Timeout: timeout},
+		Client:  client,
 	}
 }
 
@@ -94,24 +104,15 @@ func (o *openAI) SetCache(cache core.Cache) {
 	o.Cache = cache
 }
 
-func retryOptionsFromConfig(cfg *core.RetryConfig) *retry.Options {
-	if cfg == nil {
-		return nil
-	}
-	return retry.NewOptions(cfg.MaxRetries, cfg.InitialBackoff, cfg.MaxBackoff, cfg.JitterFactor)
-}
-
-// Generate generates a response from OpenAI
+// Generate generates a response from OpenAI using the official SDK
 func (o *openAI) Generate(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 	startTime := time.Now()
 
-	// Calculate prompt length for logging
 	promptLength := 0
 	for _, msg := range messages {
 		promptLength += len(msg.Content)
 	}
 
-	// Log API request start
 	logging.LogAPIRequest(ctx, "provider.OpenAI", o.Model, promptLength)
 
 	if options == nil {
@@ -120,7 +121,6 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 
 	cacheModelName := "openai/" + o.Model
 
-	// Check cache if available
 	if o.Cache != nil {
 		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		if cached, ok := o.Cache.Get(cacheKey); ok {
@@ -129,80 +129,37 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 		}
 	}
 
-	reqBody := o.buildRequest(messages, options)
+	params := o.buildParams(messages, options)
 
-	bodyBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	var rawResp *http.Response
+	reqOpts := []option.RequestOption{option.WithResponseInto(&rawResp)}
+	if o.BaseURL != "" {
+		reqOpts = append(reqOpts, option.WithBaseURL(o.BaseURL))
+	}
+	if options.RetryConfig != nil {
+		reqOpts = append(reqOpts, option.WithMaxRetries(options.RetryConfig.MaxRetries))
 	}
 
-	var retryOpts *retry.Options
-	if options != nil {
-		retryOpts = retryOptionsFromConfig(options.RetryConfig)
-	}
-
-	resp, err := retry.WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+o.APIKey)
-		return o.Client.Do(req)
-	}, retryOpts)
+	chatCompletion, err := o.Client.Chat.Completions.New(ctx, params, reqOpts...)
 	if err != nil {
 		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
-		return nil, err
-	}
-
-	// Read response body for logging and decoding
-	bodyBytes, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, readErr)
-		return nil, fmt.Errorf("failed to read response body: %w", readErr)
-	}
-
-	// Save raw request/response exchange if debug enabled
-	if debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES"); debugEnv == "1" || debugEnv == "true" {
-		if err := saveRawExchange(o.Model, reqBody, resp.StatusCode, resp.Header, bodyBytes, nil); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save raw exchange: %v\n", err)
-		}
-	}
-
-	var apiResp openAIResponse
-	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
-		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
-		// Save failed response for debugging
-		if err := saveRawExchange(o.Model+"_DECODE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
-		}
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	result, err := o.parseResponse(&apiResp)
+	result, err := o.parseResponse(chatCompletion)
 	if err != nil {
 		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
-		// Save raw response on parse error
-		if err := saveRawExchange(o.Model+"_PARSE_FAILED", reqBody, resp.StatusCode, resp.Header, bodyBytes, err); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save failed exchange: %v\n", err)
-		}
 		return nil, err
 	}
 
-	// Extract metadata from response headers
-	result.Metadata = o.extractMetadata(resp.Header)
+	if rawResp != nil {
+		if metadata := o.extractMetadata(rawResp.Header); len(metadata) > 0 {
+			result.Metadata = metadata
+		}
+	}
 
-	// Log API response
 	duration := time.Since(startTime)
-	logging.LogAPIResponse(ctx, "provider.OpenAI", o.Model, resp.StatusCode, duration, logging.Usage{
+	logging.LogAPIResponse(ctx, "provider.OpenAI", o.Model, 200, duration, logging.Usage{
 		PromptTokens:     result.Usage.PromptTokens,
 		CompletionTokens: result.Usage.CompletionTokens,
 		TotalTokens:      result.Usage.TotalTokens,
@@ -210,7 +167,6 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 		Latency:          result.Usage.Latency,
 	})
 
-	// Store in cache if available
 	if o.Cache != nil {
 		cacheKey := core.GenerateCacheKey(cacheModelName, messages, options)
 		o.Cache.Set(cacheKey, result)
@@ -219,141 +175,157 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 	return result, nil
 }
 
-func (o *openAI) buildRequest(messages []core.Message, options *core.GenerateOptions) map[string]any {
-	req := map[string]any{
-		"model":    o.Model,
-		"messages": o.convertMessages(messages),
+func (o *openAI) buildParams(messages []core.Message, options *core.GenerateOptions) openai.ChatCompletionNewParams {
+	params := openai.ChatCompletionNewParams{
+		Model:    o.Model,
+		Messages: o.convertMessages(messages),
+	}
+
+	if options == nil {
+		return params
 	}
 
 	if options.Temperature > 0 {
-		req["temperature"] = options.Temperature
+		params.Temperature = openai.Float(options.Temperature)
 	}
+
 	if options.MaxTokens > 0 {
-		// Use max_completion_tokens for reasoning models (o-series, gpt-5 series)
-		// Use max_tokens for other models
 		if o.isReasoningModel() {
-			req["max_completion_tokens"] = options.MaxTokens
+			params.MaxCompletionTokens = openai.Int(int64(options.MaxTokens))
 		} else {
-			req["max_tokens"] = options.MaxTokens
+			params.MaxTokens = openai.Int(int64(options.MaxTokens))
 		}
 	}
+
 	if options.TopP > 0 && options.TopP != 1.0 {
-		req["top_p"] = options.TopP
+		params.TopP = openai.Float(options.TopP)
 	}
+
 	if len(options.Stop) > 0 {
-		req["stop"] = options.Stop
+		params.Stop = openai.ChatCompletionNewParamsStopUnion{
+			OfStringArray: options.Stop,
+		}
 	}
+
 	if options.ResponseFormat == "json" {
 		if options.ResponseSchema != nil {
-			// Full structured output with JSON schema
-			req["response_format"] = map[string]any{
-				"type": "json_schema",
-				"json_schema": map[string]any{
-					"name":   "response",
-					"schema": options.ResponseSchema,
-					"strict": true,
+			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
+					JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
+						Name:   "response",
+						Schema: options.ResponseSchema,
+						Strict: openai.Bool(true),
+					},
 				},
 			}
 		} else {
-			// Basic JSON mode without schema
-			req["response_format"] = map[string]string{"type": "json_object"}
+			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
+			}
 		}
 	}
+
 	if options.FrequencyPenalty != 0 {
-		req["frequency_penalty"] = options.FrequencyPenalty
-	}
-	if options.PresencePenalty != 0 {
-		req["presence_penalty"] = options.PresencePenalty
+		params.FrequencyPenalty = openai.Float(options.FrequencyPenalty)
 	}
 
-	// Add tools if supported
+	if options.PresencePenalty != 0 {
+		params.PresencePenalty = openai.Float(options.PresencePenalty)
+	}
+
 	if len(options.Tools) > 0 {
-		tools := make([]map[string]any, 0, len(options.Tools))
+		tools := make([]openai.ChatCompletionToolUnionParam, 0, len(options.Tools))
 		for _, tool := range options.Tools {
 			tools = append(tools, o.convertTool(&tool))
 		}
-		req["tools"] = tools
+		params.Tools = tools
 
 		if options.ToolChoice != "" && options.ToolChoice != "auto" {
 			if options.ToolChoice == "none" {
-				req["tool_choice"] = "none"
-			} else {
-				req["tool_choice"] = map[string]any{
-					"type": "function",
-					"function": map[string]string{
-						"name": options.ToolChoice,
-					},
+				params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+					OfAuto: openai.String("none"),
 				}
+			} else {
+				params.ToolChoice = openai.ToolChoiceOptionFunctionToolChoice(
+					openai.ChatCompletionNamedToolChoiceFunctionParam{
+						Name: options.ToolChoice,
+					},
+				)
 			}
 		}
 	}
 
-	// Merge ProviderParams with request, respecting DSGo-managed keys
-	if len(options.ProviderParams) > 0 {
-		for key, value := range options.ProviderParams {
-			// Don't override DSGo-managed keys to maintain consistency
-			switch key {
-			case "model", "messages", "temperature", "max_tokens", "max_completion_tokens", "top_p", "stop",
-				"response_format", "frequency_penalty", "presence_penalty", "tools", "tool_choice":
-				// Skip DSGo-managed keys - DSGo values take precedence
-				continue
-			default:
-				// Merge provider-specific parameter
-				req[key] = value
-			}
-		}
-	}
+	util.ApplyChatCompletionProviderParams(&params, options.ProviderParams)
 
-	return req
+	return params
 }
 
-func (o *openAI) convertMessages(messages []core.Message) []map[string]any {
-	converted := make([]map[string]any, 0, len(messages))
-	for _, msg := range messages {
-		m := map[string]any{
-			"role": msg.Role,
-		}
+func (o *openAI) convertMessages(messages []core.Message) []openai.ChatCompletionMessageParamUnion {
+	converted := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
 
-		// Handle tool responses
-		if msg.Role == "tool" {
-			m["content"] = msg.Content
-			if msg.ToolID != "" {
-				m["tool_call_id"] = msg.ToolID
-			}
-		} else if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
-			// Assistant message with tool calls
-			if msg.Content != "" {
-				m["content"] = msg.Content
-			}
-			toolCalls := make([]map[string]any, 0, len(msg.ToolCalls))
-			for _, tc := range msg.ToolCalls {
-				argsBytes, _ := json.Marshal(tc.Arguments)
-				toolCalls = append(toolCalls, map[string]any{
-					"id":   tc.ID,
-					"type": "function",
-					"function": map[string]any{
-						"name":      tc.Name,
-						"arguments": string(argsBytes),
-					},
+	for msgIndex, msg := range messages {
+		switch msg.Role {
+		case "system":
+			converted = append(converted, openai.SystemMessage(msg.Content))
+		case "user":
+			converted = append(converted, openai.UserMessage(msg.Content))
+		case "assistant":
+			if len(msg.ToolCalls) > 0 {
+				toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(msg.ToolCalls))
+				for tcIndex, tc := range msg.ToolCalls {
+					argsBytes, _ := json.Marshal(tc.Arguments)
+					argsHash := sha256.Sum256(argsBytes)
+					argsHashStr := hex.EncodeToString(argsHash[:])[:16]
+					// Sanitize tool call ID to meet provider constraints.
+					// If the provider returns an empty/whitespace ID, we deterministically derive
+					// a collision-resistant ID from call index + a short hash of arguments.
+					fallback := fmt.Sprintf("dsgo_toolcall_%d_%d_%s_%s", msgIndex, tcIndex, tc.Name, argsHashStr)
+					sanitizedID := sanitizeToolCallIDWithFallback(tc.ID, fallback)
+					toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{
+						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
+							ID:   sanitizedID,
+							Type: "function",
+							Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
+								Name:      tc.Name,
+								Arguments: string(argsBytes),
+							},
+						},
+					})
+				}
+				assistantMsg := &openai.ChatCompletionAssistantMessageParam{
+					ToolCalls: toolCalls,
+				}
+				// Only set content if non-empty - some providers reject empty text fields
+				if msg.Content != "" {
+					assistantMsg.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(msg.Content)}
+				}
+				converted = append(converted, openai.ChatCompletionMessageParamUnion{
+					OfAssistant: assistantMsg,
 				})
+			} else {
+				converted = append(converted, openai.AssistantMessage(msg.Content))
 			}
-			m["tool_calls"] = toolCalls
-		} else {
-			// Regular message
-			m["content"] = msg.Content
+		case "tool":
+			// Sanitize tool call ID to meet provider constraints.
+			contentHash := sha256.Sum256([]byte(msg.Content))
+			contentHashStr := hex.EncodeToString(contentHash[:])[:16]
+			fallback := fmt.Sprintf("dsgo_tool_message_%d_%s", msgIndex, contentHashStr)
+			sanitizedToolID := sanitizeToolCallIDWithFallback(msg.ToolID, fallback)
+			// Note: ToolMessage signature is (content, toolCallID) - not (toolCallID, content)
+			converted = append(converted, openai.ToolMessage(msg.Content, sanitizedToolID))
+		default:
+			converted = append(converted, openai.UserMessage(msg.Content))
 		}
-
-		converted = append(converted, m)
 	}
+
 	return converted
 }
 
-func (o *openAI) convertTool(tool *core.Tool) map[string]any {
+func (o *openAI) convertTool(tool *core.Tool) openai.ChatCompletionToolUnionParam {
 	properties := make(map[string]any)
 	required := []string{}
 
 	for _, param := range tool.Parameters {
-		// Map internal types to JSON Schema types
 		jsonType := param.Type
 		switch param.Type {
 		case "int":
@@ -371,15 +343,11 @@ func (o *openAI) convertTool(tool *core.Tool) map[string]any {
 			"description": param.Description,
 		}
 
-		// Handle array items
 		if jsonType == "array" || param.Type == "array" {
-			// Map ElementType to JSON schema type
-			elemType := "string" // default
+			elemType := "string"
 			if param.ElementType != "" {
 				elemType = param.ElementType
 			}
-
-			// Convert element type to JSON schema type
 			switch elemType {
 			case "int":
 				elemType = "integer"
@@ -390,15 +358,13 @@ func (o *openAI) convertTool(tool *core.Tool) map[string]any {
 			case "json":
 				elemType = "object"
 			}
-
-			prop["items"] = map[string]any{
-				"type": elemType,
-			}
+			prop["items"] = map[string]any{"type": elemType}
 		}
 
 		if len(param.Enum) > 0 {
 			prop["enum"] = param.Enum
 		}
+
 		properties[param.Name] = prop
 
 		if param.Required {
@@ -406,21 +372,18 @@ func (o *openAI) convertTool(tool *core.Tool) map[string]any {
 		}
 	}
 
-	return map[string]any{
-		"type": "function",
-		"function": map[string]any{
-			"name":        tool.Name,
-			"description": tool.Description,
-			"parameters": map[string]any{
-				"type":       "object",
-				"properties": properties,
-				"required":   required,
-			},
+	return openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
+		Name:        tool.Name,
+		Description: openai.String(tool.Description),
+		Parameters: shared.FunctionParameters{
+			"type":       "object",
+			"properties": properties,
+			"required":   required,
 		},
-	}
+	})
 }
 
-func (o *openAI) parseResponse(resp *openAIResponse) (*core.GenerateResult, error) {
+func (o *openAI) parseResponse(resp *openai.ChatCompletion) (*core.GenerateResult, error) {
 	if len(resp.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
@@ -428,28 +391,32 @@ func (o *openAI) parseResponse(resp *openAIResponse) (*core.GenerateResult, erro
 	choice := resp.Choices[0]
 	result := &core.GenerateResult{
 		Content:      choice.Message.Content,
-		FinishReason: choice.FinishReason,
+		FinishReason: string(choice.FinishReason),
 		Usage: core.Usage{
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: resp.Usage.CompletionTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
+			PromptTokens:     int(resp.Usage.PromptTokens),
+			CompletionTokens: int(resp.Usage.CompletionTokens),
+			TotalTokens:      int(resp.Usage.TotalTokens),
 		},
 	}
 
-	// Parse tool calls if present
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]core.ToolCall, 0, len(choice.Message.ToolCalls))
-		for _, tc := range choice.Message.ToolCalls {
+		for tcIndex, tc := range choice.Message.ToolCalls {
 			var args map[string]any
-
-			// Apply JSON repair to handle malformed tool arguments from models
 			repairedArgs := jsonutil.RepairJSON(tc.Function.Arguments)
 
 			if err := json.Unmarshal([]byte(repairedArgs), &args); err != nil {
 				return nil, fmt.Errorf("failed to parse tool arguments (after repair): %w", err)
 			}
+			// Sanitize tool call ID to meet provider constraints.
+			// If the provider returns an empty/whitespace ID, derive a stable ID based on
+			// tool index + name + a short hash of arguments.
+			argHash := sha256.Sum256([]byte(tc.Function.Arguments))
+			argHashStr := hex.EncodeToString(argHash[:])[:16]
+			fallback := fmt.Sprintf("dsgo_response_toolcall_%d_%s_%s", tcIndex, tc.Function.Name, argHashStr)
+			sanitizedID := sanitizeToolCallIDWithFallback(tc.ID, fallback)
 			result.ToolCalls = append(result.ToolCalls, core.ToolCall{
-				ID:        tc.ID,
+				ID:        sanitizedID,
 				Name:      tc.Function.Name,
 				Arguments: args,
 			})
@@ -459,47 +426,93 @@ func (o *openAI) parseResponse(resp *openAIResponse) (*core.GenerateResult, erro
 	return result, nil
 }
 
-// extractMetadata extracts provider-specific metadata from HTTP response headers
 func (o *openAI) extractMetadata(headers http.Header) map[string]any {
 	metadata := make(map[string]any)
 
-	// Cache detection (OpenAI uses Cloudflare)
+	if v := headers.Get("X-RateLimit-Limit-Requests"); v != "" {
+		metadata["rate_limit_requests"] = v
+	}
+	if v := headers.Get("X-RateLimit-Remaining-Requests"); v != "" {
+		metadata["rate_limit_remaining_requests"] = v
+	}
+	if v := headers.Get("X-RateLimit-Limit-Tokens"); v != "" {
+		metadata["rate_limit_tokens"] = v
+	}
+	if v := headers.Get("X-RateLimit-Remaining-Tokens"); v != "" {
+		metadata["rate_limit_remaining_tokens"] = v
+	}
+	if v := headers.Get("X-Request-ID"); v != "" {
+		metadata["request_id"] = v
+	}
+	if v := headers.Get("Openai-Organization"); v != "" {
+		metadata["organization"] = v
+	}
+
 	if cacheStatus := headers.Get("CF-Cache-Status"); cacheStatus != "" {
 		metadata["cache_status"] = cacheStatus
-		metadata["cache_hit"] = (cacheStatus == "HIT")
+		metadata["cache_hit"] = cacheStatus == "HIT"
 	}
 	if cache := headers.Get("X-Cache"); cache != "" {
 		metadata["x_cache"] = cache
 	}
 
-	// OpenAI rate limit headers
-	if rateLimit := headers.Get("X-RateLimit-Limit-Requests"); rateLimit != "" {
-		metadata["rate_limit_requests"] = rateLimit
-	}
-	if rateRemaining := headers.Get("X-RateLimit-Remaining-Requests"); rateRemaining != "" {
-		metadata["rate_limit_remaining_requests"] = rateRemaining
-	}
-	if rateLimit := headers.Get("X-RateLimit-Limit-Tokens"); rateLimit != "" {
-		metadata["rate_limit_tokens"] = rateLimit
-	}
-	if rateRemaining := headers.Get("X-RateLimit-Remaining-Tokens"); rateRemaining != "" {
-		metadata["rate_limit_remaining_tokens"] = rateRemaining
-	}
-
-	// OpenAI request ID for debugging
-	if requestID := headers.Get("X-Request-ID"); requestID != "" {
-		metadata["request_id"] = requestID
-	}
-
-	// OpenAI organization
-	if org := headers.Get("Openai-Organization"); org != "" {
-		metadata["organization"] = org
-	}
-
 	return metadata
 }
 
-// Stream generates a streaming response from OpenAI
+// sanitizeToolCallID ensures a tool call ID meets provider constraints.
+// It handles IDs that are too long or contain invalid characters by creating
+// a deterministic hash-based ID that preserves uniqueness.
+func sanitizeToolCallID(id string) string {
+	return sanitizeToolCallIDWithFallback(id, "")
+}
+
+func sanitizeToolCallIDWithFallback(id, fallback string) string {
+	if strings.TrimSpace(id) == "" {
+		seed := strings.TrimSpace(fallback)
+		if seed == "" {
+			seed = "dsgo_empty_tool_call_id"
+		}
+		hash := sha256.Sum256([]byte(seed))
+		return "toolcall_" + hex.EncodeToString(hash[:])[:16]
+	}
+
+	// Check if ID is already valid
+	if len(id) <= maxToolCallIDLength && !toolCallIDPattern.MatchString(id) {
+		return id
+	}
+
+	// Replace invalid characters first
+	sanitized := toolCallIDPattern.ReplaceAllString(id, "_")
+
+	// If still too long, create a hash-based ID
+	if len(sanitized) > maxToolCallIDLength {
+		// Use SHA-256 to create a deterministic short ID
+		// Keep a prefix for readability, append hash for uniqueness
+		hash := sha256.Sum256([]byte(id))
+		hashStr := hex.EncodeToString(hash[:])[:16] // Use first 16 chars of hash
+
+		// Calculate max prefix length: maxLength - hash length - separator
+		maxPrefixLen := maxToolCallIDLength - len(hashStr) - 1
+		if maxPrefixLen < 0 {
+			maxPrefixLen = 0
+		}
+
+		prefix := sanitized
+		if len(prefix) > maxPrefixLen {
+			prefix = prefix[:maxPrefixLen]
+		}
+
+		if prefix == "" {
+			sanitized = hashStr
+		} else {
+			sanitized = prefix + "_" + hashStr
+		}
+	}
+
+	return sanitized
+}
+
+// Stream generates a streaming response from OpenAI using the official SDK
 func (o *openAI) Stream(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (<-chan core.Chunk, <-chan error) {
 	chunkChan := make(chan core.Chunk)
 	errChan := make(chan error, 1)
@@ -512,222 +525,47 @@ func (o *openAI) Stream(ctx context.Context, messages []core.Message, options *c
 			options = core.DefaultGenerateOptions()
 		}
 
-		reqBody := o.buildRequest(messages, options)
-		reqBody["stream"] = true
+		params := o.buildParams(messages, options)
 
-		bodyBytes, err := json.Marshal(reqBody)
-		if err != nil {
-			errChan <- fmt.Errorf("failed to marshal request: %w", err)
-			return
+		var rawResp *http.Response
+		reqOpts := []option.RequestOption{option.WithResponseInto(&rawResp)}
+		if o.BaseURL != "" {
+			reqOpts = append(reqOpts, option.WithBaseURL(o.BaseURL))
+		}
+		if options.RetryConfig != nil {
+			reqOpts = append(reqOpts, option.WithMaxRetries(options.RetryConfig.MaxRetries))
 		}
 
-		var retryOpts *retry.Options
-		if options != nil {
-			retryOpts = retryOptionsFromConfig(options.RetryConfig)
-		}
+		stream := o.Client.Chat.Completions.NewStreaming(ctx, params, reqOpts...)
+		defer func() { _ = stream.Close() }()
 
-		resp, err := retry.WithExponentialBackoffOpts(ctx, func() (*http.Response, error) {
-			req, err := http.NewRequestWithContext(ctx, "POST", o.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
-			if err != nil {
-				return nil, err
-			}
+		for stream.Next() {
+			chunk := stream.Current()
 
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+o.APIKey)
-
-			return o.Client.Do(req)
-		}, retryOpts)
-		if err != nil {
-			errChan <- fmt.Errorf("request failed: %w", err)
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			errChan <- fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-			return
-		}
-
-		// Read SSE stream
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-
-			// Skip empty lines
-			if line == "" {
-				continue
-			}
-
-			// Parse SSE format: "data: {json}"
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-
-			data := strings.TrimPrefix(line, "data: ")
-
-			// Check for stream end
-			if data == "[DONE]" {
-				break
-			}
-
-			// Parse JSON chunk
-			var streamResp openAIStreamResponse
-			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				errChan <- fmt.Errorf("failed to parse stream chunk: %w", err)
-				return
-			}
-
-			// Extract chunk data
-			if len(streamResp.Choices) > 0 {
-				choice := streamResp.Choices[0]
-				chunk := core.Chunk{
+			if len(chunk.Choices) > 0 {
+				choice := chunk.Choices[0]
+				coreChunk := core.Chunk{
 					Content:      choice.Delta.Content,
-					FinishReason: choice.FinishReason,
+					FinishReason: string(choice.FinishReason),
 				}
 
-				// Add usage if present (typically in last chunk)
-				if streamResp.Usage != nil {
-					chunk.Usage = core.Usage{
-						PromptTokens:     streamResp.Usage.PromptTokens,
-						CompletionTokens: streamResp.Usage.CompletionTokens,
-						TotalTokens:      streamResp.Usage.TotalTokens,
+				if chunk.Usage.TotalTokens > 0 {
+					coreChunk.Usage = core.Usage{
+						PromptTokens:     int(chunk.Usage.PromptTokens),
+						CompletionTokens: int(chunk.Usage.CompletionTokens),
+						TotalTokens:      int(chunk.Usage.TotalTokens),
 					}
 				}
 
-				chunkChan <- chunk
+				chunkChan <- coreChunk
 			}
 		}
 
-		if err := scanner.Err(); err != nil {
-			errChan <- fmt.Errorf("stream reading error: %w", err)
+		if err := stream.Err(); err != nil {
+			errChan <- fmt.Errorf("stream error: %w", err)
 			return
 		}
 	}()
 
 	return chunkChan, errChan
-}
-
-// OpenAI API response structures
-type openAIResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index        int           `json:"index"`
-		Message      openAIMessage `json:"message"`
-		FinishReason string        `json:"finish_reason"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-type openAIMessage struct {
-	Role      string           `json:"role"`
-	Content   string           `json:"content"`
-	ToolCalls []openAIToolCall `json:"tool_calls,omitempty"`
-}
-
-type openAIToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
-}
-
-type openAIStreamResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index int `json:"index"`
-		Delta struct {
-			Content string `json:"content"`
-			Role    string `json:"role,omitempty"`
-		} `json:"delta"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage,omitempty"`
-}
-
-// saveRawExchange saves complete request/response exchange to a file for debugging
-func saveRawExchange(model string, request map[string]any, statusCode int, headers http.Header, responseBody []byte, saveErr error) error {
-	// Only write artifacts when explicitly enabled.
-	debugEnv := os.Getenv("DSGO_SAVE_RAW_RESPONSES")
-	if debugEnv != "1" && strings.ToLower(debugEnv) != "true" {
-		return nil
-	}
-
-	// Determine output directory - prefer DSGO_ARTIFACT_DIR, fallback to dsgo_artifacts
-	baseDir := os.Getenv("DSGO_ARTIFACT_DIR")
-	if baseDir == "" {
-		baseDir = "dsgo_artifacts"
-	}
-	rawDir := filepath.Join(baseDir, "raw")
-	if err := os.MkdirAll(rawDir, 0755); err != nil {
-		return err
-	}
-
-	// Parse response body as JSON if possible
-	var responseJSON any
-	var responseText string
-	if err := json.Unmarshal(responseBody, &responseJSON); err != nil {
-		responseText = string(responseBody)
-	}
-
-	// Build complete exchange record
-	exchange := map[string]any{
-		"timestamp": time.Now().Format(time.RFC3339Nano),
-		"provider":  "openai",
-		"model":     model,
-		"example":   os.Getenv("DSGO_EXAMPLE"),
-		"request":   request,
-		"http": map[string]any{
-			"status":  statusCode,
-			"headers": headers,
-		},
-	}
-
-	if responseJSON != nil {
-		exchange["response"] = responseJSON
-	} else {
-		exchange["response_text"] = responseText
-	}
-
-	if saveErr != nil {
-		exchange["error"] = saveErr.Error()
-	}
-
-	// Create filename with timestamp and model
-	timestamp := time.Now().Format("20060102_150405.000000")
-	safeModel := strings.ReplaceAll(model, "/", "_")
-	safeModel = strings.ReplaceAll(safeModel, ":", "_")
-	filename := filepath.Join(rawDir, fmt.Sprintf("%s_openai_%s.json", timestamp, safeModel))
-
-	// Marshal with 2-space indentation
-	exchangeJSON, err := json.MarshalIndent(exchange, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	// Write to file
-	if err := os.WriteFile(filename, exchangeJSON, 0644); err != nil {
-		return err
-	}
-
-	if os.Getenv("DSGO_ARTIFACT_DIR") != "" {
-		fmt.Fprintf(os.Stderr, "📝 Raw exchange saved to: %s\n", filename)
-	}
-	return nil
 }

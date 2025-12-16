@@ -23,6 +23,10 @@ const (
 	// ReviewModel is the model used for all review modules
 	ReviewModel = "openrouter/google/gemini-2.5-flash-lite-preview-09-2025"
 
+	// ReasoningReviewModel is used for an optional final synthesis.
+	// It demonstrates ProviderParams passthrough (reasoning.effort).
+	ReasoningReviewModel = "openrouter/openai/gpt-5.2"
+
 	// MaxFileBytes limits file content to prevent excessive token usage
 	MaxFileBytes = 128 * 1024
 
@@ -525,7 +529,7 @@ func main() {
 		remainingFiles = newRemaining
 
 		log.Printf("Attempt %d: %d successful, %d remaining", attempt+1, len(attemptReviews), len(remainingFiles))
-		log.Printf("Usage: %s, %d tokens", fileResult.Usage.Cost, fileResult.Usage.TotalTokens)
+		log.Printf("Usage: $%.6f, %d tokens", fileResult.Usage.Cost, fileResult.Usage.TotalTokens)
 	}
 
 	// Convert map to slice in original order
@@ -629,7 +633,7 @@ func main() {
 		remainingPkgs = newRemaining
 
 		log.Printf("Attempt %d: %d successful, %d remaining", attempt+1, len(attemptReviews), len(remainingPkgs))
-		log.Printf("Usage: %s, %d tokens", pkgResult.Usage.Cost, pkgResult.Usage.TotalTokens)
+		log.Printf("Usage: $%.6f, %d tokens", pkgResult.Usage.Cost, pkgResult.Usage.TotalTokens)
 	}
 
 	// Convert map to slice in original order
@@ -693,7 +697,7 @@ func main() {
 		log.Fatalf("No project review results available")
 	}
 
-	log.Printf("Completed project-level review: %s, %d tokens", projectPred.Usage.Cost, projectPred.Usage.TotalTokens)
+	log.Printf("Completed project-level review: $%.6f, %d tokens", projectPred.Usage.Cost, projectPred.Usage.TotalTokens)
 
 	// Print final project review
 	fmt.Println("\n" + strings.Repeat("=", 60))
@@ -725,6 +729,73 @@ func main() {
 	}
 
 	if recommendations, ok := bestReview["top_recommendations"].(string); ok && recommendations != "" {
+		fmt.Println("\n🎯 TOP RECOMMENDATIONS")
+		fmt.Println(strings.Repeat("-", 30))
+		fmt.Println(recommendations)
+	}
+
+	fmt.Println("\n" + strings.Repeat("=", 60))
+
+	// Stage 4: Optional high-effort reasoning synthesis.
+	log.Println("Stage 4: Running high-effort reasoning synthesis...")
+	reasoningLM, err := dsgo.NewLM(ctx, ReasoningReviewModel)
+	if err != nil {
+		log.Printf("Skipping stage 4 (failed to initialize LM %s): %v", ReasoningReviewModel, err)
+		return
+	}
+
+	reasoningModule := dsgo.NewChainOfThought(projectSig, reasoningLM).
+		WithOptions(&dsgo.GenerateOptions{
+			Temperature: 0.2,
+			MaxTokens:   1024 * 64,
+			ProviderParams: map[string]any{
+				"reasoning": map[string]any{
+					"effort": "high",
+				},
+			},
+		})
+
+	reasoningPred, err := reasoningModule.Forward(ctx, map[string]any{
+		"project_root":    root,
+		"module_path":     modulePath,
+		"package_reviews": projectInput,
+	})
+	if err != nil {
+		log.Printf("Stage 4 failed: %v", err)
+		return
+	}
+
+	log.Printf("Completed stage 4: $%.6f, %d tokens", reasoningPred.Usage.Cost, reasoningPred.Usage.TotalTokens)
+
+	fmt.Println("\n" + strings.Repeat("=", 60))
+	fmt.Printf("PROJECT REVIEW (%s, reasoning=high)\n", ReasoningReviewModel)
+	fmt.Println(strings.Repeat("=", 60))
+
+	if execSummary, ok := reasoningPred.GetString("executive_summary"); ok && execSummary != "" {
+		fmt.Println("\n📋 EXECUTIVE SUMMARY")
+		fmt.Println(strings.Repeat("-", 30))
+		fmt.Println(execSummary)
+	}
+
+	if archOverview, ok := reasoningPred.GetString("architecture_overview"); ok && archOverview != "" {
+		fmt.Println("\n🏗️  ARCHITECTURE OVERVIEW")
+		fmt.Println(strings.Repeat("-", 30))
+		fmt.Println(archOverview)
+	}
+
+	if strengths, ok := reasoningPred.GetString("project_strengths"); ok && strengths != "" {
+		fmt.Println("\n💪 PROJECT STRENGTHS")
+		fmt.Println(strings.Repeat("-", 30))
+		fmt.Println(strengths)
+	}
+
+	if risks, ok := reasoningPred.GetString("project_risks"); ok && risks != "" {
+		fmt.Println("\n⚠️  PROJECT RISKS")
+		fmt.Println(strings.Repeat("-", 30))
+		fmt.Println(risks)
+	}
+
+	if recommendations, ok := reasoningPred.GetString("top_recommendations"); ok && recommendations != "" {
 		fmt.Println("\n🎯 TOP RECOMMENDATIONS")
 		fmt.Println(strings.Repeat("-", 30))
 		fmt.Println(recommendations)
