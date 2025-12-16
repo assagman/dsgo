@@ -112,11 +112,11 @@ func createMCPClient(ctx context.Context, name string, spec MCPSpec, timeouts Ti
 		if err != nil {
 			return nil, fmt.Errorf("failed to find project root: %w", err)
 		}
-		allowedDirs := []string{projectRoot}
+		allowedDir := projectRoot
 		if len(spec.AllowedDirs) > 0 {
-			allowedDirs = spec.AllowedDirs
+			allowedDir = spec.AllowedDirs[0] // Use first directory as primary
 		}
-		client, err := dsgo.NewMCPFilesystemClient(allowedDirs...)
+		client, err := dsgo.NewMCPFilesystemClient(allowedDir)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create filesystem MCP client: %w", err)
 		}
