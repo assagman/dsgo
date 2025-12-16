@@ -18,28 +18,37 @@ import (
 const (
 	defaultShellTimeout   = 10 * time.Minute
 	defaultShellMaxOutput = 256 * 1024
+	defaultShellMaxPatch  = 512 * 1024
 )
 
 // ShellServerConfig configures the built-in MCP shell server.
 //
 // RootDir is used to constrain working directories and patch application.
+// Note: Symlinks within RootDir may point outside it; this is not a security boundary.
 // DefaultTimeout is used when callers do not provide timeout_seconds.
 // MaxOutputBytes bounds stdout/stderr capture for shell_run.
+// MaxPatchBytes bounds the size of patches accepted by apply_patch.
 type ShellServerConfig struct {
 	RootDir        string
 	DefaultTimeout time.Duration
 	MaxOutputBytes int
+	MaxPatchBytes  int
 }
 
 // ShellServer is a built-in MCP server that exposes safe tools:
 // - shell_run (whitelisted command runner)
 // - apply_patch (git apply for unified diffs)
 //
+// SECURITY NOTE: ShellServer is designed for trusted repositories only.
+// It is NOT a security sandbox. Commands like make/go test can run arbitrary
+// code defined in the repo, and symlinks in the repo may point outside RootDir.
+//
 // It implements LocalHandler.
 type ShellServer struct {
 	rootDir        string
 	defaultTimeout time.Duration
 	maxOutputBytes int
+	maxPatchBytes  int
 }
 
 // NewShellServer creates a new ShellServer.
@@ -63,11 +72,15 @@ func NewShellServer(cfg ShellServerConfig) (*ShellServer, error) {
 	if cfg.MaxOutputBytes <= 0 {
 		cfg.MaxOutputBytes = defaultShellMaxOutput
 	}
+	if cfg.MaxPatchBytes <= 0 {
+		cfg.MaxPatchBytes = defaultShellMaxPatch
+	}
 
 	return &ShellServer{
 		rootDir:        root,
 		defaultTimeout: cfg.DefaultTimeout,
 		maxOutputBytes: cfg.MaxOutputBytes,
+		maxPatchBytes:  cfg.MaxPatchBytes,
 	}, nil
 }
 
@@ -266,6 +279,9 @@ func (s *ShellServer) handleShellRun(ctx context.Context, id any, args map[strin
 
 func (s *ShellServer) handleApplyPatch(ctx context.Context, id any, args map[string]any) (*JSONRPCResponse, error) {
 	patch, _ := args["patch"].(string)
+	if len(patch) > s.maxPatchBytes {
+		return s.toolResultError(id, "patch too large")
+	}
 	if strings.TrimSpace(patch) == "" {
 		return s.toolResultError(id, "patch is required")
 	}
@@ -339,10 +355,14 @@ func findRepoRoot() (string, error) {
 	dir := cwd
 	for {
 		if st, err := os.Stat(filepath.Join(dir, ".git")); err == nil && st.IsDir() {
-			return dir, nil
+			if isValidRepoRoot(dir) {
+				return dir, nil
+			}
 		}
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
+			if isValidRepoRoot(dir) {
+				return dir, nil
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -350,6 +370,29 @@ func findRepoRoot() (string, error) {
 		}
 		dir = parent
 	}
+}
+
+func isValidRepoRoot(dir string) bool {
+	if dir == "/" || dir == "" {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		if len(dir) <= 3 {
+			return false
+		}
+	} else {
+		parts := strings.Split(strings.Trim(dir, "/"), "/")
+		if len(parts) < 2 {
+			return false
+		}
+	}
+	systemDirs := []string{"/bin", "/etc", "/lib", "/sbin", "/usr", "/var", "/tmp", "/dev", "/proc", "/sys"}
+	for _, sys := range systemDirs {
+		if dir == sys || strings.HasPrefix(dir, sys+"/") {
+			return false
+		}
+	}
+	return true
 }
 
 type limitedBuffer struct {
@@ -381,19 +424,22 @@ func decodeStringArray(v any) ([]string, bool) {
 	if v == nil {
 		return nil, true
 	}
-	arr, ok := v.([]any)
-	if !ok {
+	switch arr := v.(type) {
+	case []any:
+		out := make([]string, 0, len(arr))
+		for _, item := range arr {
+			s, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, true
+	case []string:
+		return append([]string(nil), arr...), true
+	default:
 		return nil, false
 	}
-	out := make([]string, 0, len(arr))
-	for _, item := range arr {
-		s, ok := item.(string)
-		if !ok {
-			return nil, false
-		}
-		out = append(out, s)
-	}
-	return out, true
 }
 
 func toInt(v any) (int, error) {

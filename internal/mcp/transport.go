@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -66,6 +67,11 @@ func (t *HTTPTransport) Send(ctx context.Context, request *JSONRPCRequest) (*JSO
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Short-circuit if context is already cancelled
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		req, err := http.NewRequestWithContext(ctx, "POST", t.url, bytes.NewReader(body))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
@@ -423,7 +429,7 @@ func (t *SSETransport) readLoop(body io.ReadCloser) {
 					u, err := url.Parse(t.sseURL)
 					if err != nil {
 						// Fallback to simple string manipulation if parsing fails
-						fmt.Printf("Warning: failed to parse SSE URL %q: %v\n", t.sseURL, err)
+						fmt.Fprintf(os.Stderr, "dsgo: warning: failed to parse SSE URL %q: %v\n", t.sseURL, err)
 					} else {
 						// Construct new URL
 						t.postURL = u.Scheme + "://" + u.Host + endpoint

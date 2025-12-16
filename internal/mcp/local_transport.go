@@ -18,7 +18,10 @@ type LocalTransport struct {
 }
 
 // NewLocalTransport creates a new LocalTransport.
-// It panics if handler is nil.
+//
+// Panics if handler is nil. This is intentional: a nil handler is a programmer
+// error that should be caught immediately during initialization, not deferred
+// to runtime when Send is called.
 func NewLocalTransport(handler LocalHandler) *LocalTransport {
 	if handler == nil {
 		panic("handler cannot be nil")
