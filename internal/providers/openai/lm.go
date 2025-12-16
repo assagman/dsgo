@@ -15,6 +15,7 @@ import (
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/jsonutil"
 	"github.com/assagman/dsgo/internal/logging"
+	"github.com/assagman/dsgo/internal/modelcatalog"
 	"github.com/assagman/dsgo/internal/providers/util"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -71,12 +72,11 @@ func newOpenAI(model string) *openAI {
 	}
 }
 
-// Match exact model patterns: o1, o1-*, o3, o3-*, o4, o4-*, gpt-5, gpt-5-*
-var reasoningModelRegex = regexp.MustCompile(`^(o1|o3|o4|gpt-5)(-|$)`)
-
 // isReasoningModel checks if the model requires max_completion_tokens instead of max_tokens
 func (o *openAI) isReasoningModel() bool {
-	return reasoningModelRegex.MatchString(strings.ToLower(o.Model))
+	canonicalModel := "openai/" + o.Model
+	model, ok := modelcatalog.GetModel(canonicalModel)
+	return ok && model.Capabilities.Reasoning
 }
 
 // Name returns the model name
