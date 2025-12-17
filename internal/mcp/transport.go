@@ -530,8 +530,17 @@ type StdioTransport struct {
 
 // NewStdioTransport creates a new StdioTransport.
 func NewStdioTransport(command string, args []string, env []string) (*StdioTransport, error) {
+	return NewStdioTransportWithDir(command, args, env, "")
+}
+
+// NewStdioTransportWithDir creates a new StdioTransport with a specific working directory.
+// If dir is empty, the current working directory is used.
+func NewStdioTransportWithDir(command string, args []string, env []string, dir string) (*StdioTransport, error) {
 	cmd := exec.Command(command, args...)
 	cmd.Env = env
+	if dir != "" {
+		cmd.Dir = dir
+	}
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

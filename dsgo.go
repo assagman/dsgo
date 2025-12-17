@@ -273,7 +273,7 @@ var (
 	// Provides tavily-search and tavily-extract tools.
 	NewMCPTavilyClient = mcp.NewTavilyClient
 	// NewMCPFilesystemClient creates a new MCP client for local filesystem operations.
-	// Uses the official @modelcontextprotocol/server-filesystem via npx/bunx.
+	// The directory parameter specifies both allowed directory and working directory.
 	NewMCPFilesystemClient = mcp.NewFilesystemClient
 	// NewMCPHTTPTransport creates a new HTTP transport for MCP communication.
 	NewMCPHTTPTransport = mcp.NewHTTPTransport
@@ -285,6 +285,8 @@ var (
 	NewMCPSSETransportWithTimeouts = mcp.NewSSETransportWithTimeouts
 	// NewMCPStdioTransport creates a new stdio transport for MCP communication.
 	NewMCPStdioTransport = mcp.NewStdioTransport
+	// NewMCPStdioTransportWithDir creates a new stdio transport with a specific working directory.
+	NewMCPStdioTransportWithDir = mcp.NewStdioTransportWithDir
 	// NewMCPLocalTransport creates a local MCP transport.
 	NewMCPLocalTransport = mcp.NewLocalTransport
 	// NewMCPShellServer creates a built-in shell MCP server.

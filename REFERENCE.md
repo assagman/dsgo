@@ -166,15 +166,15 @@ DSGo supports MCP clients for accessing external tools and services:
 | Exa | `NewMCPExaClient(apiKey)` | HTTP | Web search and content extraction |
 | Jina | `NewMCPJinaClient(apiKey)` | SSE | URL reading and content extraction |
 | Tavily | `NewMCPTavilyClient(apiKey)` | HTTP | Web search and content extraction |
-| Filesystem | `NewMCPFilesystemClient(dirs...)` | Stdio | Local filesystem operations via official MCP server |
+| Filesystem | `NewMCPFilesystemClient(dir)` | Stdio | Local filesystem operations via official MCP server |
 
 ### Filesystem MCP Client
 
 Uses the official `@modelcontextprotocol/server-filesystem` via npx/bunx:
 
 ```go
-// Create filesystem client with allowed directories
-fsClient, err := dsgo.NewMCPFilesystemClient("/path/to/dir1", "/path/to/dir2")
+// Create filesystem client with specific directory
+fsClient, err := dsgo.NewMCPFilesystemClient("/path/to/directory")
 
 // Or use current directory (default)
 fsClient, err := dsgo.NewMCPFilesystemClient()

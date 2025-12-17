@@ -68,16 +68,17 @@ func NewTavilyClient(apiKey string) (*Client, error) {
 
 // NewFilesystemClient creates a new MCP client for local filesystem operations.
 // Uses the official @modelcontextprotocol/server-filesystem via npx/bunx with stdio transport.
-// allowedDirs specifies the directories that the filesystem server can access.
-// If no directories are provided, defaults to current working directory.
-func NewFilesystemClient(allowedDirs ...string) (*Client, error) {
+// The directory parameter specifies both the allowed directory and the working directory
+// for the MCP server, so relative paths resolve correctly within it.
+// If empty, defaults to current working directory.
+func NewFilesystemClient(directory string) (*Client, error) {
 	// Default to current directory if none specified
-	if len(allowedDirs) == 0 {
+	if directory == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current directory: %w", err)
 		}
-		allowedDirs = []string{cwd}
+		directory = cwd
 	}
 
 	// Try bunx first (Bun's npx equivalent), fall back to npx
@@ -89,12 +90,12 @@ func NewFilesystemClient(allowedDirs ...string) (*Client, error) {
 		}
 	}
 
-	// Build args: npx -y @modelcontextprotocol/server-filesystem <dir1> <dir2> ...
-	args := []string{"-y", "@modelcontextprotocol/server-filesystem"}
-	args = append(args, allowedDirs...)
+	// Build args: npx -y @modelcontextprotocol/server-filesystem <directory>
+	args := []string{"-y", "@modelcontextprotocol/server-filesystem", directory}
 
-	// Create stdio transport
-	transport, err := NewStdioTransport(command, args, os.Environ())
+	// Create stdio transport with working directory set to the allowed directory.
+	// This ensures relative paths are resolved correctly from the directory root.
+	transport, err := NewStdioTransportWithDir(command, args, os.Environ(), directory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stdio transport: %w", err)
 	}
