@@ -95,6 +95,8 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 		totalUsage.PromptTokens += prediction.Usage.PromptTokens
 		totalUsage.CompletionTokens += prediction.Usage.CompletionTokens
 		totalUsage.TotalTokens += prediction.Usage.TotalTokens
+		totalUsage.Cost += prediction.Usage.Cost
+		totalUsage.Latency += prediction.Usage.Latency
 
 		// Merge outputs into inputs for next module
 		// This allows modules to access both original inputs and previous outputs
