@@ -637,7 +637,7 @@ func init() {
 		},
 		{
 			ID:           "openrouter/google/gemini-3-flash-preview",
-			Pricing:      Pricing{PromptPrice: 0.15, CompletionPrice: 0.6, CacheReadPrice: 0.0375, CacheWritePrice: 0},
+			Pricing:      Pricing{PromptPrice: 0.5, CompletionPrice: 3, CacheReadPrice: 0.05, CacheWritePrice: 0},
 			Limits:       Limits{ContextTokens: 1048576, OutputTokens: 65536},
 			Capabilities: Capabilities{Attachment: true, Reasoning: true, ToolCall: true, StructuredOutput: false, Temperature: true},
 			Modalities:   Modalities{Input: []string{"text"}, Output: []string{"text"}},
