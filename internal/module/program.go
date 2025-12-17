@@ -108,6 +108,16 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 			merged[k] = v
 		}
 
+		// Pass Completions to next module only when the next module is a MultiChainComparison.
+		// This avoids leaking internal completions into modules that don't consume them,
+		// and prevents accidental overwrites of user-provided "completions" inputs.
+		if len(prediction.Completions) > 0 && i+1 < len(p.modules) {
+			switch p.modules[i+1].(type) {
+			case *MultiChainComparison:
+				merged["completions"] = prediction.Completions
+			}
+		}
+
 		// Diagnostic logging for pipeline data flow debugging
 		if logger := logging.GetLogger(); logger != nil {
 			logger.Debug(ctx, "Program module data flow", map[string]any{
