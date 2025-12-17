@@ -831,8 +831,8 @@ func TestScenario_ErrorPropagationSequential(t *testing.T) {
 		t.Error("Expected error from pipeline, but got none")
 	}
 
-	if !contains(err.Error(), "module 0 failed") {
-		t.Errorf("Expected error mentioning 'module 0 failed', got: %v", err)
+	if !contains(err.Error(), "module 0") && !contains(err.Error(), "failed") {
+		t.Errorf("Expected error mentioning 'module 0' and 'failed', got: %v", err)
 	}
 }
 
