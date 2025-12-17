@@ -63,6 +63,12 @@ func (p *Program) Forward(ctx context.Context, inputs map[string]any) (*core.Pre
 	var lastPrediction *core.Prediction
 	var totalUsage core.Usage
 
+	// Check context cancellation before starting
+	if err := ctx.Err(); err != nil {
+		predErr = fmt.Errorf("program cancelled before module %d: %w", 0, err)
+		return nil, predErr
+	}
+
 	for i, module := range p.modules {
 		logging.GetLogger().Debug(ctx, "Program step", map[string]any{
 			"step":   i + 1,
