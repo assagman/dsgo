@@ -856,17 +856,17 @@ func TestCanonicalizeMap_NestedMaps(t *testing.T) {
 	}
 }
 
-// TestDeepCopyMap_NilInput tests nil handling in deepCopyMap
+// TestDeepCopyMap_NilInput tests nil handling in DeepCopyMap
 func TestDeepCopyMap_NilInput(t *testing.T) {
-	result := deepCopyMap(nil)
+	result := DeepCopyMap(nil)
 	if result != nil {
 		t.Error("Expected nil result for nil input")
 	}
 }
 
-// TestDeepCopySlice_NilInput tests nil handling in deepCopySlice
+// TestDeepCopySlice_NilInput tests nil handling in DeepCopySlice
 func TestDeepCopySlice_NilInput(t *testing.T) {
-	result := deepCopySlice(nil)
+	result := DeepCopySlice(nil)
 	if result != nil {
 		t.Error("Expected nil result for nil input")
 	}
@@ -882,7 +882,7 @@ func TestDeepCopySlice_ComplexTypes(t *testing.T) {
 		[]any{"nested", "slice"},
 	}
 
-	copied := deepCopySlice(slice)
+	copied := DeepCopySlice(slice)
 	if copied == nil {
 		t.Fatal("Expected non-nil result")
 	}

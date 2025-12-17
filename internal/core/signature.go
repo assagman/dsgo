@@ -143,6 +143,25 @@ func (d *ValidationDiagnostics) HasErrors() bool {
 	return len(d.MissingFields) > 0 || len(d.TypeErrors) > 0 || len(d.ClassErrors) > 0
 }
 
+// Clone returns a deep copy of ValidationDiagnostics
+func (d *ValidationDiagnostics) Clone() *ValidationDiagnostics {
+	if d == nil {
+		return nil
+	}
+	copy := &ValidationDiagnostics{
+		MissingFields: append([]string(nil), d.MissingFields...),
+		TypeErrors:    make(map[string]error, len(d.TypeErrors)),
+		ClassErrors:   make(map[string]error, len(d.ClassErrors)),
+	}
+	for k, v := range d.TypeErrors {
+		copy.TypeErrors[k] = v
+	}
+	for k, v := range d.ClassErrors {
+		copy.ClassErrors[k] = v
+	}
+	return copy
+}
+
 // ValidateOutputs validates that all required outputs are present and of correct type
 func (s *Signature) ValidateOutputs(outputs map[string]any) error {
 	for _, field := range s.OutputFields {

@@ -543,21 +543,21 @@ func deepCopyResult(r *GenerateResult) *GenerateResult {
 			}
 			// Deep copy Arguments map
 			if tc.Arguments != nil {
-				result.ToolCalls[i].Arguments = deepCopyMap(tc.Arguments)
+				result.ToolCalls[i].Arguments = DeepCopyMap(tc.Arguments)
 			}
 		}
 	}
 
 	// Deep copy Metadata map
 	if r.Metadata != nil {
-		result.Metadata = deepCopyMap(r.Metadata)
+		result.Metadata = DeepCopyMap(r.Metadata)
 	}
 
 	return result
 }
 
-// deepCopyMap creates a deep copy of a map[string]any
-func deepCopyMap(m map[string]any) map[string]any {
+// DeepCopyMap creates a deep copy of a map[string]any
+func DeepCopyMap(m map[string]any) map[string]any {
 	if m == nil {
 		return nil
 	}
@@ -566,9 +566,9 @@ func deepCopyMap(m map[string]any) map[string]any {
 	for k, v := range m {
 		switch val := v.(type) {
 		case map[string]any:
-			result[k] = deepCopyMap(val)
+			result[k] = DeepCopyMap(val)
 		case []any:
-			result[k] = deepCopySlice(val)
+			result[k] = DeepCopySlice(val)
 		default:
 			result[k] = val
 		}
@@ -576,8 +576,8 @@ func deepCopyMap(m map[string]any) map[string]any {
 	return result
 }
 
-// deepCopySlice creates a deep copy of a []any slice
-func deepCopySlice(s []any) []any {
+// DeepCopySlice creates a deep copy of a []any slice
+func DeepCopySlice(s []any) []any {
 	if s == nil {
 		return nil
 	}
@@ -586,9 +586,9 @@ func deepCopySlice(s []any) []any {
 	for i, v := range s {
 		switch val := v.(type) {
 		case map[string]any:
-			result[i] = deepCopyMap(val)
+			result[i] = DeepCopyMap(val)
 		case []any:
-			result[i] = deepCopySlice(val)
+			result[i] = DeepCopySlice(val)
 		default:
 			result[i] = val
 		}
