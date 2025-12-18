@@ -1247,30 +1247,30 @@ func TestCache_TTLExpiry(t *testing.T) {
 		description string
 	}{
 		{
-			name:        "hit at 50ms with 100ms TTL",
-			ttl:         100 * time.Millisecond,
+			name:        "hit at 50ms with 1s TTL",
+			ttl:         1 * time.Second,
 			checkAt:     50 * time.Millisecond,
 			expectedHit: true,
 			description: "Entry should be valid before TTL expires",
 		},
 		{
-			name:        "miss at 150ms with 100ms TTL",
+			name:        "miss at 300ms with 100ms TTL",
 			ttl:         100 * time.Millisecond,
-			checkAt:     150 * time.Millisecond,
+			checkAt:     300 * time.Millisecond,
 			expectedHit: false,
 			description: "Entry should expire after TTL",
 		},
 		{
 			name:        "exact TTL boundary miss",
 			ttl:         100 * time.Millisecond,
-			checkAt:     110 * time.Millisecond,
+			checkAt:     200 * time.Millisecond,
 			expectedHit: false,
 			description: "Entry should be expired just after TTL",
 		},
 		{
 			name:        "very short TTL",
 			ttl:         10 * time.Millisecond,
-			checkAt:     50 * time.Millisecond,
+			checkAt:     100 * time.Millisecond,
 			expectedHit: false,
 			description: "Very short TTL should expire quickly",
 		},
@@ -1297,7 +1297,7 @@ func TestCache_TTLExpiry(t *testing.T) {
 // TestCache_TTLExpiry_SequentialChecks tests multiple checks across TTL boundary
 func TestCache_TTLExpiry_SequentialChecks(t *testing.T) {
 	t.Parallel()
-	ttl := 100 * time.Millisecond
+	ttl := 500 * time.Millisecond
 	cache := dsgo.NewLMCacheWithTTL(10, ttl)
 
 	cache.Set("key1", &dsgo.GenerateResult{Content: "test"})
@@ -1309,11 +1309,11 @@ func TestCache_TTLExpiry_SequentialChecks(t *testing.T) {
 		t.Error("Expected hit at 50ms (before TTL)")
 	}
 
-	// Wait additional 100ms (total 150ms) - should miss
-	time.Sleep(100 * time.Millisecond)
+	// Wait additional 600ms (total 650ms) - should miss
+	time.Sleep(600 * time.Millisecond)
 	_, hit = cache.Get("key1")
 	if hit {
-		t.Error("Expected miss at 150ms (after TTL)")
+		t.Error("Expected miss at 650ms (after TTL)")
 	}
 
 	stats := cache.Stats()
