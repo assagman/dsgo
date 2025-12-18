@@ -67,7 +67,11 @@ func main() {
 
 	// Initialize LM
 	modelName := getModelName(config)
-	fmt.Printf("🤖 Initializing LM: %s\n", modelName)
+	displayName := modelName
+	if config.Model.Name == "" {
+		displayName = modelName + " (DEFAULT)"
+	}
+	fmt.Printf("🤖 Initializing LM: %s\n", displayName)
 
 	lm, err := dsgo.NewLM(ctx, modelName)
 	if err != nil {
@@ -147,7 +151,6 @@ func displayPipelineStructure(config *PipelineConfig) {
 
 	for i, step := range config.Pipeline {
 		mod := config.Modules[step.Module]
-		sig := config.Signatures[mod.Signature]
 
 		arrow := "  │"
 		if i == len(config.Pipeline)-1 {
@@ -155,11 +158,25 @@ func displayPipelineStructure(config *PipelineConfig) {
 		}
 
 		fmt.Printf("  %d. %s (%s)\n", i+1, step.Module, mod.Type)
-		fmt.Printf("%s── Signature: %s\n", arrow, mod.Signature)
-		fmt.Printf("%s── Inputs: %s\n", arrow, formatFields(sig.Inputs))
-		fmt.Printf("%s── Outputs: %s\n", arrow, formatFields(sig.Outputs))
-		if mod.Options.Temperature > 0 {
-			fmt.Printf("%s── Temperature: %.2f\n", arrow, mod.Options.Temperature)
+
+		// Handle Parallel modules (no signature, but have child modules)
+		if mod.Type == "Parallel" {
+			fmt.Printf("%s── Modules: %s\n", arrow, strings.Join(mod.Modules, ", "))
+			if mod.MaxWorkers > 0 {
+				fmt.Printf("%s── MaxWorkers: %d\n", arrow, mod.MaxWorkers)
+			}
+		} else {
+			// Regular modules with signatures
+			sig := config.Signatures[mod.Signature]
+			fmt.Printf("%s── Signature: %s\n", arrow, mod.Signature)
+			fmt.Printf("%s── Inputs: %s\n", arrow, formatFields(sig.Inputs))
+			fmt.Printf("%s── Outputs: %s\n", arrow, formatFields(sig.Outputs))
+			if mod.Options.Temperature > 0 {
+				fmt.Printf("%s── Temperature: %.2f\n", arrow, mod.Options.Temperature)
+			}
+			if mod.Model != "" {
+				fmt.Printf("%s── Model: %s\n", arrow, mod.Model)
+			}
 		}
 		fmt.Println()
 	}

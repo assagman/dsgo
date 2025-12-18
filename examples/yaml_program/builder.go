@@ -135,9 +135,17 @@ type FieldSpec struct {
 type ModuleSpec struct {
 	Type      string                   `yaml:"type"`
 	Model     string                   `yaml:"model,omitempty"`
-	Signature string                   `yaml:"signature"`
+	Signature string                   `yaml:"signature,omitempty"` // Not required for Parallel
 	Options   ModuleOptions            `yaml:"options"`
 	MCP       map[string]ModuleMCPSpec `yaml:"mcp,omitempty"` // Per-module MCP tool configuration
+
+	// Parallel-specific fields
+	Modules    []string `yaml:"modules,omitempty"`     // List of module names to run in parallel
+	MaxWorkers int      `yaml:"max_workers,omitempty"` // Max concurrent workers for Parallel
+
+	// MultiChainComparison-specific fields
+	SourceModule string `yaml:"source_module,omitempty"` // Module that provides completions for MCC
+	M            int    `yaml:"m,omitempty"`             // Number of completions expected (derived from Parallel)
 }
 
 // ModuleOptions represents module-specific options
@@ -283,7 +291,7 @@ func validateConfig(config *PipelineConfig) error {
 
 	// Validate modules reference existing signatures and MCP clients
 	for name, mod := range config.Modules {
-		if err := validateModule(name, mod, config.Signatures, config.Tools, config.MCP); err != nil {
+		if err := validateModule(name, mod, config.Signatures, config.Tools, config.MCP, config.Modules); err != nil {
 			return err
 		}
 	}
@@ -397,17 +405,54 @@ func validateSignature(name string, sig SignatureSpec) error {
 }
 
 // validateModule validates a module definition
-func validateModule(name string, mod ModuleSpec, signatures map[string]SignatureSpec, tools map[string]ToolSpec, mcpClients map[string]MCPSpec) error {
+func validateModule(name string, mod ModuleSpec, signatures map[string]SignatureSpec, tools map[string]ToolSpec, mcpClients map[string]MCPSpec, allModules map[string]ModuleSpec) error {
 	validTypes := map[string]bool{
-		"Predict":        true,
-		"ChainOfThought": true,
-		"ReAct":          true,
+		"Predict":              true,
+		"ChainOfThought":       true,
+		"ReAct":                true,
+		"Parallel":             true,
+		"MultiChainComparison": true,
 	}
 
 	if !validTypes[mod.Type] {
-		return fmt.Errorf("module '%s' has invalid type: %s (valid: Predict, ChainOfThought, ReAct)", name, mod.Type)
+		return fmt.Errorf("module '%s' has invalid type: %s (valid: Predict, ChainOfThought, ReAct, Parallel, MultiChainComparison)", name, mod.Type)
 	}
 
+	// Parallel module validation
+	if mod.Type == "Parallel" {
+		if len(mod.Modules) == 0 {
+			return fmt.Errorf("module '%s' is Parallel type but has no modules defined", name)
+		}
+		// Validate all referenced modules exist
+		for _, modRef := range mod.Modules {
+			if _, exists := allModules[modRef]; !exists {
+				return fmt.Errorf("module '%s' references undefined module: %s", name, modRef)
+			}
+		}
+		return nil // Parallel doesn't need signature
+	}
+
+	// MultiChainComparison module validation
+	if mod.Type == "MultiChainComparison" {
+		if mod.Signature == "" {
+			return fmt.Errorf("module '%s' is MultiChainComparison type but has no signature defined", name)
+		}
+		if _, exists := signatures[mod.Signature]; !exists {
+			return fmt.Errorf("module '%s' references undefined signature: %s", name, mod.Signature)
+		}
+		if mod.SourceModule == "" {
+			return fmt.Errorf("module '%s' is MultiChainComparison type but has no source_module defined", name)
+		}
+		if _, exists := allModules[mod.SourceModule]; !exists {
+			return fmt.Errorf("module '%s' references undefined source_module: %s", name, mod.SourceModule)
+		}
+		return nil
+	}
+
+	// Standard module validation (Predict, ChainOfThought, ReAct)
+	if mod.Signature == "" {
+		return fmt.Errorf("module '%s' must have a signature", name)
+	}
 	if _, exists := signatures[mod.Signature]; !exists {
 		return fmt.Errorf("module '%s' references undefined signature: %s", name, mod.Signature)
 	}

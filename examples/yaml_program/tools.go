@@ -283,6 +283,34 @@ func createFilesystemTool(name string, spec ToolSpec) (dsgo.Tool, error) {
 	}
 }
 
+// expandTilde expands ~ to the user's home directory
+func expandTilde(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home := os.Getenv("HOME")
+		if home == "" {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	if path == "~" {
+		home := os.Getenv("HOME")
+		if home == "" {
+			return path
+		}
+		return home
+	}
+	return path
+}
+
+// expandTildesInPaths expands ~ in all paths
+func expandTildesInPaths(paths []string) []string {
+	result := make([]string, len(paths))
+	for i, p := range paths {
+		result[i] = expandTilde(p)
+	}
+	return result
+}
+
 // findProjectRoot finds the project root by looking for go.mod
 func findProjectRoot() (string, error) {
 	dir, err := os.Getwd()

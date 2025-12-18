@@ -21,6 +21,7 @@ This example shows how to:
 | `pipeline_react.yaml` | ReAct pipeline with filesystem MCP tools |
 | `pipeline_functions.yaml` | ReAct with native function tools + filesystem MCP |
 | `pipeline_mcp.yaml` | ReAct pipeline with MCP web search tools (requires API key) |
+| `pipeline_web_summary.yaml` | Search/Extract/Scrape and summarize web content elegantly (requires TAVILY_API_KEY) |
 | `pipeline_deep_researcher.yaml` | Multi-stage deep researcher (requires API key) |
 | `pipeline_deep_review.yaml` | 2-iteration implement/test/review loop (requires TAVILY_API_KEY) |
 | `pipeline_todo.yaml` | Task -> web research -> codebase analysis -> numbered TODO list (requires TAVILY_API_KEY) |
@@ -228,6 +229,9 @@ go run . pipeline_functions.yaml
 
 # ReAct with MCP web search (requires TAVILY_API_KEY)
 TAVILY_API_KEY=your-key go run . pipeline_mcp.yaml
+
+# Search and summarize web content (requires TAVILY_API_KEY)
+TAVILY_API_KEY=your-key go run . pipeline_web_summary.yaml
 
 # Deep researcher pipeline (requires TAVILY_API_KEY)
 TAVILY_API_KEY=your-key go run . pipeline_deep_researcher.yaml
