@@ -1271,6 +1271,7 @@ type capturingLogger struct {
 	mu     sync.Mutex
 	infos  []logEntry
 	debugs []logEntry
+	warns  []logEntry
 }
 
 type logEntry struct {
@@ -1300,7 +1301,13 @@ func (c *capturingLogger) Debug(ctx context.Context, message string, fields map[
 }
 
 func (c *capturingLogger) Warn(ctx context.Context, message string, fields map[string]any) {
-	// Not used in these tests
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.warns = append(c.warns, logEntry{
+		level:   "warn",
+		message: message,
+		fields:  fields,
+	})
 }
 
 func (c *capturingLogger) Error(ctx context.Context, message string, fields map[string]any) {
@@ -1333,6 +1340,7 @@ func (c *capturingLogger) reset() {
 	defer c.mu.Unlock()
 	c.infos = c.infos[:0]
 	c.debugs = c.debugs[:0]
+	c.warns = c.warns[:0]
 }
 
 // mockLMWithName is a MockLM that returns a specific model name
@@ -2379,5 +2387,85 @@ func TestParallelWithFactory_ExactFactoryCalls(t *testing.T) {
 	// Factory should be called exactly once per task (3 times)
 	if calls := atomic.LoadInt32(&factoryCalls); calls != 3 {
 		t.Errorf("Expected 3 factory calls, got %d", calls)
+	}
+}
+
+func TestParallelFactoryCaching(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("value", core.FieldTypeString, "Value")
+
+	var factoryCalls atomic.Int32
+
+	factory := func(i int) core.Module {
+		factoryCalls.Add(1)
+		if i >= 3 {
+			return nil
+		}
+		lm := &MockLM{
+			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+				return &core.GenerateResult{
+					Content: "[[ ## value ## ]]\nsuccess",
+					Usage:   core.Usage{TotalTokens: 1, Cost: 0.001},
+				}, nil
+			},
+		}
+		return NewPredict(sig, lm)
+	}
+
+	p := NewParallelWithFactory(factory).WithMaxWorkers(2)
+
+	_, err := p.Forward(context.Background(), map[string]any{"some_input": "val"})
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	if factoryCalls.Load() != 4 {
+		t.Errorf("Expected exactly 4 factory calls (3 successes + 1 nil probe), got %d", factoryCalls.Load())
+	}
+}
+
+func TestParallelWithRepeatWarning(t *testing.T) {
+	capturingLog := &capturingLogger{}
+	originalLogger := logging.GetLogger()
+	defer logging.SetLogger(originalLogger)
+	logging.SetLogger(capturingLog)
+
+	sig := core.NewSignature("Test")
+	factory := func(i int) core.Module {
+		if i >= 1 {
+			return nil
+		}
+		return NewPredict(sig, &MockLM{
+			GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+				return &core.GenerateResult{
+					Content: "[[ ## result ## ]]\nok",
+					Usage:   core.Usage{},
+				}, nil
+			},
+		})
+	}
+
+	p := NewParallelWithFactory(factory).WithRepeat(5)
+
+	_, err := p.Forward(context.Background(), map[string]any{"dummy": "val"})
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	capturingLog.mu.Lock()
+	defer capturingLog.mu.Unlock()
+
+	found := false
+	expectedMsg := "Parallel: WithRepeat(n) ignored because factory is present. Factory count takes precedence."
+	for _, w := range capturingLog.warns {
+		if w.message == expectedMsg {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("Expected warning message %q not found in captured logs", expectedMsg)
 	}
 }

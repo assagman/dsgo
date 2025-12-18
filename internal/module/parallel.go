@@ -68,6 +68,13 @@ type Parallel struct {
 	// Runtime state for logging/context (captured once)
 	moduleInfoOnce sync.Once
 	moduleInfo     parallelModuleInfo
+
+	mu sync.Mutex
+
+	// Factory cache to avoid double factory calls during probing and execution
+	factoryCache   []core.Module
+	factoryCount   int
+	factoryCounted bool
 }
 
 // getParallelModuleInfo extracts module type and LM model information for logging
@@ -214,12 +221,21 @@ func NewParallel(module core.Module) *Parallel {
 		batchKey:       "_batch",
 		repeat:         1,
 		verbose:        false,
+		factoryCache:   nil,
+		factoryCount:   0,
+		factoryCounted: false,
 	}
 }
 
 // NewParallelWithFactory creates a Parallel module with a factory function.
 // The factory is called for each task with the task index.
-// This is the recommended approach for stateful modules.
+//
+// When inputs don't specify a batch (_batch or slices), Parallel probes the
+// factory to determine module count by calling factory(i) until it returns nil.
+// The factory MUST return nil for out-of-bounds indices.
+//
+// In factory mode, WithRepeat(n) is ignored as the factory count determines
+// the number of parallel tasks.
 func NewParallelWithFactory(factory func(i int) core.Module) *Parallel {
 	return &Parallel{
 		factory:        factory,
@@ -231,11 +247,17 @@ func NewParallelWithFactory(factory func(i int) core.Module) *Parallel {
 		batchKey:       "_batch",
 		repeat:         1,
 		verbose:        false,
+		factoryCache:   nil,
+		factoryCount:   0,
+		factoryCounted: false,
 	}
 }
 
 // NewParallelWithInstances creates a Parallel module with pre-created instances.
-// Each task will use instances[i % len(instances)].
+// Each task uses instances[i % len(instances)].
+//
+// By default, repeat is set to len(instances), so a single input runs through
+// all instances. Override with WithRepeat() if using batch inputs.
 func NewParallelWithInstances(instances []core.Module) *Parallel {
 	if len(instances) == 0 {
 		panic("NewParallelWithInstances: instances slice cannot be empty")
@@ -248,8 +270,11 @@ func NewParallelWithInstances(instances []core.Module) *Parallel {
 		returnAll:      true,
 		onlySuccessful: true,
 		batchKey:       "_batch",
-		repeat:         1,
+		repeat:         len(instances), // Auto-set to run all instances with same input
 		verbose:        false,
+		factoryCache:   nil,
+		factoryCount:   0,
+		factoryCounted: false,
 	}
 }
 
@@ -367,7 +392,7 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 	}()
 
 	// Expand inputs into batch
-	batch, err := p.expandInputs(inputs)
+	batch, err := p.expandInputs(ctx, inputs)
 	if err != nil {
 		predErr = fmt.Errorf("failed to expand inputs: %w", err)
 		return nil, predErr
@@ -416,6 +441,14 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 	// Module getter
 	getModule := func(i int) core.Module {
 		if p.factory != nil {
+			// Check cache first (probed during expandInputs)
+			p.mu.Lock()
+			if i < len(p.factoryCache) && p.factoryCache[i] != nil {
+				mod := p.factoryCache[i]
+				p.mu.Unlock()
+				return mod
+			}
+			p.mu.Unlock()
 			return p.factory(i)
 		}
 		if len(p.instances) > 0 {
@@ -712,7 +745,7 @@ func (p *Parallel) Forward(ctx context.Context, inputs map[string]any) (*core.Pr
 }
 
 // expandInputs converts inputs into a slice of input maps
-func (p *Parallel) expandInputs(inputs map[string]any) ([]map[string]any, error) {
+func (p *Parallel) expandInputs(ctx context.Context, inputs map[string]any) ([]map[string]any, error) {
 	// Check for explicit batch
 	if batchVal, ok := inputs[p.batchKey]; ok {
 		batch, ok := batchVal.([]map[string]any)
@@ -760,7 +793,26 @@ func (p *Parallel) expandInputs(inputs map[string]any) ([]map[string]any, error)
 		return batch, nil
 	}
 
-	// No batch, no slices - repeat if configured
+	// No batch, no slices - check for factory-based module count
+	if p.factory != nil {
+		// Log warning if WithRepeat was also used
+		if p.repeat > 1 {
+			logging.GetLogger().Warn(ctx, "Parallel: WithRepeat(n) ignored because factory is present. Factory count takes precedence.", map[string]any{
+				"repeat_ignored": p.repeat,
+			})
+		}
+		// Probe factory to determine module count
+		n := p.probeFactoryCount()
+		batch := make([]map[string]any, n)
+		for i := 0; i < n; i++ {
+			taskInputs := make(map[string]any)
+			maps.Copy(taskInputs, inputs)
+			batch[i] = taskInputs
+		}
+		return batch, nil
+	}
+
+	// Repeat if configured
 	if p.repeat > 1 {
 		batch := make([]map[string]any, p.repeat)
 		for i := 0; i < p.repeat; i++ {
@@ -774,6 +826,39 @@ func (p *Parallel) expandInputs(inputs map[string]any) ([]map[string]any, error)
 
 	// Single input
 	return []map[string]any{inputs}, nil
+}
+
+// probeFactoryCount determines how many modules the factory can create
+// by calling factory(i) until it returns nil. Returns at least 1.
+func (p *Parallel) probeFactoryCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.factoryCounted {
+		return p.factoryCount
+	}
+	if p.factory == nil {
+		p.factoryCount = 1
+		p.factoryCounted = true
+		return 1
+	}
+
+	const maxProbe = 1000 // Safety limit
+	var cache []core.Module
+	for i := 0; i < maxProbe; i++ {
+		mod := p.factory(i)
+		if mod == nil {
+			p.factoryCount = i
+			p.factoryCache = cache
+			p.factoryCounted = true
+			return p.factoryCount
+		}
+		cache = append(cache, mod)
+	}
+
+	p.factoryCount = maxProbe
+	p.factoryCache = cache
+	p.factoryCounted = true
+	return maxProbe
 }
 
 // summarizeLatencies calculates min/max/avg/p50 from latencies
@@ -857,6 +942,9 @@ func (p *Parallel) Clone() core.Module {
 		batchKey:       p.batchKey,
 		repeat:         p.repeat,
 		verbose:        p.verbose,
+		factoryCache:   nil,
+		factoryCount:   0,
+		factoryCounted: false,
 	}
 
 	// Only clone module if it exists
