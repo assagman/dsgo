@@ -13,7 +13,7 @@ import (
 //   - YAML decoding is strict (unknown fields are errors).
 //   - Scalar option fields use pointers so that explicit zero values (e.g. temperature: 0)
 //     are representable and not confused with "unset".
-//   - This package is internal-only and not re-exported via dsgo.go.
+//   - This package is internal-only; execute YAML via dsgo.ExecYaml(ctx, path).
 //
 // The schema is intentionally declarative: it describes signatures, tools, modules,
 // and a top-level pipeline (Program) that runs modules in order.
@@ -68,7 +68,7 @@ type Defaults struct {
 }
 
 type Runtime struct {
-	// DSGo global settings (applied via dsgo.Configure / core.Configure).
+	// DSGo global settings (applied via core.Configure; dsgo.Configure re-exports it).
 	DSGo DSGoRuntime `yaml:"dsgo,omitempty" json:"dsgo,omitempty"`
 
 	// Timeouts for the YAML runner itself.

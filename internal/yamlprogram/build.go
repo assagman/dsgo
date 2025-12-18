@@ -6,34 +6,35 @@ import (
 	"os"
 	"time"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/module"
 )
 
 // BuildResult is the output of compiling a YAML spec.
 type BuildResult struct {
-	Program         *dsgo.Program
+	Program         *module.Program
 	PipelineTimeout time.Duration
 }
 
 // LMFactory creates an LM by canonical model name.
-type LMFactory func(ctx context.Context, model string) (dsgo.LM, error)
+type LMFactory func(ctx context.Context, model string) (core.LM, error)
 
 // Builder compiles a Spec into DSGo modules.
 //
 // It is internal-only; the API is intentionally small and oriented around
-// building an executable dsgo.Program.
+// building an executable module.Program.
 type Builder struct {
 	ctx  context.Context
 	spec *Spec
 
 	lmFactory LMFactory
-	lms       map[string]dsgo.LM
+	lms       map[string]core.LM
 
-	signatures map[string]*dsgo.Signature
-	modules    map[string]dsgo.Module
+	signatures map[string]*core.Signature
+	modules    map[string]core.Module
 
-	histories   map[string]*dsgo.History
-	toolSources map[string][]dsgo.Tool
+	histories   map[string]*core.History
+	toolSources map[string][]core.Tool
 }
 
 // NewBuilder creates a Builder for a spec.
@@ -45,24 +46,24 @@ func NewBuilder(ctx context.Context, spec *Spec, lmFactory LMFactory) (*Builder,
 		return nil, fmt.Errorf("spec is nil")
 	}
 	if lmFactory == nil {
-		lmFactory = dsgo.NewLM
+		lmFactory = core.NewLM
 	}
 
 	b := &Builder{
 		ctx:         ctx,
 		spec:        spec,
 		lmFactory:   lmFactory,
-		lms:         make(map[string]dsgo.LM),
-		signatures:  make(map[string]*dsgo.Signature),
-		modules:     make(map[string]dsgo.Module),
-		histories:   make(map[string]*dsgo.History),
-		toolSources: make(map[string][]dsgo.Tool),
+		lms:         make(map[string]core.LM),
+		signatures:  make(map[string]*core.Signature),
+		modules:     make(map[string]core.Module),
+		histories:   make(map[string]*core.History),
+		toolSources: make(map[string][]core.Tool),
 	}
 
 	return b, nil
 }
 
-// Build compiles the spec into a dsgo.Program.
+// Build compiles the spec into a module.Program.
 func (b *Builder) Build() (*BuildResult, error) {
 	if err := b.applyRuntimeSettings(); err != nil {
 		return nil, err
@@ -80,7 +81,7 @@ func (b *Builder) Build() (*BuildResult, error) {
 		return nil, err
 	}
 
-	prog := dsgo.NewProgram(b.spec.Name)
+	prog := module.NewProgram(b.spec.Name)
 	for _, step := range b.spec.Pipeline {
 		m, ok := b.modules[step]
 		if !ok {
@@ -98,43 +99,43 @@ func (b *Builder) Build() (*BuildResult, error) {
 }
 
 func (b *Builder) applyRuntimeSettings() error {
-	var opts []dsgo.Option
+	var opts []core.Option
 
 	if b.spec.Runtime.DSGo.TimeoutSeconds != nil {
-		opts = append(opts, dsgo.WithTimeout(time.Duration(*b.spec.Runtime.DSGo.TimeoutSeconds)*time.Second))
+		opts = append(opts, core.WithTimeout(time.Duration(*b.spec.Runtime.DSGo.TimeoutSeconds)*time.Second))
 	}
 	if b.spec.Runtime.DSGo.MaxRetries != nil {
-		opts = append(opts, dsgo.WithMaxRetries(*b.spec.Runtime.DSGo.MaxRetries))
+		opts = append(opts, core.WithMaxRetries(*b.spec.Runtime.DSGo.MaxRetries))
 	}
 	if b.spec.Runtime.DSGo.Tracing != nil {
-		opts = append(opts, dsgo.WithTracing(*b.spec.Runtime.DSGo.Tracing))
+		opts = append(opts, core.WithTracing(*b.spec.Runtime.DSGo.Tracing))
 	}
 	if b.spec.Runtime.DSGo.SkipModelValidation != nil {
-		opts = append(opts, dsgo.WithSkipModelValidation(*b.spec.Runtime.DSGo.SkipModelValidation))
+		opts = append(opts, core.WithSkipModelValidation(*b.spec.Runtime.DSGo.SkipModelValidation))
 	}
 
 	// Structured outputs
 	so := b.spec.Runtime.DSGo.StructuredOutput
 	if so.Enabled != nil {
-		opts = append(opts, dsgo.WithStructuredOutputEnabled(*so.Enabled))
+		opts = append(opts, core.WithStructuredOutputEnabled(*so.Enabled))
 	}
 	if so.MaxAttempts != nil {
-		opts = append(opts, dsgo.WithStructuredOutputMaxAttempts(*so.MaxAttempts))
+		opts = append(opts, core.WithStructuredOutputMaxAttempts(*so.MaxAttempts))
 	}
 	if so.Temperature != nil {
-		opts = append(opts, dsgo.WithStructuredOutputTemperature(float32(*so.Temperature)))
+		opts = append(opts, core.WithStructuredOutputTemperature(float32(*so.Temperature)))
 	}
 
 	// Cache
 	if b.spec.Runtime.DSGo.Cache.Capacity != nil {
-		opts = append(opts, dsgo.WithCache(*b.spec.Runtime.DSGo.Cache.Capacity))
+		opts = append(opts, core.WithCache(*b.spec.Runtime.DSGo.Cache.Capacity))
 	}
 	if b.spec.Runtime.DSGo.Cache.TTL != nil {
-		opts = append(opts, dsgo.WithCacheTTL(b.spec.Runtime.DSGo.Cache.TTL.Duration))
+		opts = append(opts, core.WithCacheTTL(b.spec.Runtime.DSGo.Cache.TTL.Duration))
 	}
 
 	if len(opts) > 0 {
-		dsgo.Configure(opts...)
+		core.Configure(opts...)
 	}
 	return nil
 }
@@ -149,7 +150,7 @@ func (b *Builder) defaultModel() string {
 	return "openrouter/z-ai/glm-4.6"
 }
 
-func (b *Builder) getLM(model string) (dsgo.LM, error) {
+func (b *Builder) getLM(model string) (core.LM, error) {
 	if model == "" {
 		model = b.defaultModel()
 	}
@@ -167,9 +168,9 @@ func (b *Builder) getLM(model string) (dsgo.LM, error) {
 func (b *Builder) buildHistories() error {
 	for name, hs := range b.spec.Histories {
 		if hs.Limit != nil {
-			b.histories[name] = dsgo.NewHistoryWithLimit(*hs.Limit)
+			b.histories[name] = core.NewHistoryWithLimit(*hs.Limit)
 		} else {
-			b.histories[name] = dsgo.NewHistory()
+			b.histories[name] = core.NewHistory()
 		}
 	}
 	return nil

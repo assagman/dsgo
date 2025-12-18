@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/module"
 )
@@ -93,7 +92,7 @@ func TestBuild_ExplicitTemperatureZeroIsApplied(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 
-	b, err := NewBuilder(context.Background(), s, func(ctx context.Context, model string) (dsgo.LM, error) {
+	b, err := NewBuilder(context.Background(), s, func(ctx context.Context, model string) (core.LM, error) {
 		return &fakeLM{}, nil
 	})
 	if err != nil {

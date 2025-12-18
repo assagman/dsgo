@@ -1,11 +1,11 @@
 package yamlprogram
 
 import (
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/core"
 )
 
-func buildGenerateOptions(spec GenerateOptionsSpec) *dsgo.GenerateOptions {
-	opts := dsgo.DefaultGenerateOptions()
+func buildGenerateOptions(spec GenerateOptionsSpec) *core.GenerateOptions {
+	opts := core.DefaultGenerateOptions()
 
 	if spec.Temperature != nil {
 		opts.Temperature = *spec.Temperature
@@ -35,12 +35,12 @@ func buildGenerateOptions(spec GenerateOptionsSpec) *dsgo.GenerateOptions {
 		opts.PresencePenalty = *spec.PresencePenalty
 	}
 	if spec.ProviderParams != nil {
-		opts.ProviderParams = dsgo.DeepCopyMap(spec.ProviderParams)
+		opts.ProviderParams = core.DeepCopyMap(spec.ProviderParams)
 	}
 
 	// Retry
 	if spec.Retry.MaxRetries != nil || spec.Retry.InitialBackoff != nil || spec.Retry.MaxBackoff != nil || spec.Retry.JitterFactor != nil {
-		rc := &dsgo.RetryConfig{}
+		rc := &core.RetryConfig{}
 		if spec.Retry.MaxRetries != nil {
 			rc.MaxRetries = *spec.Retry.MaxRetries
 		}

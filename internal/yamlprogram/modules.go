@@ -3,7 +3,7 @@ package yamlprogram
 import (
 	"fmt"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 func (b *Builder) buildAllModules() error {
@@ -15,7 +15,7 @@ func (b *Builder) buildAllModules() error {
 	return nil
 }
 
-func (b *Builder) getModule(name string) (dsgo.Module, error) {
+func (b *Builder) getModule(name string) (core.Module, error) {
 	if m, ok := b.modules[name]; ok {
 		return m, nil
 	}
@@ -32,7 +32,7 @@ func (b *Builder) getModule(name string) (dsgo.Module, error) {
 	return m, nil
 }
 
-func (b *Builder) buildModule(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildModule(name string, spec ModuleSpec) (core.Module, error) {
 	switch spec.Kind {
 	case "predict":
 		return b.buildPredict(name, spec)
@@ -57,7 +57,7 @@ func (b *Builder) buildModule(name string, spec ModuleSpec) (dsgo.Module, error)
 	}
 }
 
-func (b *Builder) getSignature(name, sigName string) (*dsgo.Signature, error) {
+func (b *Builder) getSignature(name, sigName string) (*core.Signature, error) {
 	sig, ok := b.signatures[sigName]
 	if !ok {
 		return nil, fmt.Errorf("module %q: unknown signature %q", name, sigName)
@@ -65,7 +65,7 @@ func (b *Builder) getSignature(name, sigName string) (*dsgo.Signature, error) {
 	return sig, nil
 }
 
-func (b *Builder) getHistory(ref string) *dsgo.History {
+func (b *Builder) getHistory(ref string) *core.History {
 	if ref == "" {
 		return nil
 	}

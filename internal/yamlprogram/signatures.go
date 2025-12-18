@@ -3,7 +3,7 @@ package yamlprogram
 import (
 	"fmt"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/core"
 )
 
 func (b *Builder) buildSignatures() error {
@@ -17,11 +17,11 @@ func (b *Builder) buildSignatures() error {
 	return nil
 }
 
-func convertSignature(name string, spec SignatureSpec) (*dsgo.Signature, error) {
-	sig := dsgo.NewSignature(spec.Desc)
+func convertSignature(name string, spec SignatureSpec) (*core.Signature, error) {
+	sig := core.NewSignature(spec.Desc)
 
 	for fieldName, f := range spec.In {
-		ft, classes, err := mapFieldType(f)
+		ft, _, err := mapFieldType(f)
 		if err != nil {
 			return nil, fmt.Errorf("signature %q in.%s: %w", name, fieldName, err)
 		}
@@ -31,7 +31,6 @@ func convertSignature(name string, spec SignatureSpec) (*dsgo.Signature, error) 
 		} else {
 			sig.AddInput(fieldName, ft, f.Desc)
 		}
-		_ = classes // inputs don't use classes in DSGo
 	}
 
 	for fieldName, f := range spec.Out {
@@ -40,7 +39,7 @@ func convertSignature(name string, spec SignatureSpec) (*dsgo.Signature, error) 
 			return nil, fmt.Errorf("signature %q out.%s: %w", name, fieldName, err)
 		}
 
-		if ft == dsgo.FieldTypeClass {
+		if ft == core.FieldTypeClass {
 			sig.AddClassOutput(fieldName, classes, f.Desc)
 			continue
 		}
@@ -55,28 +54,28 @@ func convertSignature(name string, spec SignatureSpec) (*dsgo.Signature, error) 
 	return sig, nil
 }
 
-func mapFieldType(f FieldSpec) (dsgo.FieldType, []string, error) {
+func mapFieldType(f FieldSpec) (core.FieldType, []string, error) {
 	switch f.Type {
 	case "string":
-		return dsgo.FieldTypeString, nil, nil
+		return core.FieldTypeString, nil, nil
 	case "int":
-		return dsgo.FieldTypeInt, nil, nil
+		return core.FieldTypeInt, nil, nil
 	case "float":
-		return dsgo.FieldTypeFloat, nil, nil
+		return core.FieldTypeFloat, nil, nil
 	case "bool":
-		return dsgo.FieldTypeBool, nil, nil
+		return core.FieldTypeBool, nil, nil
 	case "json":
-		return dsgo.FieldTypeJSON, nil, nil
+		return core.FieldTypeJSON, nil, nil
 	case "image":
-		return dsgo.FieldTypeImage, nil, nil
+		return core.FieldTypeImage, nil, nil
 	case "datetime":
-		return dsgo.FieldTypeDatetime, nil, nil
+		return core.FieldTypeDatetime, nil, nil
 	case "enum":
 		if len(f.Values) == 0 {
-			return dsgo.FieldTypeString, nil, fmt.Errorf("enum values is empty")
+			return core.FieldTypeString, nil, fmt.Errorf("enum values is empty")
 		}
-		return dsgo.FieldTypeClass, f.Values, nil
+		return core.FieldTypeClass, f.Values, nil
 	default:
-		return dsgo.FieldTypeString, nil, fmt.Errorf("unknown field type %q", f.Type)
+		return core.FieldTypeString, nil, fmt.Errorf("unknown field type %q", f.Type)
 	}
 }

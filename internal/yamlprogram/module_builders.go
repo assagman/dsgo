@@ -5,10 +5,11 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/module"
 )
 
-func (b *Builder) buildPredict(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildPredict(name string, spec ModuleSpec) (core.Module, error) {
 	sig, err := b.getSignature(name, spec.Sig)
 	if err != nil {
 		return nil, err
@@ -23,7 +24,7 @@ func (b *Builder) buildPredict(name string, spec ModuleSpec) (dsgo.Module, error
 	}
 	opts := buildGenerateOptions(spec.Gen)
 
-	m := dsgo.NewPredict(sig, lm).WithOptions(opts).WithAdapter(adapter)
+	m := module.NewPredict(sig, lm).WithOptions(opts).WithAdapter(adapter)
 	if h := b.getHistory(spec.History); h != nil {
 		m.WithHistory(h)
 	}
@@ -33,7 +34,7 @@ func (b *Builder) buildPredict(name string, spec ModuleSpec) (dsgo.Module, error
 	return m, nil
 }
 
-func (b *Builder) buildChainOfThought(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildChainOfThought(name string, spec ModuleSpec) (core.Module, error) {
 	sig, err := b.getSignature(name, spec.Sig)
 	if err != nil {
 		return nil, err
@@ -48,7 +49,7 @@ func (b *Builder) buildChainOfThought(name string, spec ModuleSpec) (dsgo.Module
 	}
 	opts := buildGenerateOptions(spec.Gen)
 
-	m := dsgo.NewChainOfThought(sig, lm).WithOptions(opts).WithAdapter(adapter)
+	m := module.NewChainOfThought(sig, lm).WithOptions(opts).WithAdapter(adapter)
 	if h := b.getHistory(spec.History); h != nil {
 		m.WithHistory(h)
 	}
@@ -58,7 +59,7 @@ func (b *Builder) buildChainOfThought(name string, spec ModuleSpec) (dsgo.Module
 	return m, nil
 }
 
-func (b *Builder) buildReAct(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildReAct(name string, spec ModuleSpec) (core.Module, error) {
 	sig, err := b.getSignature(name, spec.Sig)
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func (b *Builder) buildReAct(name string, spec ModuleSpec) (dsgo.Module, error) 
 		return nil, fmt.Errorf("module %q: resolve tools: %w", name, err)
 	}
 
-	m := dsgo.NewReAct(sig, lm, tools).WithOptions(opts).WithAdapter(adapter)
+	m := module.NewReAct(sig, lm, tools).WithOptions(opts).WithAdapter(adapter)
 	if spec.ReAct.MaxIterations != nil {
 		m.WithMaxIterations(*spec.ReAct.MaxIterations)
 	}
@@ -88,7 +89,7 @@ func (b *Builder) buildReAct(name string, spec ModuleSpec) (dsgo.Module, error) 
 	return m, nil
 }
 
-func (b *Builder) buildRefine(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildRefine(name string, spec ModuleSpec) (core.Module, error) {
 	sig, err := b.getSignature(name, spec.Sig)
 	if err != nil {
 		return nil, err
@@ -103,7 +104,7 @@ func (b *Builder) buildRefine(name string, spec ModuleSpec) (dsgo.Module, error)
 	}
 	opts := buildGenerateOptions(spec.Gen)
 
-	m := dsgo.NewRefine(sig, lm).WithOptions(opts).WithAdapter(adapter)
+	m := module.NewRefine(sig, lm).WithOptions(opts).WithAdapter(adapter)
 	if spec.Refine.MaxIterations != nil {
 		m.WithMaxIterations(*spec.Refine.MaxIterations)
 	}
@@ -122,19 +123,19 @@ func (b *Builder) buildRefine(name string, spec ModuleSpec) (dsgo.Module, error)
 	return m, nil
 }
 
-func (b *Builder) buildBestOfN(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildBestOfN(name string, spec ModuleSpec) (core.Module, error) {
 	inner, err := b.getModule(spec.BestOfN.Of)
 	if err != nil {
 		return nil, fmt.Errorf("module %q: %w", name, err)
 	}
 
-	m := dsgo.NewBestOfN(inner, spec.BestOfN.N)
+	m := module.NewBestOfN(inner, spec.BestOfN.N)
 
 	switch spec.BestOfN.Scorer.Kind {
 	case "default":
-		m.WithScorer(dsgo.DefaultScorer())
+		m.WithScorer(module.DefaultScorer())
 	case "confidence":
-		m.WithScorer(dsgo.ConfidenceScorer(spec.BestOfN.Scorer.Field))
+		m.WithScorer(module.ConfidenceScorer(spec.BestOfN.Scorer.Field))
 	default:
 		return nil, fmt.Errorf("module %q: unsupported scorer.kind %q", name, spec.BestOfN.Scorer.Kind)
 	}
@@ -154,7 +155,7 @@ func (b *Builder) buildBestOfN(name string, spec ModuleSpec) (dsgo.Module, error
 	return m, nil
 }
 
-func (b *Builder) buildProgramOfThought(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildProgramOfThought(name string, spec ModuleSpec) (core.Module, error) {
 	sig, err := b.getSignature(name, spec.Sig)
 	if err != nil {
 		return nil, err
@@ -170,7 +171,7 @@ func (b *Builder) buildProgramOfThought(name string, spec ModuleSpec) (dsgo.Modu
 	opts := buildGenerateOptions(spec.Gen)
 
 	_ = adapter // ProgramOfThought currently does not expose adapter overrides.
-	m := dsgo.NewProgramOfThought(sig, lm, spec.ProgramOfThought.Language).WithOptions(opts)
+	m := module.NewProgramOfThought(sig, lm, spec.ProgramOfThought.Language).WithOptions(opts)
 	if spec.ProgramOfThought.AllowExecution != nil {
 		m.WithAllowExecution(*spec.ProgramOfThought.AllowExecution)
 	}
@@ -180,8 +181,8 @@ func (b *Builder) buildProgramOfThought(name string, spec ModuleSpec) (dsgo.Modu
 	return m, nil
 }
 
-func (b *Builder) buildProgram(name string, spec ModuleSpec) (dsgo.Module, error) {
-	p := dsgo.NewProgram(name)
+func (b *Builder) buildProgram(name string, spec ModuleSpec) (core.Module, error) {
+	p := module.NewProgram(name)
 	for _, step := range spec.Program.Steps {
 		m, err := b.getModule(step)
 		if err != nil {
@@ -192,22 +193,22 @@ func (b *Builder) buildProgram(name string, spec ModuleSpec) (dsgo.Module, error
 	return p, nil
 }
 
-func (b *Builder) buildParallel(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildParallel(name string, spec ModuleSpec) (core.Module, error) {
 	mode := spec.Parallel.Mode
 	if mode == "" {
 		mode = "clone"
 	}
 
-	var p *dsgo.Parallel
+	var p *module.Parallel
 	switch mode {
 	case "clone":
 		inner, err := b.getModule(spec.Parallel.Module)
 		if err != nil {
 			return nil, fmt.Errorf("module %q: %w", name, err)
 		}
-		p = dsgo.NewParallel(inner)
+		p = module.NewParallel(inner)
 	case "instances":
-		instances := make([]dsgo.Module, 0, len(spec.Parallel.Instances))
+		instances := make([]core.Module, 0, len(spec.Parallel.Instances))
 		for _, in := range spec.Parallel.Instances {
 			m, err := b.getModule(in)
 			if err != nil {
@@ -215,9 +216,9 @@ func (b *Builder) buildParallel(name string, spec ModuleSpec) (dsgo.Module, erro
 			}
 			instances = append(instances, m.Clone())
 		}
-		p = dsgo.NewParallelWithInstances(instances)
+		p = module.NewParallelWithInstances(instances)
 	case "factory":
-		mods := make([]dsgo.Module, 0, len(spec.Parallel.Factory))
+		mods := make([]core.Module, 0, len(spec.Parallel.Factory))
 		for _, use := range spec.Parallel.Factory {
 			m, err := b.getModule(use)
 			if err != nil {
@@ -225,7 +226,7 @@ func (b *Builder) buildParallel(name string, spec ModuleSpec) (dsgo.Module, erro
 			}
 			mods = append(mods, m)
 		}
-		p = dsgo.NewParallelWithFactory(func(i int) dsgo.Module {
+		p = module.NewParallelWithFactory(func(i int) core.Module {
 			if i < 0 || i >= len(mods) {
 				return nil
 			}
@@ -264,7 +265,7 @@ func (b *Builder) buildParallel(name string, spec ModuleSpec) (dsgo.Module, erro
 	return p, nil
 }
 
-func (b *Builder) buildMultiChainComparison(name string, spec ModuleSpec) (dsgo.Module, error) {
+func (b *Builder) buildMultiChainComparison(name string, spec ModuleSpec) (core.Module, error) {
 	sig, err := b.getSignature(name, spec.Sig)
 	if err != nil {
 		return nil, err
@@ -279,7 +280,7 @@ func (b *Builder) buildMultiChainComparison(name string, spec ModuleSpec) (dsgo.
 	}
 	opts := buildGenerateOptions(spec.Gen)
 
-	m := dsgo.NewMultiChainComparison(sig, lm, spec.MultiChainComparison.Attempts).WithOptions(opts).WithAdapter(adapter)
+	m := module.NewMultiChainComparison(sig, lm, spec.MultiChainComparison.Attempts).WithOptions(opts).WithAdapter(adapter)
 	if spec.MultiChainComparison.AttemptTemplate != nil {
 		m.WithAttemptTemplate(*spec.MultiChainComparison.AttemptTemplate)
 	}
@@ -292,8 +293,8 @@ func (b *Builder) buildMultiChainComparison(name string, spec ModuleSpec) (dsgo.
 	return m, nil
 }
 
-func (b *Builder) resolveTools(selections []ToolSelection) ([]dsgo.Tool, error) {
-	byName := map[string]dsgo.Tool{}
+func (b *Builder) resolveTools(selections []ToolSelection) ([]core.Tool, error) {
+	byName := map[string]core.Tool{}
 
 	for _, sel := range selections {
 		tools, ok := b.toolSources[sel.Source]
@@ -318,11 +319,11 @@ func (b *Builder) resolveTools(selections []ToolSelection) ([]dsgo.Tool, error) 
 		}
 	}
 
-	out := make([]dsgo.Tool, 0, len(byName))
+	out := make([]core.Tool, 0, len(byName))
 	for t := range maps.Values(byName) {
 		out = append(out, t)
 	}
-	slices.SortFunc(out, func(a, b dsgo.Tool) int { return stringsCompare(a.Name, b.Name) })
+	slices.SortFunc(out, func(a, b core.Tool) int { return stringsCompare(a.Name, b.Name) })
 	return out, nil
 }
 
@@ -336,13 +337,13 @@ func stringsCompare(a, b string) int {
 	return 1
 }
 
-func convertDemos(in []ExampleSpec) []dsgo.Example {
+func convertDemos(in []ExampleSpec) []core.Example {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]dsgo.Example, 0, len(in))
+	out := make([]core.Example, 0, len(in))
 	for _, ex := range in {
-		out = append(out, dsgo.Example{Inputs: ex.Inputs, Outputs: ex.Outputs})
+		out = append(out, core.Example{Inputs: ex.Inputs, Outputs: ex.Outputs})
 	}
 	return out
 }

@@ -3,24 +3,23 @@ package yamlprogram
 import (
 	"fmt"
 
-	"github.com/assagman/dsgo"
 	"github.com/assagman/dsgo/internal/core"
 )
 
-func (b *Builder) buildAdapter(spec AdapterSpec, moduleLM dsgo.LM) (dsgo.Adapter, error) {
+func (b *Builder) buildAdapter(spec AdapterSpec, moduleLM core.LM) (core.Adapter, error) {
 	kind := spec.Kind
 	if kind == "" {
 		kind = "fallback"
 	}
 
-	var adapter dsgo.Adapter
+	var adapter core.Adapter
 	switch kind {
 	case "fallback":
-		adapter = dsgo.NewFallbackAdapter()
+		adapter = core.NewFallbackAdapter()
 	case "chat":
-		adapter = dsgo.NewChatAdapter()
+		adapter = core.NewChatAdapter()
 	case "json":
-		adapter = dsgo.NewJSONAdapter()
+		adapter = core.NewJSONAdapter()
 	case "two_step":
 		extractLM := moduleLM
 		if spec.ExtractionModel != "" {
@@ -30,7 +29,7 @@ func (b *Builder) buildAdapter(spec AdapterSpec, moduleLM dsgo.LM) (dsgo.Adapter
 			}
 			extractLM = lm
 		}
-		adapter = dsgo.NewTwoStepAdapter(extractLM)
+		adapter = core.NewTwoStepAdapter(extractLM)
 	default:
 		return nil, fmt.Errorf("unknown adapter kind %q", kind)
 	}
@@ -41,7 +40,7 @@ func (b *Builder) buildAdapter(spec AdapterSpec, moduleLM dsgo.LM) (dsgo.Adapter
 	return adapter, nil
 }
 
-func withReasoning(adapter dsgo.Adapter, on bool) dsgo.Adapter {
+func withReasoning(adapter core.Adapter, on bool) core.Adapter {
 	switch a := adapter.(type) {
 	case *core.ChatAdapter:
 		return a.WithReasoning(on)

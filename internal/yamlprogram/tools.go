@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/core"
+	"github.com/assagman/dsgo/internal/mcp"
 )
 
 func (b *Builder) buildToolSources() error {
@@ -18,10 +19,10 @@ func (b *Builder) buildToolSources() error {
 	return nil
 }
 
-func (b *Builder) buildToolSource(name string, src ToolSource) ([]dsgo.Tool, error) {
+func (b *Builder) buildToolSource(name string, src ToolSource) ([]core.Tool, error) {
 	switch src.Kind {
 	case "builtin":
-		var out []dsgo.Tool
+		var out []core.Tool
 		for _, tname := range src.Tools {
 			tool, err := builtinTool(tname)
 			if err != nil {
@@ -44,7 +45,7 @@ func (b *Builder) buildToolSource(name string, src ToolSource) ([]dsgo.Tool, err
 	}
 }
 
-func (b *Builder) buildMCPClient(src ToolSource) (*dsgo.MCPClient, error) {
+func (b *Builder) buildMCPClient(src ToolSource) (*mcp.Client, error) {
 	apiKey := src.APIKey
 	if apiKey == "" && src.APIKeyEnv != "" {
 		apiKey = os.Getenv(src.APIKeyEnv)
@@ -63,19 +64,19 @@ func (b *Builder) buildMCPClient(src ToolSource) (*dsgo.MCPClient, error) {
 
 	switch src.Type {
 	case "exa":
-		c, err := dsgo.NewMCPExaClient(apiKey)
+		c, err := mcp.NewExaClient(apiKey)
 		if err != nil {
 			return nil, err
 		}
 		return c, nil
 	case "jina":
-		c, err := dsgo.NewMCPJinaClient(apiKey)
+		c, err := mcp.NewJinaClient(apiKey)
 		if err != nil {
 			return nil, err
 		}
 		return c, nil
 	case "tavily":
-		c, err := dsgo.NewMCPTavilyClient(apiKey)
+		c, err := mcp.NewTavilyClient(apiKey)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +85,7 @@ func (b *Builder) buildMCPClient(src ToolSource) (*dsgo.MCPClient, error) {
 		if len(src.AllowedDirs) == 0 {
 			return nil, fmt.Errorf("filesystem tool source requires allowed_dirs")
 		}
-		c, err := dsgo.NewMCPFilesystemClient(src.AllowedDirs[0])
+		c, err := mcp.NewFilesystemClient(src.AllowedDirs[0])
 		if err != nil {
 			return nil, err
 		}
@@ -94,15 +95,15 @@ func (b *Builder) buildMCPClient(src ToolSource) (*dsgo.MCPClient, error) {
 		if len(src.AllowedDirs) > 0 {
 			root = src.AllowedDirs[0]
 		}
-		server, err := dsgo.NewMCPShellServer(dsgo.MCPShellServerConfig{RootDir: root})
+		server, err := mcp.NewShellServer(mcp.ShellServerConfig{RootDir: root})
 		if err != nil {
 			return nil, err
 		}
-		transport, err := dsgo.NewMCPLocalTransport(server)
+		transport, err := mcp.NewLocalTransport(server)
 		if err != nil {
 			return nil, err
 		}
-		c, err := dsgo.NewMCPClient(dsgo.MCPClientConfig{Transport: transport})
+		c, err := mcp.NewClient(mcp.ClientConfig{Transport: transport})
 		if err != nil {
 			return nil, err
 		}
@@ -111,8 +112,8 @@ func (b *Builder) buildMCPClient(src ToolSource) (*dsgo.MCPClient, error) {
 		if src.URL == "" {
 			return nil, fmt.Errorf("custom tool source requires url")
 		}
-		transport := dsgo.NewMCPHTTPTransport(src.URL, apiKey)
-		c, err := dsgo.NewMCPClient(dsgo.MCPClientConfig{Transport: transport})
+		transport := mcp.NewHTTPTransport(src.URL, apiKey)
+		c, err := mcp.NewClient(mcp.ClientConfig{Transport: transport})
 		if err != nil {
 			return nil, err
 		}

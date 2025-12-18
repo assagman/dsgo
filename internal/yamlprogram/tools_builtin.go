@@ -12,20 +12,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/core"
 )
 
-func builtinTool(name string) (*dsgo.Tool, error) {
+func builtinTool(name string) (*core.Tool, error) {
 	switch name {
 	case "current_datetime":
-		return dsgo.NewTool("current_datetime", "Get the current date and time", func(ctx context.Context, args map[string]any) (any, error) {
+		return core.NewTool("current_datetime", "Get the current date and time", func(ctx context.Context, args map[string]any) (any, error) {
 			return map[string]any{
 				"datetime": time.Now().Format(time.RFC3339),
 			}, nil
 		}).AddParameter("format", "string", "Optional time format (RFC3339 by default)", false), nil
 
 	case "calculate":
-		return dsgo.NewTool("calculate", "Evaluate a simple arithmetic expression", func(ctx context.Context, args map[string]any) (any, error) {
+		return core.NewTool("calculate", "Evaluate a simple arithmetic expression", func(ctx context.Context, args map[string]any) (any, error) {
 			expr, _ := args["expression"].(string)
 			expr = strings.TrimSpace(expr)
 			if expr == "" {
@@ -66,7 +66,7 @@ func builtinTool(name string) (*dsgo.Tool, error) {
 		}).AddParameter("expression", "string", "Expression like '2 + 2'", true), nil
 
 	case "random_number":
-		return dsgo.NewTool("random_number", "Generate a random number in range", func(ctx context.Context, args map[string]any) (any, error) {
+		return core.NewTool("random_number", "Generate a random number in range", func(ctx context.Context, args map[string]any) (any, error) {
 			min := int64(0)
 			max := int64(100)
 			if v, ok := args["min"].(float64); ok {
@@ -88,20 +88,20 @@ func builtinTool(name string) (*dsgo.Tool, error) {
 			AddParameter("max", "number", "Maximum (inclusive)", false), nil
 
 	case "string_length":
-		return dsgo.NewTool("string_length", "Get length of a string", func(ctx context.Context, args map[string]any) (any, error) {
+		return core.NewTool("string_length", "Get length of a string", func(ctx context.Context, args map[string]any) (any, error) {
 			text, _ := args["text"].(string)
 			return map[string]any{"length": len(text)}, nil
 		}).AddParameter("text", "string", "Text to measure", true), nil
 
 	case "word_count":
-		return dsgo.NewTool("word_count", "Count words in text", func(ctx context.Context, args map[string]any) (any, error) {
+		return core.NewTool("word_count", "Count words in text", func(ctx context.Context, args map[string]any) (any, error) {
 			text, _ := args["text"].(string)
 			words := strings.Fields(text)
 			return map[string]any{"words": len(words)}, nil
 		}).AddParameter("text", "string", "Text to count", true), nil
 
 	case "environment_info":
-		return dsgo.NewTool("environment_info", "Return environment/runtime info", func(ctx context.Context, args map[string]any) (any, error) {
+		return core.NewTool("environment_info", "Return environment/runtime info", func(ctx context.Context, args map[string]any) (any, error) {
 			info := map[string]any{
 				"goos":   runtime.GOOS,
 				"goarch": runtime.GOARCH,
