@@ -420,6 +420,24 @@ func TestOpenRouter_BuildParams_ToolChoice(t *testing.T) {
 			t.Errorf("expected tool_choice 'none' for non-ZAI model, got %v", m["tool_choice"])
 		}
 	})
+
+	t.Run("non-zai model sends tool_choice required", func(t *testing.T) {
+		lm := &openRouter{Model: "openai/gpt-4"}
+		messages := []core.Message{{Role: "user", Content: "test"}}
+		options := &core.GenerateOptions{
+			Tools:      []core.Tool{*core.NewTool("test_tool", "A test tool", nil)},
+			ToolChoice: "required",
+		}
+		params := lm.buildParams(messages, options)
+
+		data, _ := json.Marshal(params)
+		var m map[string]any
+		_ = json.Unmarshal(data, &m)
+
+		if m["tool_choice"] != "required" {
+			t.Errorf("expected tool_choice 'required' for non-ZAI model, got %v", m["tool_choice"])
+		}
+	})
 }
 
 func TestOpenRouter_BuildParams_ZAIToolChoice(t *testing.T) {
@@ -507,8 +525,23 @@ func TestOpenRouter_ConvertTool(t *testing.T) {
 
 	converted := lm.convertTool(tool)
 
-	if converted.GetFunction() == nil {
-		t.Error("expected function to be set")
+	fn := converted.GetFunction()
+	if fn == nil {
+		t.Fatal("expected function to be set")
+	}
+
+	data, err := json.Marshal(converted)
+	if err != nil {
+		t.Fatalf("marshal tool: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal tool: %v", err)
+	}
+	function, _ := m["function"].(map[string]any)
+	params, _ := function["parameters"].(map[string]any)
+	if params["additionalProperties"] != false {
+		t.Errorf("expected additionalProperties=false, got %v", params["additionalProperties"])
 	}
 }
 

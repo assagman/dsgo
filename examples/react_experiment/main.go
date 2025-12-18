@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,41 +15,51 @@ import (
 	"github.com/assagman/dsgo/internal/core"
 )
 
-const MaxIterations = 10
+const (
+	MaxIterations = 10
+	// Limit concurrency to reduce rate limit errors.
+	DefaultMaxConcurrent = 3
+)
 
 func main() {
 	ctx := context.Background()
 
-	models := []string{
-		"openrouter/google/gemini-2.5-flash-lite-preview-09-2025",
-		"openrouter/openai/gpt-4o-mini",
-		"openrouter/openai/gpt-5-mini-2025-08-07",
-		"openrouter/openai/gpt-5-nano-2025-08-07",
-		"openrouter/openai/gpt-4.1-2025-04-14",
-		"openrouter/google/gemini-2.5-flash",
-		"openrouter/x-ai/grok-code-fast-1",
-		"openrouter/deepseek/deepseek-v3.2",
-		"openrouter/qwen/qwen3-next-80b-a3b-instruct",
-		"openrouter/z-ai/glm-4.6:exacto",
-		"openrouter/moonshotai/kimi-k2-0905:exacto",
-		"openrouter/openai/gpt-oss-120b:exacto",
-		"openrouter/qwen/qwen3-coder:exacto",
+	// This example is intended for experimentation; allow running models that aren't in the catalog.
+	dsgo.Configure()
+
+	models := selectModels()
+	if len(models) == 0 {
+		fmt.Println("No models selected.\n" +
+			"Set OPENROUTER_API_KEY and/or OPENAI_API_KEY, or update examples/react_experiment/main.go.")
+		return
 	}
 
-	fmt.Println("🧪 ReAct Experiment: Cost Package Analysis")
+	maxConcurrent := DefaultMaxConcurrent
+	if v := os.Getenv("DSGO_EXPERIMENT_CONCURRENCY"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxConcurrent = n
+		}
+	}
+
+	fmt.Println("🧪 ReAct Experiment: Core Package Analysis")
 	fmt.Println("=" + strings.Repeat("=", 60))
 	fmt.Printf("Models: %s\n", strings.Join(models, ", "))
 	fmt.Printf("Max Iterations: %d\n", MaxIterations)
+	fmt.Printf("Max Concurrent: %d\n", maxConcurrent)
 	fmt.Println()
 
 	var wg sync.WaitGroup
 	results := make(map[string]*ExperimentResult)
 	var mu sync.Mutex
 
+	sem := make(chan struct{}, maxConcurrent)
 	for _, modelName := range models {
 		wg.Add(1)
 		go func(model string) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
 			result := runExperiment(ctx, model)
 			mu.Lock()
 			results[model] = result
@@ -59,6 +72,158 @@ func main() {
 	fmt.Println("\n📊 Comparison Results")
 	fmt.Println("=" + strings.Repeat("=", 60))
 	displayComparison(results)
+}
+
+func selectModels() []string {
+	hasOpenRouter := os.Getenv("OPENROUTER_API_KEY") != ""
+	hasOpenAI := os.Getenv("OPENAI_API_KEY") != ""
+
+	// Curated selection:
+	// - max 10 models total
+	// - 2 models each from: moonshotai, google, openai, z-ai, qwen
+	// - avoid ":free" variants (often unstable)
+	maxTotal := 10
+	perOrg := 2
+
+	type candidate struct {
+		id     string
+		cost   float64   // PromptPrice + CompletionPrice (USD / 1M tokens)
+		newest time.Time // parsed from LastUpdated/ReleaseDate
+	}
+
+	parseDate := func(s string) time.Time {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return time.Time{}
+		}
+		// Allow YYYY-MM-DD, YYYY-MM, or YYYY.
+		for _, layout := range []string{"2006-01-02", "2006-01", "2006"} {
+			if t, err := time.Parse(layout, s); err == nil {
+				return t
+			}
+		}
+		return time.Time{}
+	}
+
+	pickForPrefix := func(provider, prefix string, max int) []string {
+		models := dsgo.ListModelsByProvider(provider)
+		cands := make([]candidate, 0, len(models))
+		for _, m := range models {
+			if !strings.HasPrefix(m.ID, prefix) {
+				continue
+			}
+			// Avoid free-tier models; they tend to be unstable / rate-limited.
+			if strings.Contains(m.ID, ":free") {
+				continue
+			}
+			// ReAct relies on tool calling (native when supported).
+			if !m.Capabilities.ToolCall {
+				continue
+			}
+			// Some catalog entries use 0 output tokens as "unknown"; avoid those.
+			if m.Limits.OutputTokens <= 0 {
+				continue
+			}
+
+			newest := parseDate(m.Metadata.LastUpdated)
+			if newest.IsZero() {
+				newest = parseDate(m.Metadata.ReleaseDate)
+			}
+
+			cands = append(cands, candidate{
+				id:     m.ID,
+				cost:   m.Pricing.PromptPrice + m.Pricing.CompletionPrice,
+				newest: newest,
+			})
+		}
+
+		if len(cands) == 0 {
+			return nil
+		}
+
+		// Pick 1 cheapest and 1 newest (if distinct). This matches "newest and cheapest".
+		cheapestIdx := 0
+		for i := 1; i < len(cands); i++ {
+			if cands[i].cost < cands[cheapestIdx].cost || (cands[i].cost == cands[cheapestIdx].cost && cands[i].id < cands[cheapestIdx].id) {
+				cheapestIdx = i
+			}
+		}
+
+		newestIdx := 0
+		for i := 1; i < len(cands); i++ {
+			if cands[i].newest.After(cands[newestIdx].newest) {
+				newestIdx = i
+				continue
+			}
+			if cands[i].newest.Equal(cands[newestIdx].newest) {
+				// tie-breaker: cheaper first
+				if cands[i].cost < cands[newestIdx].cost || (cands[i].cost == cands[newestIdx].cost && cands[i].id < cands[newestIdx].id) {
+					newestIdx = i
+				}
+			}
+		}
+
+		picked := make([]string, 0, max)
+		picked = append(picked, cands[cheapestIdx].id)
+		if len(picked) >= max {
+			return picked
+		}
+		if newestIdx != cheapestIdx {
+			picked = append(picked, cands[newestIdx].id)
+		}
+
+		// If we still need more (e.g. cheapest==newest), fill by (newest desc, cost asc).
+		if len(picked) < max {
+			sort.Slice(cands, func(i, j int) bool {
+				if cands[i].newest.Equal(cands[j].newest) {
+					if cands[i].cost == cands[j].cost {
+						return cands[i].id < cands[j].id
+					}
+					return cands[i].cost < cands[j].cost
+				}
+				return cands[i].newest.After(cands[j].newest)
+			})
+			for i := 0; i < len(cands) && len(picked) < max; i++ {
+				already := false
+				for _, id := range picked {
+					if id == cands[i].id {
+						already = true
+						break
+					}
+				}
+				if already {
+					continue
+				}
+				picked = append(picked, cands[i].id)
+			}
+		}
+
+		return picked
+	}
+
+	out := make([]string, 0, maxTotal)
+
+	if hasOpenRouter {
+		orgPrefixes := []string{
+			"openrouter/moonshotai/",
+			"openrouter/google/",
+			"openrouter/openai/",
+			"openrouter/z-ai/",
+			"openrouter/qwen/",
+		}
+		for _, prefix := range orgPrefixes {
+			out = append(out, pickForPrefix("openrouter", prefix, perOrg)...)
+		}
+		// Exactly 10 (5 orgs * 2 models).
+		return out
+	}
+
+	// Fallback when OpenRouter isn't configured: only OpenAI direct models can be selected.
+	if hasOpenAI {
+		return pickForPrefix("openai", "openai/", perOrg)
+	}
+
+	return nil
 }
 
 // SpyLM wraps an LM to capture interactions
@@ -146,6 +311,7 @@ func runExperiment(ctx context.Context, modelName string) *ExperimentResult {
 	react = react.WithOptions(&dsgo.GenerateOptions{
 		Temperature: 0.3,
 		MaxTokens:   2000,
+		RetryConfig: &dsgo.RetryConfig{MaxRetries: 2},
 	})
 
 	startTime := time.Now()
@@ -154,7 +320,7 @@ func runExperiment(ctx context.Context, modelName string) *ExperimentResult {
 	defer cancel()
 
 	inputs := map[string]any{
-		"task": "Analyze the internal/core package. Read the source files to understand: 1) The overall architecture and design, 2) Key interfaces like LM, Module, and Provider, 3) The pipeline and execution flow, 4) Error handling and logging, 5) Test coverage and examples. Use the filesystem tools to read actual source code.",
+		"task": "Analyze the internal/core package. First, list internal/core and only read files that exist in that listing (do not guess file names). Focus on: overall architecture, LM + Module interfaces, signatures/validation, adapters/parsing flow, prediction/usage metadata, tools and tool calling surfaces, caching, history, settings/config, and collectors.",
 	}
 
 	prediction, err := react.Forward(ctx, inputs)
@@ -174,6 +340,18 @@ func runExperiment(ctx context.Context, modelName string) *ExperimentResult {
 		result.Cost = prediction.Usage.Cost
 		if analysis, ok := prediction.GetString("analysis"); ok {
 			result.FinalOutput = analysis
+		}
+
+		// Prefer module-reported iteration count (includes termination and extractor info).
+		if it, ok := prediction.Metadata["react_iterations_used"]; ok {
+			switch v := it.(type) {
+			case int:
+				result.Iterations = v
+			case int64:
+				result.Iterations = int(v)
+			case float64:
+				result.Iterations = int(v)
+			}
 		}
 
 		// Process captured interactions to extract thoughts and tool calls

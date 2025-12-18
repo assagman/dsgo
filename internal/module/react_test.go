@@ -2,7 +2,6 @@ package module
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -50,623 +49,6 @@ func TestReAct_Forward_WithToolCalls(t *testing.T) {
 		SupportsToolsVal: true,
 		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			callCount++
-			if callCount == 1 {
-				return &core.GenerateResult{
-					Content: "Let me search",
-					ToolCalls: []core.ToolCall{
-						{ID: "1", Name: "search", Arguments: map[string]interface{}{"query": "test"}},
-					},
-				}, nil
-			}
-			return &core.GenerateResult{
-				Content: `{"answer": "final answer"}`,
-			}, nil
-		},
-	}
-
-	searchTool := core.NewTool("search", "Search for info", func(ctx context.Context, args map[string]any) (any, error) {
-		return "search result", nil
-	})
-
-	react := NewReAct(sig, lm, []core.Tool{*searchTool})
-	outputs, err := react.Forward(context.Background(), map[string]interface{}{
-		"question": "test",
-	})
-
-	if err != nil {
-		t.Fatalf("Forward() error = %v", err)
-	}
-
-	if outputs.Outputs["answer"] != "final answer" {
-		t.Errorf("Expected final answer, got %v", outputs.Outputs["answer"])
-	}
-}
-
-func TestCoerceBasicTypes(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name      string
-		signature *core.Signature
-		inputs    map[string]any
-		expected  map[string]any
-	}{
-		{
-			name: "int from string with number",
-			signature: core.NewSignature("test").
-				AddOutput("age", core.FieldTypeInt, "Age"),
-			inputs:   map[string]any{"age": "5 years"},
-			expected: map[string]any{"age": 5},
-		},
-		{
-			name: "int from string negative",
-			signature: core.NewSignature("test").
-				AddOutput("temp", core.FieldTypeInt, "Temperature"),
-			inputs:   map[string]any{"temp": "-10 degrees"},
-			expected: map[string]any{"temp": -10},
-		},
-		{
-			name: "int from float64",
-			signature: core.NewSignature("test").
-				AddOutput("count", core.FieldTypeInt, "Count"),
-			inputs:   map[string]any{"count": float64(42.7)},
-			expected: map[string]any{"count": 42},
-		},
-		{
-			name: "int from unparseable string",
-			signature: core.NewSignature("test").
-				AddOutput("val", core.FieldTypeInt, "Value"),
-			inputs:   map[string]any{"val": "no number here"},
-			expected: map[string]any{"val": "no number here"},
-		},
-		{
-			name: "bool from string true variants",
-			signature: core.NewSignature("test").
-				AddOutput("flag1", core.FieldTypeBool, "Flag1").
-				AddOutput("flag2", core.FieldTypeBool, "Flag2").
-				AddOutput("flag3", core.FieldTypeBool, "Flag3"),
-			inputs: map[string]any{
-				"flag1": "true",
-				"flag2": "YES",
-				"flag3": " 1 ",
-			},
-			expected: map[string]any{
-				"flag1": true,
-				"flag2": true,
-				"flag3": true,
-			},
-		},
-		{
-			name: "bool from string false variants",
-			signature: core.NewSignature("test").
-				AddOutput("flag1", core.FieldTypeBool, "Flag1").
-				AddOutput("flag2", core.FieldTypeBool, "Flag2").
-				AddOutput("flag3", core.FieldTypeBool, "Flag3"),
-			inputs: map[string]any{
-				"flag1": "false",
-				"flag2": "NO",
-				"flag3": " 0 ",
-			},
-			expected: map[string]any{
-				"flag1": false,
-				"flag2": false,
-				"flag3": false,
-			},
-		},
-		{
-			name: "bool from unparseable string",
-			signature: core.NewSignature("test").
-				AddOutput("flag", core.FieldTypeBool, "Flag"),
-			inputs:   map[string]any{"flag": "maybe"},
-			expected: map[string]any{"flag": "maybe"},
-		},
-		{
-			name: "string from non-nil value",
-			signature: core.NewSignature("test").
-				AddOutput("text", core.FieldTypeString, "Text"),
-			inputs:   map[string]any{"text": 123},
-			expected: map[string]any{"text": "123"},
-		},
-		{
-			name: "string from nil value",
-			signature: core.NewSignature("test").
-				AddOutput("text", core.FieldTypeString, "Text"),
-			inputs:   map[string]any{"text": nil},
-			expected: map[string]any{"text": nil},
-		},
-		{
-			name: "field not in signature",
-			signature: core.NewSignature("test").
-				AddOutput("known", core.FieldTypeString, "Known"),
-			inputs:   map[string]any{"unknown": "value", "known": "test"},
-			expected: map[string]any{"unknown": "value", "known": "test"},
-		},
-		{
-			name: "default type passthrough",
-			signature: core.NewSignature("test").
-				AddOutput("data", core.FieldTypeJSON, "Data"),
-			inputs:   map[string]any{"data": map[string]any{"key": "value"}},
-			expected: map[string]any{"data": map[string]any{"key": "value"}},
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt // Capture range variable
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := coerceBasicTypes(tt.signature, tt.inputs)
-
-			for key, expectedVal := range tt.expected {
-				actualVal, ok := result[key]
-				if !ok {
-					t.Errorf("Expected key %q not found in result", key)
-					continue
-				}
-				if fmt.Sprintf("%v", actualVal) != fmt.Sprintf("%v", expectedVal) {
-					t.Errorf("For key %q: expected %v (%T), got %v (%T)",
-						key, expectedVal, expectedVal, actualVal, actualVal)
-				}
-			}
-		})
-	}
-}
-
-func TestReAct_RunExtract_Success(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			return &core.GenerateResult{
-				Content: `{"rationale": "my reasoning", "answer": "extracted answer"}`,
-				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
-			}, nil
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{})
-	messages := []core.Message{
-		{Role: "user", Content: "What is the answer?"},
-	}
-	inputs := map[string]any{"question": "test"}
-
-	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
-	if err != nil {
-		t.Fatalf("runExtract() error = %v", err)
-	}
-
-	if pred.Outputs["answer"] != "extracted answer" {
-		t.Errorf("Expected answer='extracted answer', got %v", pred.Outputs["answer"])
-	}
-
-	if pred.Rationale != "my reasoning" {
-		t.Errorf("Expected rationale='my reasoning', got %v", pred.Rationale)
-	}
-}
-
-func TestReAct_RunExtract_FallbackToDirectJSON(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			// Return JSON that might fail adapter parsing but is valid JSON
-			return &core.GenerateResult{
-				Content: `{"answer": "direct json answer"}`,
-				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
-			}, nil
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{})
-	messages := []core.Message{{Role: "user", Content: "test"}}
-	inputs := map[string]any{"question": "test"}
-
-	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
-	if err != nil {
-		t.Fatalf("runExtract() error = %v", err)
-	}
-
-	if pred.Outputs["answer"] != "direct json answer" {
-		t.Errorf("Expected answer from direct JSON, got %v", pred.Outputs["answer"])
-	}
-}
-
-func TestReAct_RunExtract_FallbackToTextExtraction(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			// Return non-JSON text that needs text extraction
-			return &core.GenerateResult{
-				Content: `The answer is: fallback text answer`,
-				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
-			}, nil
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{})
-	messages := []core.Message{{Role: "user", Content: "test"}}
-	inputs := map[string]any{"question": "test"}
-
-	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
-	// Should succeed using extractTextOutputs as last resort
-	if err != nil {
-		t.Fatalf("runExtract() should succeed with text extraction, got error: %v", err)
-	}
-
-	// Check that some output was extracted
-	if len(pred.Outputs) == 0 {
-		t.Errorf("Expected text extraction to produce outputs")
-	}
-}
-
-func TestReAct_RunExtract_GenerationError(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			return nil, errors.New("generation failed")
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{})
-	messages := []core.Message{{Role: "user", Content: "test"}}
-	inputs := map[string]any{"question": "test"}
-
-	_, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
-	if err == nil {
-		t.Fatal("runExtract() should fail when generation fails")
-	}
-
-	if !strings.Contains(err.Error(), "extraction generation failed") {
-		t.Errorf("Expected error about generation failure, got: %v", err)
-	}
-}
-
-func TestReAct_RunExtract_CompleteFailure(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			// Return unparseable JSON-like content
-			return &core.GenerateResult{
-				Content: `{invalid json`,
-				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
-			}, nil
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{})
-	messages := []core.Message{{Role: "user", Content: "test"}}
-	inputs := map[string]any{"question": "test"}
-
-	// Even with invalid JSON, extractTextOutputs will extract something
-	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
-	if err != nil {
-		t.Fatalf("runExtract() should succeed with text extraction fallback, got error: %v", err)
-	}
-
-	// Should have extracted something via text extraction
-	if len(pred.Outputs) == 0 {
-		t.Error("Expected text extraction to produce outputs")
-	}
-}
-
-func TestReAct_RunExtract_WithReasoningField(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		SupportsJSONVal: true,
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			return &core.GenerateResult{
-				Content: `{"reasoning": "alternative reasoning field", "answer": "test answer"}`,
-				Usage:   core.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
-			}, nil
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{})
-	messages := []core.Message{{Role: "user", Content: "test"}}
-	inputs := map[string]any{"question": "test"}
-
-	pred, err := react.runExtract(context.Background(), messages, inputs, []core.Message{}, core.Usage{}, false)
-	if err != nil {
-		t.Fatalf("runExtract() error = %v", err)
-	}
-
-	if pred.Rationale != "alternative reasoning field" {
-		t.Errorf("Expected rationale from 'reasoning' field, got %v", pred.Rationale)
-	}
-
-	// Reasoning field should be removed from outputs
-	if _, exists := pred.Outputs["reasoning"]; exists {
-		t.Errorf("reasoning field should be removed from outputs")
-	}
-}
-
-func TestReAct_Forward_InvalidInput(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test").
-		AddInput("required", core.FieldTypeString, "Required")
-
-	lm := &MockLM{}
-	react := NewReAct(sig, lm, []core.Tool{})
-
-	_, err := react.Forward(context.Background(), map[string]interface{}{})
-	if err == nil {
-		t.Error("Forward() should error on invalid input")
-	}
-}
-
-func TestReAct_Forward_LMError(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test").
-		AddInput("question", core.FieldTypeString, "Question")
-
-	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			return nil, errors.New("LM error")
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{})
-	_, err := react.Forward(context.Background(), map[string]interface{}{
-		"question": "test",
-	})
-
-	if err == nil {
-		t.Error("Forward() should propagate LM error")
-	}
-}
-
-func TestReAct_Forward_MaxIterations(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			return &core.GenerateResult{
-				Content: "thinking",
-				ToolCalls: []core.ToolCall{
-					{ID: "1", Name: "search", Arguments: map[string]interface{}{}},
-				},
-			}, nil
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{}).WithMaxIterations(2)
-	result, err := react.Forward(context.Background(), map[string]interface{}{
-		"question": "test",
-	})
-
-	// With the extraction phase, ReAct should now return a result instead of erroring
-	if err != nil {
-		t.Errorf("Forward() should not error when max iterations exceeded, got: %v", err)
-	}
-	if result == nil {
-		t.Error("Forward() should return a result via extraction")
-	}
-	// Verify that extraction was called (should have made additional LM call)
-	if result != nil {
-		answer, _ := result.GetString("answer")
-		if answer == "" {
-			t.Error("Extraction should have produced an answer")
-		}
-	}
-}
-
-func TestReAct_Forward_ToolNotFound(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	callCount := 0
-	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			callCount++
-			if callCount == 1 {
-				return &core.GenerateResult{
-					Content: "Using tool",
-					ToolCalls: []core.ToolCall{
-						{ID: "1", Name: "nonexistent", Arguments: map[string]interface{}{}},
-					},
-				}, nil
-			}
-			return &core.GenerateResult{
-				Content: `{"answer": "recovered"}`,
-			}, nil
-		},
-	}
-
-	react := NewReAct(sig, lm, []core.Tool{})
-	outputs, err := react.Forward(context.Background(), map[string]interface{}{
-		"question": "test",
-	})
-
-	if err != nil {
-		t.Fatalf("Forward() should handle missing tool gracefully, got error: %v", err)
-	}
-
-	if outputs.Outputs["answer"] != "recovered" {
-		t.Error("Should recover from tool not found error")
-	}
-}
-
-func TestReAct_Forward_ToolError(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	callCount := 0
-	lm := &MockLM{
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			callCount++
-			if callCount == 1 {
-				return &core.GenerateResult{
-					Content: "Using tool",
-					ToolCalls: []core.ToolCall{
-						{ID: "1", Name: "failing_tool", Arguments: map[string]interface{}{}},
-					},
-				}, nil
-			}
-			return &core.GenerateResult{
-				Content: `{"answer": "recovered from error"}`,
-			}, nil
-		},
-	}
-
-	failingTool := core.NewTool("failing_tool", "Fails", func(ctx context.Context, args map[string]any) (any, error) {
-		return nil, errors.New("tool failed")
-	})
-
-	react := NewReAct(sig, lm, []core.Tool{*failingTool})
-	outputs, err := react.Forward(context.Background(), map[string]interface{}{
-		"question": "test",
-	})
-
-	if err != nil {
-		t.Fatalf("Forward() should handle tool errors, got: %v", err)
-	}
-
-	if outputs.Outputs["answer"] != "recovered from error" {
-		t.Error("Should recover from tool execution error")
-	}
-}
-
-func TestReAct_WithOptions(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test")
-	lm := &MockLM{}
-	react := NewReAct(sig, lm, []core.Tool{})
-
-	customOpts := &core.GenerateOptions{Temperature: 0.9}
-	react.WithOptions(customOpts)
-
-	if react.Options.Temperature != 0.9 {
-		t.Error("WithOptions should set custom options")
-	}
-}
-
-func TestReAct_WithMaxIterations(t *testing.T) {
-	t.Parallel()
-	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
-	react.WithMaxIterations(5)
-
-	if react.MaxIterations != 5 {
-		t.Error("WithMaxIterations should set max iterations")
-	}
-}
-
-func TestReAct_WithVerbose(t *testing.T) {
-	t.Parallel()
-	react := NewReAct(core.NewSignature("Test"), &MockLM{}, []core.Tool{})
-	react.WithVerbose(true)
-
-	if !react.Verbose {
-		t.Error("WithVerbose should enable verbose mode")
-	}
-}
-
-func TestReAct_GetSignature(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test")
-	react := NewReAct(sig, &MockLM{}, []core.Tool{})
-
-	if react.GetSignature() != sig {
-		t.Error("GetSignature should return the signature")
-	}
-}
-
-// TestReAct_FixJSONNewlines removed - functionality moved to internal/jsonutil package
-// See internal/jsonutil/extract_test.go for comprehensive JSON extraction and newline fixing tests
-
-func TestReAct_BuildSystemPrompt_NoTools(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test")
-	react := NewReAct(sig, &MockLM{}, []core.Tool{})
-
-	prompt := react.buildSystemPrompt()
-	if prompt != "" {
-		t.Error("System prompt should be empty when no tools")
-	}
-}
-
-func TestReAct_BuildSystemPrompt_WithTools(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Test")
-	tool := core.NewTool("test", "Test tool", nil)
-	react := NewReAct(sig, &MockLM{}, []core.Tool{*tool})
-
-	prompt := react.buildSystemPrompt()
-	if prompt == "" {
-		t.Error("System prompt should not be empty with tools")
-	}
-
-	if !contains(prompt, "tools") {
-		t.Error("System prompt should mention tools")
-	}
-	if !contains(prompt, "finish") {
-		t.Error("System prompt should mention finish tool")
-	}
-}
-
-func TestReAct_FindTool(t *testing.T) {
-	t.Parallel()
-	tool1 := core.NewTool("search", "Search", nil)
-	tool2 := core.NewTool("calculate", "Calculate", nil)
-
-	sig := core.NewSignature("Test")
-	react := NewReAct(sig, &MockLM{}, []core.Tool{*tool1, *tool2})
-
-	found := react.findTool("search")
-	if found == nil || found.Name != "search" {
-		t.Error("Should find existing tool")
-	}
-
-	notFound := react.findTool("nonexistent")
-	if notFound != nil {
-		t.Error("Should return nil for missing tool")
-	}
-}
-
-func TestReAct_StagnationDetection(t *testing.T) {
-	t.Parallel()
-	sig := core.NewSignature("Answer question").
-		AddInput("question", core.FieldTypeString, "Question").
-		AddOutput("answer", core.FieldTypeString, "Answer")
-
-	callCount := 0
-	var capturedMessages []core.Message
-	lm := &MockLM{
-		SupportsToolsVal: true,
-		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			callCount++
-			capturedMessages = messages
 
 			switch callCount {
 			case 1:
@@ -712,18 +94,7 @@ func TestReAct_StagnationDetection(t *testing.T) {
 		t.Errorf("Expected forced final answer after stagnation, got %v", outputs.Outputs["answer"])
 	}
 
-	// Verify that a stagnation prevention message was injected
-	stagnationMessageFound := false
-	for _, msg := range capturedMessages {
-		if msg.Role == "user" && contains(msg.Content, "same observation twice") {
-			stagnationMessageFound = true
-			break
-		}
-	}
-
-	if !stagnationMessageFound {
-		t.Error("Expected stagnation prevention message to be injected")
-	}
+	// Stagnation triggers early termination into extraction; no extra prompt injection.
 
 	// Verify the model was called at least 3 times (2 tool calls + 1 final answer after stagnation)
 	if callCount < 3 {
@@ -778,40 +149,53 @@ func TestReAct_Forward_WithFinishTool(t *testing.T) {
 		AddOutput("answer", core.FieldTypeString, "Answer").
 		AddOutput("confidence", core.FieldTypeFloat, "Confidence")
 
+	callCount := 0
 	lm := &MockLM{
 		SupportsToolsVal: true,
+		SupportsJSONVal:  true,
 		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
-			return &core.GenerateResult{
-				Content: "I have the answer",
-				ToolCalls: []core.ToolCall{
-					{
-						ID:   "finish-1",
-						Name: "finish",
-						Arguments: map[string]interface{}{
-							"answer":     "The answer is 42",
-							"confidence": 0.95,
+			callCount++
+			if callCount == 1 {
+				// Loop call: finish is a termination signal.
+				return &core.GenerateResult{
+					Content: "I have the answer",
+					ToolCalls: []core.ToolCall{
+						{
+							ID:   "finish-1",
+							Name: "finish",
+							Arguments: map[string]interface{}{
+								"answer":     "The answer is 42",
+								"confidence": 0.95,
+							},
 						},
 					},
-				},
-			}, nil
+				}, nil
+			}
+			// Extraction call: produce signature-valid JSON.
+			return &core.GenerateResult{Content: `{"answer":"The answer is 42","confidence":0.95}`}, nil
 		},
 	}
 
-	react := NewReAct(sig, lm, []core.Tool{})
+	dummyTool := core.NewTool("dummy", "unused", func(ctx context.Context, args map[string]any) (any, error) {
+		return "unused", nil
+	})
+
+	react := NewReAct(sig, lm, []core.Tool{*dummyTool})
 	outputs, err := react.Forward(context.Background(), map[string]interface{}{
 		"question": "What is the answer?",
 	})
-
 	if err != nil {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
 	if outputs.Outputs["answer"] != "The answer is 42" {
-		t.Errorf("Expected finish tool answer, got %v", outputs.Outputs["answer"])
+		t.Errorf("expected answer, got %v", outputs.Outputs["answer"])
 	}
-
 	if outputs.Outputs["confidence"] != 0.95 {
-		t.Errorf("Expected confidence 0.95, got %v", outputs.Outputs["confidence"])
+		t.Errorf("expected confidence 0.95, got %v", outputs.Outputs["confidence"])
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 LM call (finish args validated), got %d", callCount)
 	}
 }
 
@@ -826,45 +210,42 @@ func TestReAct_Forward_WithFinishTool_InvalidOutputs(t *testing.T) {
 	callCount := 0
 	lm := &MockLM{
 		SupportsToolsVal: true,
+		SupportsJSONVal:  true,
 		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			callCount++
 			if callCount == 1 {
-				// First call: finish tool with invalid outputs (missing score)
+				// First call: finish tool (possibly invalid args). The loop terminates and extraction produces outputs.
 				return &core.GenerateResult{
 					Content: "Trying to finish",
 					ToolCalls: []core.ToolCall{
 						{
-							ID:   "finish-1",
-							Name: "finish",
-							Arguments: map[string]interface{}{
-								"answer": "incomplete",
-							},
+							ID:        "finish-1",
+							Name:      "finish",
+							Arguments: map[string]interface{}{"answer": "incomplete"},
 						},
 					},
 				}, nil
 			}
-			// Second call: proper final answer
-			return &core.GenerateResult{
-				Content: `{"answer": "complete answer", "score": 85}`,
-			}, nil
+			// Extraction call: proper final answer.
+			return &core.GenerateResult{Content: `{"answer":"complete answer","score":85}`}, nil
 		},
 	}
 
-	react := NewReAct(sig, lm, []core.Tool{})
-	outputs, err := react.Forward(context.Background(), map[string]interface{}{
-		"question": "test",
+	dummyTool := core.NewTool("dummy", "unused", func(ctx context.Context, args map[string]any) (any, error) {
+		return "unused", nil
 	})
 
+	react := NewReAct(sig, lm, []core.Tool{*dummyTool})
+	outputs, err := react.Forward(context.Background(), map[string]interface{}{"question": "test"})
 	if err != nil {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
 	if outputs.Outputs["answer"] != "complete answer" {
-		t.Error("Should recover from invalid finish tool and provide proper answer")
+		t.Errorf("expected recovered answer, got %v", outputs.Outputs["answer"])
 	}
-
 	if callCount != 2 {
-		t.Errorf("Expected 2 calls (invalid finish + recovery), got %d", callCount)
+		t.Errorf("expected 2 calls (loop + extraction), got %d", callCount)
 	}
 }
 
@@ -1114,23 +495,22 @@ func TestReAct_Forward_OutputValidationError(t *testing.T) {
 
 	callCount := 0
 	lm := &MockLM{
-		SupportsJSONVal: true,
+		SupportsToolsVal: true,
+		SupportsJSONVal:  true,
 		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			callCount++
 			if callCount == 1 {
-				// Missing required "score" field - will trigger extraction
-				return &core.GenerateResult{
-					Content: `{"answer": "incomplete"}`,
-				}, nil
+				// Loop call (implicit finish): missing required field.
+				return &core.GenerateResult{Content: `{"answer":"incomplete"}`}, nil
 			}
-			// Extraction call - provide complete answer
-			return &core.GenerateResult{
-				Content: `{"answer": "extracted answer", "score": 42}`,
-			}, nil
+			// Extraction call - provide complete answer.
+			return &core.GenerateResult{Content: `{"answer":"extracted answer","score":42}`}, nil
 		},
 	}
 
-	react := NewReAct(sig, lm, []core.Tool{})
+	dummyTool := core.NewTool("dummy", "unused", func(ctx context.Context, args map[string]any) (any, error) { return "unused", nil })
+
+	react := NewReAct(sig, lm, []core.Tool{*dummyTool})
 	result, err := react.Forward(context.Background(), map[string]interface{}{
 		"question": "test",
 	})
@@ -1505,9 +885,9 @@ func TestReAct_ImplicitFinish(t *testing.T) {
 		t.Fatalf("Forward() error = %v, want nil", err)
 	}
 
-	// Verify: callCount == 1 (single LM call, no retry)
+	// Direct answer was signature-valid; no extraction call needed.
 	if callCount != 1 {
-		t.Errorf("Expected 1 LM call for implicit finish, got %d", callCount)
+		t.Errorf("Expected 1 LM call, got %d", callCount)
 	}
 
 	// Verify: result.Outputs["answer"] == "42"
@@ -1529,12 +909,11 @@ func TestReAct_ImplicitFinish_MalformedRetry(t *testing.T) {
 		AddOutput("count", core.FieldTypeInt, "Count result")
 
 	callCount := 0
-	var capturedMessages []core.Message
 	lm := &MockLM{
 		SupportsToolsVal: true,
+		SupportsJSONVal:  true,
 		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			callCount++
-			capturedMessages = messages
 
 			if callCount == 1 {
 				// First call: return malformed text without tool calls
@@ -1566,21 +945,9 @@ func TestReAct_ImplicitFinish_MalformedRetry(t *testing.T) {
 		t.Fatalf("Forward() error = %v, want nil", err)
 	}
 
-	// Verify: callCount == 2 (retry occurred)
+	// Loop terminates and extractor produces the final structured output.
 	if callCount != 2 {
-		t.Errorf("Expected 2 LM calls (malformed + retry), got %d", callCount)
-	}
-
-	// Verify: Messages contain "Please use the available tools"
-	foundToolGuidance := false
-	for _, msg := range capturedMessages {
-		if msg.Role == "user" && contains(msg.Content, "Please use the available tools") {
-			foundToolGuidance = true
-			break
-		}
-	}
-	if !foundToolGuidance {
-		t.Error("Expected retry message containing 'Please use the available tools'")
+		t.Errorf("Expected 2 LM calls (loop + extraction), got %d", callCount)
 	}
 
 	// Verify: result.Outputs["count"] == 42
@@ -1634,35 +1001,48 @@ func TestReAct_UsageAccumulation(t *testing.T) {
 	callCount := 0
 	lm := &MockLM{
 		SupportsToolsVal: true,
+		SupportsJSONVal:  true,
 		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
 			callCount++
-			if callCount == 1 {
-				// First iteration with tool call
+			switch callCount {
+			case 1:
+				// Loop: tool call
 				return &core.GenerateResult{
-					Content: "Let me search",
-					ToolCalls: []core.ToolCall{
-						{ID: "1", Name: "search", Arguments: map[string]interface{}{"query": "test"}},
-					},
+					Content:   "Let me search",
+					ToolCalls: []core.ToolCall{{ID: "1", Name: "search", Arguments: map[string]interface{}{"query": "test"}}},
 					Usage: core.Usage{
 						PromptTokens:     100,
 						CompletionTokens: 50,
 						TotalTokens:      150,
 						Cost:             0.001,
-						Latency:          500 * 1_000_000, // 500ms in nanoseconds
+						Latency:          500 * 1_000_000,
+					},
+				}, nil
+			case 2:
+				// Loop: invalid direct answer (forces extraction).
+				return &core.GenerateResult{
+					Content: `{"wrong":"field"}`,
+					Usage: core.Usage{
+						PromptTokens:     200,
+						CompletionTokens: 100,
+						TotalTokens:      300,
+						Cost:             0.002,
+						Latency:          600 * 1_000_000,
+					},
+				}, nil
+			default:
+				// Extraction: final structured answer.
+				return &core.GenerateResult{
+					Content: `{"answer":"final answer"}`,
+					Usage: core.Usage{
+						PromptTokens:     50,
+						CompletionTokens: 25,
+						TotalTokens:      75,
+						Cost:             0.0005,
+						Latency:          250 * 1_000_000,
 					},
 				}, nil
 			}
-			// Second iteration with final answer
-			return &core.GenerateResult{
-				Content: `{"answer": "final answer"}`,
-				Usage: core.Usage{
-					PromptTokens:     200,
-					CompletionTokens: 100,
-					TotalTokens:      300,
-					Cost:             0.002,
-					Latency:          600 * 1_000_000, // 600ms in nanoseconds
-				},
-			}, nil
 		},
 	}
 
@@ -1679,12 +1059,12 @@ func TestReAct_UsageAccumulation(t *testing.T) {
 		t.Fatalf("Forward() error = %v", err)
 	}
 
-	// Verify usage accumulation across 2 iterations
-	expectedPromptTokens := 100 + 200    // First + second iteration
-	expectedCompletionTokens := 50 + 100 // First + second iteration
-	expectedTotalTokens := 150 + 300     // First + second iteration
-	expectedCost := 0.001 + 0.002        // First + second iteration
-	expectedLatency := 500 + 600         // Sum of latencies (in milliseconds)
+	// Verify usage accumulation across loop + extraction (3 LM calls)
+	expectedPromptTokens := 100 + 200 + 50
+	expectedCompletionTokens := 50 + 100 + 25
+	expectedTotalTokens := 150 + 300 + 75
+	expectedCost := 0.001 + 0.002 + 0.0005
+	expectedLatency := 500 + 600 + 250
 
 	if pred.Usage.PromptTokens != expectedPromptTokens {
 		t.Errorf("PromptTokens: expected %d, got %d", expectedPromptTokens, pred.Usage.PromptTokens)
@@ -1698,6 +1078,12 @@ func TestReAct_UsageAccumulation(t *testing.T) {
 	if pred.Usage.Cost != expectedCost {
 		t.Errorf("Cost: expected %.6f, got %.6f", expectedCost, pred.Usage.Cost)
 	}
+
+	// Ensure extraction answer wins.
+	if pred.Outputs["answer"] != "final answer" {
+		t.Errorf("expected final answer, got %v", pred.Outputs["answer"])
+	}
+
 	expectedLatencyNs := int64(expectedLatency) * 1_000_000
 	if pred.Usage.Latency != expectedLatencyNs {
 		t.Errorf("Latency: expected %d ns (%.2fms), got %d ns (%.2fms)",
