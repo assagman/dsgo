@@ -418,6 +418,8 @@ func (o *openAI) convertTool(tool *core.Tool) openai.ChatCompletionToolUnionPara
 		}
 	}
 
+	required = core.DedupeStringsPreserveOrder(required)
+
 	return openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
 		Name:        tool.Name,
 		Description: openai.String(tool.Description),

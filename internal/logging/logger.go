@@ -56,6 +56,22 @@ type Config struct {
 func LoadConfigFromEnv() *Config {
 	config := DefaultConfig()
 
+	// Backward-compat: support the single "DSGO_LOG" env var used in examples/docs.
+	// Explicit DSGO_LOG_LEVEL / DSGO_LOG_FORMAT values below take precedence.
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DSGO_LOG"))) {
+	case "none", "off", "0", "false":
+		config.Level = LevelFatal
+	case "events", "event", "json":
+		config.Level = LevelInfo
+		config.Format = "json"
+	case "pretty", "text":
+		config.Level = LevelInfo
+		config.Format = "text"
+	case "debug":
+		config.Level = LevelDebug
+		config.Format = "text"
+	}
+
 	// Parse DSGO_LOG_LEVEL
 	if levelStr := os.Getenv("DSGO_LOG_LEVEL"); levelStr != "" {
 		if level := parseLevel(levelStr); level != -1 {
@@ -914,6 +930,14 @@ func EnsureCorrelationID(ctx context.Context) context.Context {
 
 // ConfigureLoggerFromEnv configures the global logger from environment variables (always async)
 func ConfigureLoggerFromEnv() {
+	// Backward-compat: allow disabling via DSGO_LOG=none.
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DSGO_LOG"))) {
+	case "none", "off", "0", "false":
+		SetLogger(&NoOpLogger{})
+		registerGlobalLoggerCleanup()
+		return
+	}
+
 	config := LoadConfigFromEnv()
 	SetLogger(NewDefaultLoggerWithConfig(config))
 	// Register cleanup for global logger (only once)

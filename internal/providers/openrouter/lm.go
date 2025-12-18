@@ -453,6 +453,8 @@ func (o *openRouter) convertTool(tool *core.Tool) openai.ChatCompletionToolUnion
 		}
 	}
 
+	required = core.DedupeStringsPreserveOrder(required)
+
 	return openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
 		Name:        tool.Name,
 		Description: openai.String(tool.Description),

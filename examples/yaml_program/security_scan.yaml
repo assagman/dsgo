@@ -1,0 +1,90 @@
+name: "security-scan"
+description: "Security scanning workflow: scan multiple files in parallel, synthesize findings, produce remediation report."
+
+defaults:
+  model: openrouter/z-ai/glm-4.6
+  gen:
+    temperature: 0.2
+    max_tokens: 5000
+
+runtime:
+  timeouts:
+    pipeline: 25m
+
+tool_sources:
+  fs:
+    kind: mcp
+    type: filesystem
+    allowed_dirs: [".."]
+  shell:
+    kind: mcp
+    type: shell
+    allowed_dirs: [".."]
+
+signatures:
+  scan_file:
+    desc: "Scan a file for security issues and report one primary finding."
+    in:
+      file_path: string
+      focus: string
+    out:
+      rationale: string
+      answer: string
+      metadata:
+        type: json
+        desc: "Structured metadata: severity, evidence, line_numbers, remediation hints"
+
+  findings_report:
+    desc: "Write a consolidated security report and remediation plan."
+    in:
+      focus: string
+      answer: string
+      metadata: json
+    out:
+      rationale: string
+      report: string
+
+modules:
+  scan_agent:
+    kind: react
+    sig: scan_file
+    react:
+      max_iterations: 10
+      tools:
+        - source: fs
+          include: ["*"]
+        - source: shell
+          include: ["*"]
+
+  scans:
+    kind: parallel
+    parallel:
+      mode: clone
+      module: scan_agent
+      batch_key: _batch
+      max_workers: 3
+      return_all: true
+      only_successful: true
+
+  synth:
+    kind: multi_chain_comparison
+    sig: scan_file
+    multi_chain_comparison:
+      attempts: 3
+      attempt_template: "Finding rationale: {rationale}\nFinding: {answer}"
+
+  report:
+    kind: chain_of_thought
+    sig: findings_report
+
+pipeline: [scans, synth, report]
+
+inputs:
+  focus: "Scan DSGo for risky patterns related to tool execution (shell/filesystem) and YAML parsing safety."
+  _batch:
+    - file_path: "internal/mcp/shell_server.go"
+      focus: "Shell tool safety and restrictions"
+    - file_path: "internal/mcp/client.go"
+      focus: "MCP transport and tool exposure"
+    - file_path: "internal/core/adapter.go"
+      focus: "Output parsing and structured-output enforcement"

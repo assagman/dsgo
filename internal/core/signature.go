@@ -424,6 +424,8 @@ func (s *Signature) SignatureToJSONSchema() map[string]any {
 		}
 	}
 
+	required = DedupeStringsPreserveOrder(required)
+
 	schema := map[string]any{
 		"type":                 "object",
 		"properties":           properties,
@@ -498,6 +500,8 @@ func (s *Signature) SignatureToOpenAIJSONSchema() map[string]any {
 		// even if they're logically optional in DSGo
 		required = append(required, field.Name)
 	}
+
+	required = DedupeStringsPreserveOrder(required)
 
 	schema := map[string]any{
 		"type":                 "object",

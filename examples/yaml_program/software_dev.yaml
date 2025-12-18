@@ -1,0 +1,197 @@
+name: "software-development-assistant"
+description: "End-to-end software development workflow: classify, draft, synthesize, implement with tools, review, refine."
+
+defaults:
+  model: openrouter/z-ai/glm-4.6
+  gen:
+    temperature: 0.6
+    max_tokens: 4096
+  adapter:
+    kind: fallback
+
+runtime:
+  timeouts:
+    pipeline: 45m
+  dsgo:
+    structured_output:
+      enabled: true
+      max_attempts: 3
+      temperature: 0
+
+# Tool sources are reusable; ReAct modules select tools from these.
+tool_sources:
+  fs:
+    kind: mcp
+    type: filesystem
+    allowed_dirs: [".."]
+  shell:
+    kind: mcp
+    type: shell
+    allowed_dirs: [".."]
+  builtin:
+    kind: builtin
+    tools: [current_datetime, calculate]
+
+histories:
+  dev: {limit: 50}
+
+signatures:
+  classify_task:
+    desc: "Classify the user's request into a development task type."
+    in:
+      request: string
+    out:
+      rationale: string
+      task_type:
+        type: enum
+        values: [feature, refactor, bugfix, review]
+
+  draft_solution:
+    desc: "Propose a solution and a patch outline."
+    in:
+      request: string
+      context: string
+    out:
+      rationale: string
+      answer: string
+      patch:
+        type: json
+        desc: "High-level patch plan (files, changes, tests)"
+
+  pot_patch:
+    desc: "Generate a code-oriented patch plan (no tools)."
+    in:
+      request: string
+      answer: string
+    out:
+      code: string
+      explanation: string
+
+  apply_changes:
+    desc: "Implement the change using tools (edit files, run tests)."
+    in:
+      request: string
+      answer: string
+      patch: json
+    out:
+      rationale: string
+      result: string
+
+  review_change:
+    desc: "Review the change and provide a confidence score."
+    in:
+      request: string
+      result: string
+    out:
+      rationale: string
+      summary: string
+      confidence: float
+
+  final_report:
+    desc: "Produce a final report; optionally refine using feedback."
+    in:
+      request: string
+      summary: string
+      feedback:
+        type: string
+        optional: true
+    out:
+      rationale: string
+      report: string
+
+modules:
+  classifier:
+    kind: predict
+    sig: classify_task
+    adapter: {kind: json}
+
+  # Three drafts with different temperatures.
+  draft_cold:
+    kind: chain_of_thought
+    sig: draft_solution
+    gen: {temperature: 0}
+
+  draft_default:
+    kind: chain_of_thought
+    sig: draft_solution
+    gen: {temperature: 0.6}
+
+  draft_hot:
+    kind: chain_of_thought
+    sig: draft_solution
+    gen: {temperature: 1.0}
+
+  drafts:
+    kind: parallel
+    parallel:
+      mode: instances
+      instances: [draft_cold, draft_default, draft_hot]
+      max_workers: 3
+      return_all: true
+      only_successful: true
+      verbose: false
+
+  synth:
+    kind: multi_chain_comparison
+    sig: draft_solution
+    multi_chain_comparison:
+      attempts: 3
+      attempt_template: "Rationale: {rationale}\nProposal: {answer}"
+
+  pot:
+    kind: program_of_thought
+    sig: pot_patch
+    program_of_thought:
+      language: python
+      allow_execution: false
+
+  implement:
+    kind: react
+    sig: apply_changes
+    verbose: true
+    react:
+      max_iterations: 12
+      tools:
+        - source: fs
+          include: ["*"]
+        - source: shell
+          include: ["*"]
+        - source: builtin
+          include: [calculate, current_datetime]
+
+  reviewer_base:
+    kind: chain_of_thought
+    sig: review_change
+    gen: {temperature: 0.4}
+
+  reviewer:
+    kind: best_of_n
+    best_of_n:
+      of: reviewer_base
+      n: 3
+      parallel: true
+      return_all: true
+      scorer:
+        kind: confidence
+        field: confidence
+
+  finalize:
+    kind: refine
+    sig: final_report
+    history: dev
+    refine:
+      max_iterations: 2
+      refinement_field: feedback
+      track_history: true
+
+  dev_flow:
+    kind: program
+    program:
+      steps: [classifier, drafts, synth, pot, implement, reviewer, finalize]
+
+pipeline: [dev_flow]
+
+inputs:
+  request: "Refactor examples/yaml_program to use the new internal YAML program loader."
+  context: "Repository: github.com/assagman/dsgo. Goal: internal-only YAML program support + schema reference."
+  feedback: "Keep the schema minimal, but cover all advanced options."

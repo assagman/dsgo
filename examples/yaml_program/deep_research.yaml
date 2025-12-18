@@ -1,0 +1,104 @@
+name: "deep-researcher"
+description: "Deep web research: multiple agents in parallel + synthesis + structured report."
+
+defaults:
+  model: openrouter/google/gemini-2.5-flash
+  gen:
+    temperature: 0.6
+    max_tokens: 6000
+
+runtime:
+  timeouts:
+    pipeline: 30m
+
+tool_sources:
+  tavily:
+    kind: mcp
+    type: tavily
+    api_key_env: TAVILY_API_KEY
+  exa:
+    kind: mcp
+    type: exa
+    api_key_env: EXA_API_KEY
+
+signatures:
+  scope_query:
+    desc: "Turn a topic into an actionable research query and constraints."
+    in:
+      topic: string
+    out:
+      rationale: string
+      query: string
+      constraints:
+        type: json
+
+  research_attempt:
+    desc: "Research the topic using tools and return a concise attempt."
+    in:
+      topic: string
+      query: string
+    out:
+      rationale: string
+      answer: string
+      sources: json
+
+  research_report:
+    desc: "Write a final report from the synthesized research."
+    in:
+      topic: string
+      answer: string
+      sources: json
+    out:
+      rationale: string
+      report: string
+      sources: json
+
+modules:
+  scope:
+    kind: chain_of_thought
+    sig: scope_query
+
+  researcher_tavily:
+    kind: react
+    sig: research_attempt
+    verbose: true
+    react:
+      max_iterations: 8
+      tools:
+        - source: tavily
+          include: ["*"]
+
+  researcher_exa:
+    kind: react
+    sig: research_attempt
+    verbose: true
+    react:
+      max_iterations: 8
+      tools:
+        - source: exa
+          include: ["*"]
+
+  attempts:
+    kind: parallel
+    parallel:
+      mode: instances
+      instances: [researcher_tavily, researcher_exa]
+      return_all: true
+      only_successful: true
+      max_workers: 2
+
+  synth:
+    kind: multi_chain_comparison
+    sig: research_attempt
+    multi_chain_comparison:
+      attempts: 2
+      attempt_template: "Rationale: {rationale}\nAnswer: {answer}\nSources: {sources}"
+
+  report:
+    kind: chain_of_thought
+    sig: research_report
+
+pipeline: [scope, attempts, synth, report]
+
+inputs:
+  topic: "How to manage roles in Snowflake?"

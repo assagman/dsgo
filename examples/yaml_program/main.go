@@ -5,198 +5,121 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/internal/yamlprogram"
 )
 
-const defaultTimeout = 5 * time.Minute
-
-func getModelName(config *PipelineConfig) string {
-	if config.Model.Name != "" {
-		return config.Model.Name
-	}
-	if model := os.Getenv("EXAMPLES_DEFAULT_MODEL"); model != "" {
-		return model
-	}
-	return "openrouter/z-ai/glm-4.6"
-}
-
 func main() {
+	// Configure DSGo logger from environment (DSGO_LOG, DSGO_LOG_LEVEL, etc.).
+	dsgo.ConfigureLoggerFromEnv()
+
 	ctx := context.Background()
 
-	fmt.Println("╔═══════════════════════════════════════════════════════════════╗")
-	fmt.Println("║        DSGo YAML Pipeline Builder Example                     ║")
-	fmt.Println("╚═══════════════════════════════════════════════════════════════╝")
-	fmt.Println()
-
-	// Load pipeline configuration
-	configPath := "pipeline.yaml"
-	if len(os.Args) > 1 {
-		configPath = os.Args[1]
-	}
-
-	fmt.Printf("📄 Loading pipeline configuration from: %s\n", configPath)
-	config, err := LoadPipelineConfig(configPath)
-	if err != nil {
-		log.Fatalf("❌ Failed to load pipeline configuration: %v", err)
-	}
-
-	fmt.Printf("✅ Loaded pipeline: %s\n", config.Name)
-	fmt.Printf("   Description: %s\n", config.Description)
-	fmt.Printf("   Signatures: %d\n", len(config.Signatures))
-	fmt.Printf("   Modules: %d\n", len(config.Modules))
-	fmt.Printf("   Pipeline steps: %d\n", len(config.Pipeline))
-	fmt.Println()
-
-	// Apply timeout overrides from YAML (if any)
-	timeouts := config.EffectiveTimeouts()
-	if timeouts.LMHTTP.Duration > 0 {
-		if err := os.Setenv("DSGO_HTTP_TIMEOUT_MS", fmt.Sprintf("%d", timeouts.LMHTTP.Milliseconds())); err != nil {
-			log.Fatalf("❌ Failed to set DSGO_HTTP_TIMEOUT_MS: %v", err)
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "--schema" {
+		b, err := yamlprogram.SchemaJSON()
+		if err != nil {
+			log.Fatalf("failed to generate schema: %v", err)
 		}
+		if _, err := os.Stdout.Write(b); err != nil {
+			log.Fatalf("failed to write schema: %v", err)
+		}
+		return
 	}
 
-	pipelineTimeout := defaultTimeout
-	if timeouts.Pipeline.Duration > 0 {
-		pipelineTimeout = timeouts.Pipeline.Duration
+	configPath := "software_dev.yaml"
+	if len(args) > 0 {
+		configPath = args[0]
 	}
-	fmt.Printf("⏱️  Pipeline timeout: %v\n", pipelineTimeout)
-	fmt.Println()
 
-	// Initialize LM
-	modelName := getModelName(config)
-	displayName := modelName
-	if config.Model.Name == "" {
-		displayName = modelName + " (DEFAULT)"
-	}
-	fmt.Printf("🤖 Initializing LM: %s\n", displayName)
+	fmt.Println("DSGo YAML Program Runner")
+	fmt.Println(strings.Repeat("=", 72))
+	fmt.Printf("Config: %s\n\n", configPath)
 
-	lm, err := dsgo.NewLM(ctx, modelName)
+	spec, err := yamlprogram.LoadFile(configPath)
 	if err != nil {
-		log.Fatalf("❌ Failed to create LM: %v", err)
+		log.Fatalf("failed to load spec: %v", err)
 	}
-	fmt.Println("✅ LM initialized successfully")
-	fmt.Println()
 
-	// Build program from YAML
-	fmt.Println("🔧 Building program from YAML configuration...")
-	builder, err := NewProgramBuilder(ctx, config, modelName, lm)
+	builder, err := yamlprogram.NewBuilder(ctx, spec, nil)
 	if err != nil {
-		log.Fatalf("❌ Failed to create program builder: %v", err)
+		log.Fatalf("failed to create builder: %v", err)
 	}
 
-	program, err := builder.Build()
+	res, err := builder.Build()
 	if err != nil {
-		log.Fatalf("❌ Failed to build program: %v", err)
+		log.Fatalf("failed to build program: %v", err)
 	}
-	fmt.Printf("✅ Program built successfully with %d modules\n", program.ModuleCount())
-	fmt.Println()
 
-	// Display pipeline structure
-	displayPipelineStructure(config)
+	displayPipeline(spec)
 
-	// Get inputs from YAML config
-	inputs := config.Inputs
-	if len(inputs) == 0 {
-		log.Fatalf("❌ No inputs defined in YAML configuration")
+	if len(spec.Inputs) == 0 {
+		log.Fatalf("no inputs provided")
 	}
-	fmt.Println("📝 Inputs:")
-	fmt.Println(strings.Repeat("-", 60))
-	for k, v := range inputs {
-		fmt.Printf("   %s: %v\n", k, v)
-	}
-	fmt.Println(strings.Repeat("-", 60))
-	fmt.Println()
 
-	// Run the pipeline
-	fmt.Println("🚀 Executing pipeline...")
-	fmt.Println()
-
-	ctx, cancel := context.WithTimeout(ctx, pipelineTimeout)
+	// Run
+	execCtx, cancel := context.WithTimeout(ctx, res.PipelineTimeout)
 	defer cancel()
 
-	startTime := time.Now()
-	prediction, err := program.Forward(ctx, inputs)
-	elapsed := time.Since(startTime)
-
+	start := time.Now()
+	pred, err := res.Program.Forward(execCtx, spec.Inputs)
 	if err != nil {
-		log.Fatalf("❌ Pipeline execution failed: %v", err)
+		log.Fatalf("pipeline failed: %v", err)
 	}
+	elapsed := time.Since(start)
 
-	// Display results
-	fmt.Println("═══════════════════════════════════════════════════════════════")
-	fmt.Println("                       PIPELINE RESULTS                         ")
-	fmt.Println("═══════════════════════════════════════════════════════════════")
-	fmt.Println()
+	fmt.Println(strings.Repeat("=", 72))
+	fmt.Println("RESULTS")
+	fmt.Println(strings.Repeat("=", 72))
+	printOutputs(pred.Outputs)
 
-	displayResults(prediction)
-
-	// Display execution stats
-	fmt.Println()
-	fmt.Println("📊 Execution Statistics:")
-	fmt.Println(strings.Repeat("-", 40))
-	fmt.Printf("   Duration: %v\n", elapsed.Round(time.Millisecond))
-	fmt.Printf("   Tokens used: %d\n", prediction.Usage.TotalTokens)
-	fmt.Printf("   Cost: $%.6f\n", prediction.Usage.Cost)
-	fmt.Println()
-
-	fmt.Println("✅ Pipeline executed successfully!")
+	fmt.Println(strings.Repeat("-", 72))
+	fmt.Printf("Duration: %s\n", elapsed.Round(time.Millisecond))
+	fmt.Printf("Tokens:   %d\n", pred.Usage.TotalTokens)
+	fmt.Printf("Cost:     $%.6f\n", pred.Usage.Cost)
 }
 
-func displayPipelineStructure(config *PipelineConfig) {
-	fmt.Println("📋 Pipeline Structure:")
-	fmt.Println(strings.Repeat("-", 60))
-
-	for i, step := range config.Pipeline {
-		mod := config.Modules[step.Module]
-
-		arrow := "  │"
-		if i == len(config.Pipeline)-1 {
-			arrow = "  └"
+func displayPipeline(spec *yamlprogram.Spec) {
+	fmt.Println("Pipeline:")
+	fmt.Println(strings.Repeat("-", 72))
+	for i, step := range spec.Pipeline {
+		m := spec.Modules[step]
+		fmt.Printf("%2d. %s (%s)\n", i+1, step, m.Kind)
+		if m.Sig != "" {
+			sig := spec.Signatures[m.Sig]
+			fmt.Printf("    sig: %s\n", m.Sig)
+			fmt.Printf("    in:  %s\n", strings.Join(sortedKeys(sig.In), ", "))
+			fmt.Printf("    out: %s\n", strings.Join(sortedKeys(sig.Out), ", "))
 		}
-
-		fmt.Printf("  %d. %s (%s)\n", i+1, step.Module, mod.Type)
-
-		// Handle Parallel modules (no signature, but have child modules)
-		if mod.Type == "Parallel" {
-			fmt.Printf("%s── Modules: %s\n", arrow, strings.Join(mod.Modules, ", "))
-			if mod.MaxWorkers > 0 {
-				fmt.Printf("%s── MaxWorkers: %d\n", arrow, mod.MaxWorkers)
-			}
-		} else {
-			// Regular modules with signatures
-			sig := config.Signatures[mod.Signature]
-			fmt.Printf("%s── Signature: %s\n", arrow, mod.Signature)
-			fmt.Printf("%s── Inputs: %s\n", arrow, formatFields(sig.Inputs))
-			fmt.Printf("%s── Outputs: %s\n", arrow, formatFields(sig.Outputs))
-			if mod.Options.Temperature > 0 {
-				fmt.Printf("%s── Temperature: %.2f\n", arrow, mod.Options.Temperature)
-			}
-			if mod.Model != "" {
-				fmt.Printf("%s── Model: %s\n", arrow, mod.Model)
-			}
-		}
-		fmt.Println()
 	}
+	fmt.Println()
 }
 
-func formatFields(fields []FieldSpec) string {
-	names := make([]string, len(fields))
-	for i, f := range fields {
-		names[i] = f.Name
+func sortedKeys(m map[string]yamlprogram.FieldSpec) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
 	}
-	return strings.Join(names, ", ")
+	sort.Strings(keys)
+	return keys
 }
 
-func displayResults(prediction *dsgo.Prediction) {
-	outputs := prediction.Outputs
-
-	for key, value := range outputs {
-		fmt.Printf("📌 %s:\n", key)
+func printOutputs(outputs map[string]any) {
+	keys := make([]string, 0, len(outputs))
+	for k := range outputs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Printf("\n[%s]\n", k)
 		fmt.Println(strings.Repeat("-", 40))
-		fmt.Printf("%v\n", value)
-		fmt.Println()
+		fmt.Printf("%v\n", outputs[k])
 	}
 }
+
+// Keep unused import guard for dsgo when examples are built standalone.
+var _ = dsgo.DefaultGenerateOptions
