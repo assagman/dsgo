@@ -33,7 +33,7 @@ mcp:
   filesystem:
     type: filesystem
     allowed_dirs:
-      - .
+      - ../
 
 signatures:
   codebase_analysis:
@@ -139,4 +139,4 @@ pipeline:
 
 inputs:
   task: |
-    Review project code quality
+    Review dsgo.go

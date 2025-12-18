@@ -20,6 +20,9 @@ type ModuleFactory struct {
 	sigRegistry   *SignatureRegistry
 	toolRegistry  *ToolRegistry
 	modelSettings ModelSettings
+
+	// For Parallel/MCC - need access to all module specs
+	allModuleSpecs map[string]ModuleSpec
 }
 
 // NewModuleFactory creates a new module factory.
@@ -61,8 +64,23 @@ func (f *ModuleFactory) getLM(model string) (dsgo.LM, error) {
 	return lm, nil
 }
 
+// SetAllModuleSpecs sets all module specs for Parallel/MCC module creation
+func (f *ModuleFactory) SetAllModuleSpecs(specs map[string]ModuleSpec) {
+	f.allModuleSpecs = specs
+}
+
 // CreateModule creates a DSGo module from a YAML specification
 func (f *ModuleFactory) CreateModule(name string, spec ModuleSpec) (dsgo.Module, error) {
+	// Handle Parallel module separately (no LM or signature needed)
+	if spec.Type == "Parallel" {
+		return f.createParallel(name, spec)
+	}
+
+	// Handle MultiChainComparison module
+	if spec.Type == "MultiChainComparison" {
+		return f.createMultiChainComparison(name, spec)
+	}
+
 	lm, err := f.getLM(spec.Model)
 	if err != nil {
 		return nil, fmt.Errorf("module '%s': %w", name, err)
@@ -160,6 +178,72 @@ func (f *ModuleFactory) buildOptions(spec ModuleSpec) *dsgo.GenerateOptions {
 	return options
 }
 
+// createParallel creates a Parallel module that runs multiple modules concurrently
+func (f *ModuleFactory) createParallel(name string, spec ModuleSpec) (dsgo.Module, error) {
+	if len(spec.Modules) == 0 {
+		return nil, fmt.Errorf("module '%s': Parallel requires modules list", name)
+	}
+
+	// Create all module instances upfront for fail-fast behavior
+	instances := make([]dsgo.Module, len(spec.Modules))
+	for i, modName := range spec.Modules {
+		modSpec, exists := f.allModuleSpecs[modName]
+		if !exists {
+			return nil, fmt.Errorf("module '%s': referenced module '%s' not found", name, modName)
+		}
+		mod, err := f.CreateModule(modName, modSpec)
+		if err != nil {
+			return nil, fmt.Errorf("module '%s': failed to create '%s': %w", name, modName, err)
+		}
+		instances[i] = mod
+	}
+
+	parallel := dsgo.NewParallelWithInstances(instances).
+		WithReturnAll(true).
+		WithOnlySuccessful(true).
+		WithVerbose(spec.Options.Verbose)
+
+	if spec.MaxWorkers > 0 {
+		parallel.WithMaxWorkers(spec.MaxWorkers)
+	} else {
+		parallel.WithMaxWorkers(len(spec.Modules))
+	}
+
+	return parallel, nil
+}
+
+// createMultiChainComparison creates a MultiChainComparison module
+func (f *ModuleFactory) createMultiChainComparison(name string, spec ModuleSpec) (dsgo.Module, error) {
+	lm, err := f.getLM(spec.Model)
+	if err != nil {
+		return nil, fmt.Errorf("module '%s': %w", name, err)
+	}
+
+	sig, err := f.sigRegistry.Get(spec.Signature)
+	if err != nil {
+		return nil, fmt.Errorf("module '%s': %w", name, err)
+	}
+
+	// Determine M from source_module (Parallel) or explicit m value
+	m := spec.M
+	if m == 0 && spec.SourceModule != "" {
+		if sourceSpec, exists := f.allModuleSpecs[spec.SourceModule]; exists {
+			m = len(sourceSpec.Modules)
+		}
+	}
+	if m == 0 {
+		return nil, fmt.Errorf("module '%s': MultiChainComparison requires m or source_module with modules", name)
+	}
+
+	options := f.buildOptions(spec)
+
+	mcc := dsgo.NewMultiChainComparison(sig, lm, m).
+		WithOptions(options).
+		WithAdapter(dsgo.NewFallbackAdapter())
+
+	return mcc, nil
+}
+
 // ModuleRegistry holds created modules
 type ModuleRegistry struct {
 	modules map[string]dsgo.Module
@@ -170,6 +254,9 @@ func NewModuleRegistry(factory *ModuleFactory, specs map[string]ModuleSpec) (*Mo
 	registry := &ModuleRegistry{
 		modules: make(map[string]dsgo.Module),
 	}
+
+	// Set all specs so Parallel/MCC can access them
+	factory.SetAllModuleSpecs(specs)
 
 	for name, spec := range specs {
 		module, err := factory.CreateModule(name, spec)
