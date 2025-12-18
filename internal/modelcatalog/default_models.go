@@ -636,6 +636,14 @@ func init() {
 			Metadata:     Metadata{Name: "Gemini 2.5 Pro Preview 06-05", Family: "gemini-pro", Knowledge: "2025-01", ReleaseDate: "2025-06-05", LastUpdated: "2025-06-05", OpenWeights: false},
 		},
 		{
+			ID:           "openrouter/google/gemini-3-flash-preview",
+			Pricing:      Pricing{PromptPrice: 0.5, CompletionPrice: 3, CacheReadPrice: 0.05, CacheWritePrice: 0},
+			Limits:       Limits{ContextTokens: 1048576, OutputTokens: 65536},
+			Capabilities: Capabilities{Attachment: true, Reasoning: true, ToolCall: true, StructuredOutput: false, Temperature: true},
+			Modalities:   Modalities{Input: []string{"text"}, Output: []string{"text"}},
+			Metadata:     Metadata{Name: "Gemini 3 Flash Preview", Family: "gemini-flash", Knowledge: "2025-01", ReleaseDate: "2025-12-17", LastUpdated: "2025-12-17", OpenWeights: false},
+		},
+		{
 			ID:           "openrouter/google/gemini-3-pro-preview",
 			Pricing:      Pricing{PromptPrice: 2, CompletionPrice: 12, CacheReadPrice: 0, CacheWritePrice: 0},
 			Limits:       Limits{ContextTokens: 1050000, OutputTokens: 66000},

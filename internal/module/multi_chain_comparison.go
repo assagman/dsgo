@@ -291,6 +291,11 @@ func buildMCCSignature(baseSig *core.Signature, m int) (*core.Signature, string)
 	return sig, lastKey
 }
 
+// RequiresCompletions implements CompletionsConsumer interface
+func (mcc *MultiChainComparison) RequiresCompletions() bool {
+	return true
+}
+
 // Clone creates an independent copy of MultiChainComparison module.
 func (mcc *MultiChainComparison) Clone() core.Module {
 	cloned := &MultiChainComparison{

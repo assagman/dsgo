@@ -97,6 +97,17 @@ type (
 	ScoringFunction      = module.ScoringFunction
 	StreamResult         = module.StreamResult
 	MultiChainComparison = module.MultiChainComparison
+
+	// Program tracing and validation types
+	ExecutionID         = module.ExecutionID
+	StepStatus          = module.StepStatus
+	ExecutionStatus     = module.ExecutionStatus
+	StepExecution       = module.StepExecution
+	ProgramExecution    = module.ProgramExecution
+	ProgramMetrics      = module.ProgramMetrics
+	ProgramResult       = module.ProgramResult
+	SignatureMismatch   = module.SignatureMismatch
+	CompletionsConsumer = module.CompletionsConsumer
 )
 
 // Re-export logging types
@@ -191,6 +202,8 @@ var (
 	GenerateCacheKey                = core.GenerateCacheKey
 	GenerateCacheKeyWithIgnored     = core.GenerateCacheKeyWithIgnored
 	MarkCacheHit                    = core.MarkCacheHit
+	DeepCopyMap                     = core.DeepCopyMap
+	DeepCopySlice                   = core.DeepCopySlice
 	NewFallbackAdapter              = core.NewFallbackAdapter
 	NewFallbackAdapterWithChain     = core.NewFallbackAdapterWithChain
 	NewJSONAdapter                  = core.NewJSONAdapter
@@ -400,4 +413,16 @@ const (
 	MCPErrCodeMethodNotFound = mcp.ErrCodeMethodNotFound
 	MCPErrCodeInvalidParams  = mcp.ErrCodeInvalidParams
 	MCPErrCodeInternalError  = mcp.ErrCodeInternalError
+
+	// Program tracing and validation constants
+	StepStatusPending   = module.StepStatusPending
+	StepStatusRunning   = module.StepStatusRunning
+	StepStatusCompleted = module.StepStatusCompleted
+	StepStatusFailed    = module.StepStatusFailed
+	StepStatusSkipped   = module.StepStatusSkipped
+
+	ExecutionStatusPending   = module.ExecutionStatusPending
+	ExecutionStatusRunning   = module.ExecutionStatusRunning
+	ExecutionStatusCompleted = module.ExecutionStatusCompleted
+	ExecutionStatusFailed    = module.ExecutionStatusFailed
 )

@@ -169,7 +169,7 @@ func (o *GenerateOptions) Copy() *GenerateOptions {
 		StreamCallback:   o.StreamCallback, // Copy reference (function pointer)
 		FrequencyPenalty: o.FrequencyPenalty,
 		PresencePenalty:  o.PresencePenalty,
-		ProviderParams:   deepCopyMap(o.ProviderParams), // Deep copy provider params
+		ProviderParams:   DeepCopyMap(o.ProviderParams), // Deep copy provider params
 	}
 
 	// Copy slices
