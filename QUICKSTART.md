@@ -289,6 +289,13 @@ dsgo.Configure(
 )
 ```
 
+#### ReAct behavioral details
+
+- **Bounded trajectories**: Tool results are truncated to `MaxToolResultBytes` (default 16KB) and encoded as JSON envelopes. The trajectory is rendered within a soft prompt budget (`MaxPromptBytes`, default 256KB), keeping only the newest steps that fit.
+- **Context overflow recovery**: If a provider returns a context-length error, ReAct drops the oldest trajectory steps and retries (up to 3 times).
+- **Strict tool schemas**: Tool parameter schemas include `additionalProperties: false`, so providers will reject tool calls with extra keys not in your schema.
+- **Termination policies**: The loop terminates early on repeated identical tool calls (3 in a row), repeated identical observations (stagnation), or consecutive tool errors (2 in a row). Termination reason is available in `Prediction.Metadata["termination_reason"]`.
+
 ### Refine - Iterative Improvement
 
 For improving outputs through iteration:

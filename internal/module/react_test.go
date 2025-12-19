@@ -2,6 +2,8 @@ package module
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -1178,5 +1180,734 @@ func TestReAct_NonToolLM_NoToolsPassedInFinalMode(t *testing.T) {
 		if finalModeOptions.ToolChoice == "none" {
 			t.Errorf("ToolChoice should not be 'none' for non-tool LM, got %q", finalModeOptions.ToolChoice)
 		}
+	}
+}
+
+// ============================================================================
+// reactTrajectory tests
+// ============================================================================
+
+func TestReActTrajectory_Render_EmptySteps(t *testing.T) {
+	t.Parallel()
+	base := []core.Message{{Role: "system", Content: "You are helpful."}}
+	traj := newReActTrajectory(base)
+
+	msgs := traj.Render(1000)
+	if len(msgs) != 1 {
+		t.Errorf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].Role != "system" {
+		t.Errorf("expected system message, got %s", msgs[0].Role)
+	}
+}
+
+func TestReActTrajectory_Render_AlwaysIncludesNewestStep(t *testing.T) {
+	t.Parallel()
+	base := []core.Message{{Role: "system", Content: "base"}}
+	traj := newReActTrajectory(base)
+
+	// Add a step that exceeds the budget by itself.
+	largeThought := string(make([]byte, 500))
+	traj.AddStep(largeThought, nil)
+
+	// Budget is 100 bytes, base is ~4 bytes, but newest step should still be included.
+	msgs := traj.Render(100)
+	if len(msgs) < 2 {
+		t.Errorf("expected at least 2 messages (base + newest step), got %d", len(msgs))
+	}
+}
+
+func TestReActTrajectory_Render_SelectsSuffix(t *testing.T) {
+	t.Parallel()
+	base := []core.Message{{Role: "system", Content: "x"}}
+	traj := newReActTrajectory(base)
+
+	// Add 5 steps, each ~10 bytes.
+	for i := 0; i < 5; i++ {
+		traj.AddStep("thought123", nil)
+	}
+
+	// Budget allows base (~1 byte) + ~30 bytes = ~3 steps.
+	msgs := traj.Render(35)
+
+	// Should get base + some suffix of steps.
+	// We expect at least 2 messages (base + at least 1 step).
+	if len(msgs) < 2 {
+		t.Errorf("expected at least 2 messages, got %d", len(msgs))
+	}
+
+	// The last message should be from the newest step (step 5).
+	found := false
+	for _, m := range msgs {
+		if m.Content == "thought123" && m.Role == "assistant" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected newest step content to be present")
+	}
+}
+
+func TestReActTrajectory_Render_BaseExceedsBudget(t *testing.T) {
+	t.Parallel()
+	// Base itself exceeds budget.
+	largeBase := []core.Message{{Role: "system", Content: string(make([]byte, 1000))}}
+	traj := newReActTrajectory(largeBase)
+	traj.AddStep("small", nil)
+
+	// Budget is only 100 bytes, base is 1000 bytes.
+	msgs := traj.Render(100)
+
+	// Should only return base, no steps (remaining budget is <= 0).
+	if len(msgs) != 1 {
+		t.Errorf("expected only base message, got %d messages", len(msgs))
+	}
+}
+
+func TestReActTrajectory_DropOldestSteps(t *testing.T) {
+	t.Parallel()
+	base := []core.Message{{Role: "system", Content: "x"}}
+	traj := newReActTrajectory(base)
+
+	for i := 0; i < 5; i++ {
+		traj.AddStep("step", nil)
+	}
+
+	// Drop 2 oldest.
+	dropped := traj.DropOldestSteps(2)
+	if dropped != 2 {
+		t.Errorf("expected 2 dropped, got %d", dropped)
+	}
+
+	// Should have 3 steps remaining.
+	msgs := traj.Render(100000)
+	// Base (1) + 3 steps (3 assistant messages) = 4.
+	if len(msgs) != 4 {
+		t.Errorf("expected 4 messages, got %d", len(msgs))
+	}
+}
+
+func TestReActTrajectory_DropOldestSteps_MoreThanAvailable(t *testing.T) {
+	t.Parallel()
+	traj := newReActTrajectory(nil)
+	traj.AddStep("s1", nil)
+	traj.AddStep("s2", nil)
+
+	dropped := traj.DropOldestSteps(10)
+	if dropped != 2 {
+		t.Errorf("expected 2 dropped (all available), got %d", dropped)
+	}
+
+	msgs := traj.Render(100000)
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages after dropping all, got %d", len(msgs))
+	}
+}
+
+func TestReActTrajectory_DropOldestSteps_Zero(t *testing.T) {
+	t.Parallel()
+	traj := newReActTrajectory(nil)
+	traj.AddStep("s1", nil)
+
+	dropped := traj.DropOldestSteps(0)
+	if dropped != 0 {
+		t.Errorf("expected 0 dropped, got %d", dropped)
+	}
+}
+
+func TestReActTrajectory_HasToolContent(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no tool content", func(t *testing.T) {
+		traj := newReActTrajectory(nil)
+		traj.AddStep("thought only", nil)
+		if traj.HasToolContent() {
+			t.Error("expected no tool content")
+		}
+	})
+
+	t.Run("with tool calls", func(t *testing.T) {
+		traj := newReActTrajectory(nil)
+		traj.AddStep("thought", []core.ToolCall{{ID: "1", Name: "search"}})
+		if !traj.HasToolContent() {
+			t.Error("expected tool content from tool calls")
+		}
+	})
+
+	t.Run("with tool results", func(t *testing.T) {
+		traj := newReActTrajectory(nil)
+		step := traj.AddStep("thought", nil)
+		step.AddToolResult(reactToolResult{ToolCallID: "1", Content: "result"})
+		if !traj.HasToolContent() {
+			t.Error("expected tool content from tool results")
+		}
+	})
+}
+
+func TestReActStep_ToMessages(t *testing.T) {
+	t.Parallel()
+	step := &reactStep{
+		Thought:   "I'm thinking",
+		ToolCalls: []core.ToolCall{{ID: "1", Name: "search"}},
+		ToolResults: []reactToolResult{
+			{ToolCallID: "1", Content: `{"tool":"search","ok":true}`},
+		},
+		Errors: []string{"error message"},
+	}
+
+	msgs := step.toMessages()
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(msgs))
+	}
+
+	if msgs[0].Role != "assistant" {
+		t.Errorf("expected assistant role, got %s", msgs[0].Role)
+	}
+	if msgs[1].Role != "tool" {
+		t.Errorf("expected tool role, got %s", msgs[1].Role)
+	}
+	if msgs[2].Role != "system" {
+		t.Errorf("expected system role for error, got %s", msgs[2].Role)
+	}
+}
+
+// ============================================================================
+// encodeToolResult tests
+// ============================================================================
+
+func TestEncodeToolResult_SmallResult(t *testing.T) {
+	t.Parallel()
+	content, truncated, hash := encodeToolResult("search", "call-1", "hello", nil, 1000)
+
+	if truncated {
+		t.Error("expected not truncated")
+	}
+
+	var env toolResultEnvelope
+	if err := json.Unmarshal([]byte(content), &env); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if env.Tool != "search" {
+		t.Errorf("expected tool=search, got %s", env.Tool)
+	}
+	if !env.OK {
+		t.Error("expected OK=true")
+	}
+	if env.Result != "hello" {
+		t.Errorf("expected result=hello, got %v", env.Result)
+	}
+
+	if hash == "" {
+		t.Error("expected non-empty hash")
+	}
+}
+
+func TestEncodeToolResult_WithError(t *testing.T) {
+	t.Parallel()
+	content, _, _ := encodeToolResult("search", "call-1", nil, errors.New("tool failed"), 1000)
+
+	var env toolResultEnvelope
+	if err := json.Unmarshal([]byte(content), &env); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if env.OK {
+		t.Error("expected OK=false for error")
+	}
+	if env.Error != "tool failed" {
+		t.Errorf("expected error message, got %s", env.Error)
+	}
+}
+
+func TestEncodeToolResult_Truncation(t *testing.T) {
+	t.Parallel()
+	largeResult := string(make([]byte, 10000))
+	content, truncated, _ := encodeToolResult("search", "call-1", largeResult, nil, 200)
+
+	if !truncated {
+		t.Error("expected truncated=true")
+	}
+	if len(content) > 200 {
+		t.Errorf("expected content <= 200 bytes, got %d", len(content))
+	}
+
+	var env toolResultEnvelope
+	if err := json.Unmarshal([]byte(content), &env); err != nil {
+		t.Fatalf("truncated result should still be valid JSON: %v", err)
+	}
+	if !env.Truncated {
+		t.Error("expected Truncated=true in envelope")
+	}
+	if env.OriginalSize == 0 {
+		t.Error("expected OriginalSize to be set")
+	}
+}
+
+func TestEncodeToolResult_StableHashIgnoresToolCallID(t *testing.T) {
+	t.Parallel()
+	// Same tool, same result, different tool_call_id should produce same hash.
+	_, _, hash1 := encodeToolResult("search", "call-1", "result", nil, 1000)
+	_, _, hash2 := encodeToolResult("search", "call-2", "result", nil, 1000)
+
+	if hash1 != hash2 {
+		t.Errorf("expected same hash for same content, different call IDs: %s vs %s", hash1, hash2)
+	}
+}
+
+func TestEncodeToolResult_DifferentResultsDifferentHashes(t *testing.T) {
+	t.Parallel()
+	_, _, hash1 := encodeToolResult("search", "call-1", "result1", nil, 1000)
+	_, _, hash2 := encodeToolResult("search", "call-1", "result2", nil, 1000)
+
+	if hash1 == hash2 {
+		t.Error("expected different hashes for different results")
+	}
+}
+
+func TestEncodeToolResult_UTF8SafeTruncation(t *testing.T) {
+	t.Parallel()
+	// Use a multi-byte UTF-8 character.
+	result := "Hello 世界 🌍"
+	content, _, _ := encodeToolResult("search", "call-1", result, nil, 50)
+
+	var env toolResultEnvelope
+	if err := json.Unmarshal([]byte(content), &env); err != nil {
+		t.Fatalf("should produce valid JSON: %v", err)
+	}
+}
+
+func TestEncodeToolResult_MinimalEnvelope(t *testing.T) {
+	t.Parallel()
+	// Extremely small budget.
+	content, truncated, _ := encodeToolResult("x", "1", "huge data", nil, 50)
+
+	if !truncated {
+		t.Error("expected truncated")
+	}
+
+	var env toolResultEnvelope
+	if err := json.Unmarshal([]byte(content), &env); err != nil {
+		t.Fatalf("should produce valid JSON even with tiny budget: %v", err)
+	}
+}
+
+// ============================================================================
+// reactTermination tests
+// ============================================================================
+
+func TestReActTermination_MarkDone_Idempotent(t *testing.T) {
+	t.Parallel()
+	term := newReActTermination()
+
+	term.MarkDone(terminationRepeatedToolCall)
+	term.MarkDone(terminationStagnation) // Should be ignored.
+
+	if term.Reason() != terminationRepeatedToolCall {
+		t.Errorf("expected reason %s, got %s", terminationRepeatedToolCall, term.Reason())
+	}
+}
+
+func TestReActTermination_ObserveToolCall_RepeatedTriggers(t *testing.T) {
+	t.Parallel()
+	term := newReActTermination()
+
+	tc := core.ToolCall{Name: "search", Arguments: map[string]any{"q": "test"}}
+
+	// First call: sets fingerprint.
+	term.ObserveToolCall(tc)
+	if term.ShouldStop() {
+		t.Error("should not stop after first call")
+	}
+
+	// Second call: increments count to 1.
+	term.ObserveToolCall(tc)
+	if term.ShouldStop() {
+		t.Error("should not stop after second call")
+	}
+
+	// Third call: count becomes 2, triggers termination.
+	term.ObserveToolCall(tc)
+	if !term.ShouldStop() {
+		t.Error("should stop after third repeated call")
+	}
+	if term.Reason() != terminationRepeatedToolCall {
+		t.Errorf("expected reason %s, got %s", terminationRepeatedToolCall, term.Reason())
+	}
+}
+
+func TestReActTermination_ObserveToolCall_DifferentCallsReset(t *testing.T) {
+	t.Parallel()
+	term := newReActTermination()
+
+	tc1 := core.ToolCall{Name: "search", Arguments: map[string]any{"q": "test1"}}
+	tc2 := core.ToolCall{Name: "search", Arguments: map[string]any{"q": "test2"}}
+
+	term.ObserveToolCall(tc1)
+	term.ObserveToolCall(tc1) // repeat count = 1
+	term.ObserveToolCall(tc2) // Different call, resets.
+
+	if term.ShouldStop() {
+		t.Error("should not stop after changing tool call args")
+	}
+}
+
+func TestReActTermination_ObserveToolResult_Stagnation(t *testing.T) {
+	t.Parallel()
+	term := newReActTermination()
+
+	tc := core.ToolCall{Name: "search"}
+	hash := "same-hash-123"
+
+	// First result: sets hash.
+	term.ObserveToolResult(tc, hash, nil)
+	if term.ShouldStop() {
+		t.Error("should not stop after first observation")
+	}
+
+	// Second result: increments.
+	term.ObserveToolResult(tc, hash, nil)
+	if term.ShouldStop() {
+		t.Error("should not stop after second observation")
+	}
+
+	// Third result: triggers stagnation.
+	term.ObserveToolResult(tc, hash, nil)
+	if !term.ShouldStop() {
+		t.Error("should stop after third repeated observation")
+	}
+	if term.Reason() != terminationStagnation {
+		t.Errorf("expected reason %s, got %s", terminationStagnation, term.Reason())
+	}
+}
+
+func TestReActTermination_ObserveError_RepeatedErrors(t *testing.T) {
+	t.Parallel()
+	term := newReActTermination()
+
+	term.ObserveError(errors.New("err1"))
+	if term.ShouldStop() {
+		t.Error("should not stop after first error")
+	}
+
+	term.ObserveError(errors.New("err2"))
+	if !term.ShouldStop() {
+		t.Error("should stop after second consecutive error")
+	}
+	if term.Reason() != terminationRepeatedErrors {
+		t.Errorf("expected reason %s, got %s", terminationRepeatedErrors, term.Reason())
+	}
+}
+
+func TestReActTermination_ObserveToolResult_ErrorResetsOnSuccess(t *testing.T) {
+	t.Parallel()
+	term := newReActTermination()
+
+	tc := core.ToolCall{Name: "search"}
+
+	term.ObserveToolResult(tc, "h1", errors.New("err"))
+	term.ObserveToolResult(tc, "h2", nil) // Success resets error count.
+	term.ObserveToolResult(tc, "h3", errors.New("err"))
+
+	if term.ShouldStop() {
+		t.Error("should not stop; error count was reset by success")
+	}
+}
+
+func TestReActTermination_SetFinalToolArgs(t *testing.T) {
+	t.Parallel()
+	term := newReActTermination()
+
+	args := map[string]any{"answer": "42"}
+	term.SetFinalToolArgs(args)
+
+	// Modify original to ensure copy was made.
+	args["answer"] = "modified"
+
+	if term.FinalToolArgs()["answer"] != "42" {
+		t.Error("expected args to be copied, not referenced")
+	}
+}
+
+func TestReActTermination_SetFinalContent(t *testing.T) {
+	t.Parallel()
+	term := newReActTermination()
+	term.SetFinalContent(`{"answer":"42"}`)
+
+	if term.FinalContent() != `{"answer":"42"}` {
+		t.Errorf("unexpected final content: %s", term.FinalContent())
+	}
+}
+
+// ============================================================================
+// generateWithContextRetry / isContextOverflowError tests
+// ============================================================================
+
+func TestIsContextOverflowError_Sentinel(t *testing.T) {
+	t.Parallel()
+	err := contextLengthSentinel{}
+	if !isContextOverflowError(err) {
+		t.Error("expected sentinel to be detected as overflow")
+	}
+}
+
+func TestIsContextOverflowError_Patterns(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		msg  string
+		want bool
+	}{
+		{"context_length_exceeded", true},
+		{"maximum context length", true},
+		{"max context length exceeded", true},
+		{"maximum context window exceeded", true},
+		{"context window exceeded", true},
+		{"too many tokens", true},
+		{"exceeded the context", true},
+		{"please reduce the length of the messages", true},
+		{"prompt is too long", true},
+		{"tokens exceeded", true},
+		{"input is too long", true},
+		{"some other error", false},
+		{"network timeout", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			err := errors.New(tc.msg)
+			if got := isContextOverflowError(err); got != tc.want {
+				t.Errorf("isContextOverflowError(%q) = %v, want %v", tc.msg, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsContextOverflowError_Nil(t *testing.T) {
+	t.Parallel()
+	if isContextOverflowError(nil) {
+		t.Error("expected nil to not be overflow error")
+	}
+}
+
+func TestGenerateWithContextRetry_NoOverflow(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			return &core.GenerateResult{Content: "success"}, nil
+		},
+	}
+
+	r := &ReAct{LM: lm, MaxPromptBytes: 10000}
+	traj := newReActTrajectory([]core.Message{{Role: "user", Content: "hi"}})
+
+	result, err := r.generateWithContextRetry(context.Background(), traj, &core.GenerateOptions{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Content != "success" {
+		t.Errorf("unexpected content: %s", result.Content)
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 call, got %d", callCount)
+	}
+}
+
+func TestGenerateWithContextRetry_OverflowRetry(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			if callCount < 3 {
+				return nil, contextLengthSentinel{}
+			}
+			return &core.GenerateResult{Content: "success after retry"}, nil
+		},
+	}
+
+	r := &ReAct{LM: lm, MaxPromptBytes: 10000}
+	traj := newReActTrajectory([]core.Message{{Role: "user", Content: "hi"}})
+	traj.AddStep("step1", nil)
+	traj.AddStep("step2", nil)
+	traj.AddStep("step3", nil)
+
+	result, err := r.generateWithContextRetry(context.Background(), traj, &core.GenerateOptions{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Content != "success after retry" {
+		t.Errorf("unexpected content: %s", result.Content)
+	}
+	if callCount != 3 {
+		t.Errorf("expected 3 calls (2 failures + 1 success), got %d", callCount)
+	}
+}
+
+func TestGenerateWithContextRetry_ExhaustedRetries(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			return nil, contextLengthSentinel{}
+		},
+	}
+
+	r := &ReAct{LM: lm, MaxPromptBytes: 10000}
+	traj := newReActTrajectory([]core.Message{{Role: "user", Content: "hi"}})
+	traj.AddStep("step1", nil)
+	traj.AddStep("step2", nil)
+	traj.AddStep("step3", nil)
+
+	_, err := r.generateWithContextRetry(context.Background(), traj, &core.GenerateOptions{}, nil)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	// Should have tried reactContextOverflowMaxRetries (3) times.
+	if callCount != 3 {
+		t.Errorf("expected 3 calls, got %d", callCount)
+	}
+}
+
+func TestGenerateWithContextRetry_NoStepsToDropReturnsImmediately(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			return nil, contextLengthSentinel{}
+		},
+	}
+
+	r := &ReAct{LM: lm, MaxPromptBytes: 10000}
+	traj := newReActTrajectory([]core.Message{{Role: "user", Content: "hi"}})
+	// No steps added - nothing to drop.
+
+	_, err := r.generateWithContextRetry(context.Background(), traj, &core.GenerateOptions{}, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	// Should return immediately after first failure since no steps to drop.
+	if callCount != 1 {
+		t.Errorf("expected 1 call (immediate return), got %d", callCount)
+	}
+}
+
+func TestGenerateWithContextRetry_NonOverflowErrorReturnsImmediately(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			callCount++
+			return nil, errors.New("network error")
+		},
+	}
+
+	r := &ReAct{LM: lm, MaxPromptBytes: 10000}
+	traj := newReActTrajectory([]core.Message{{Role: "user", Content: "hi"}})
+	traj.AddStep("step1", nil)
+
+	_, err := r.generateWithContextRetry(context.Background(), traj, &core.GenerateOptions{}, nil)
+	if err == nil || err.Error() != "network error" {
+		t.Fatalf("expected network error, got: %v", err)
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 call (immediate return for non-overflow error), got %d", callCount)
+	}
+}
+
+// ============================================================================
+// Helper: approxMessagesBytes / approxBytes tests
+// ============================================================================
+
+func TestApproxMessagesBytes(t *testing.T) {
+	t.Parallel()
+	msgs := []core.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "world"},
+	}
+
+	bytes := approxMessagesBytes(msgs)
+	if bytes != 10 { // "hello" (5) + "world" (5)
+		t.Errorf("expected 10 bytes, got %d", bytes)
+	}
+}
+
+func TestApproxMessagesBytes_WithToolCalls(t *testing.T) {
+	t.Parallel()
+	msgs := []core.Message{
+		{
+			Role:    "assistant",
+			Content: "x",
+			ToolCalls: []core.ToolCall{
+				{ID: "1", Name: "search", Arguments: map[string]any{"q": "test"}},
+			},
+		},
+	}
+
+	bytes := approxMessagesBytes(msgs)
+	// Content "x" (1 byte) + JSON of tool calls.
+	if bytes <= 1 {
+		t.Errorf("expected > 1 byte due to tool calls, got %d", bytes)
+	}
+}
+
+func TestReActStep_ApproxBytes(t *testing.T) {
+	t.Parallel()
+	step := &reactStep{
+		Thought: "thinking",
+		ToolResults: []reactToolResult{
+			{Content: "result"},
+		},
+		Errors: []string{"error"},
+	}
+
+	bytes := step.approxBytes()
+	// "thinking" (8) + "result" (6) + "error" (5) = 19
+	if bytes != 19 {
+		t.Errorf("expected 19 bytes, got %d", bytes)
+	}
+}
+
+// ============================================================================
+// toolFingerprint tests
+// ============================================================================
+
+func TestToolFingerprint_SameCallsSameFingerprint(t *testing.T) {
+	t.Parallel()
+	tc1 := core.ToolCall{Name: "search", Arguments: map[string]any{"q": "test"}}
+	tc2 := core.ToolCall{Name: "search", Arguments: map[string]any{"q": "test"}}
+
+	fp1 := toolFingerprint(tc1)
+	fp2 := toolFingerprint(tc2)
+
+	if fp1 != fp2 {
+		t.Errorf("expected same fingerprint for identical calls: %s vs %s", fp1, fp2)
+	}
+}
+
+func TestToolFingerprint_DifferentArgsDifferentFingerprint(t *testing.T) {
+	t.Parallel()
+	tc1 := core.ToolCall{Name: "search", Arguments: map[string]any{"q": "test1"}}
+	tc2 := core.ToolCall{Name: "search", Arguments: map[string]any{"q": "test2"}}
+
+	fp1 := toolFingerprint(tc1)
+	fp2 := toolFingerprint(tc2)
+
+	if fp1 == fp2 {
+		t.Error("expected different fingerprints for different args")
+	}
+}
+
+func TestToolFingerprint_IncludesToolName(t *testing.T) {
+	t.Parallel()
+	tc1 := core.ToolCall{Name: "search", Arguments: map[string]any{"q": "test"}}
+	tc2 := core.ToolCall{Name: "calculate", Arguments: map[string]any{"q": "test"}}
+
+	fp1 := toolFingerprint(tc1)
+	fp2 := toolFingerprint(tc2)
+
+	if fp1 == fp2 {
+		t.Error("expected different fingerprints for different tool names")
 	}
 }
