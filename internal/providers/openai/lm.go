@@ -17,6 +17,7 @@ import (
 	"github.com/assagman/dsgo/internal/logging"
 	"github.com/assagman/dsgo/internal/modelcatalog"
 	"github.com/assagman/dsgo/internal/providers/util"
+	"github.com/assagman/dsgo/internal/retry"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/shared"
@@ -131,19 +132,58 @@ func (o *openAI) Generate(ctx context.Context, messages []core.Message, options 
 
 	params := o.buildParams(messages, options)
 
-	var rawResp *http.Response
-	reqOpts := []option.RequestOption{option.WithResponseInto(&rawResp)}
-	if o.BaseURL != "" {
-		reqOpts = append(reqOpts, option.WithBaseURL(o.BaseURL))
-	}
-	if options.RetryConfig != nil {
-		reqOpts = append(reqOpts, option.WithMaxRetries(options.RetryConfig.MaxRetries))
+	// Apply exponential backoff on 429/5xx to survive bursty concurrency.
+	retryOpts := retry.DefaultOptions()
+	if options != nil && options.RetryConfig != nil {
+		retryOpts.MergeFrom(
+			options.RetryConfig.MaxRetries,
+			options.RetryConfig.InitialBackoff,
+			options.RetryConfig.MaxBackoff,
+			options.RetryConfig.JitterFactor,
+		)
 	}
 
-	chatCompletion, err := o.Client.Chat.Completions.New(ctx, params, reqOpts...)
+	var rawResp *http.Response
+	var chatCompletion *openai.ChatCompletion
+	var lastErr error
+
+	httpFn := func() (*http.Response, error) {
+		chatCompletion = nil
+		lastErr = nil
+
+		var attemptResp *http.Response
+		reqOpts := []option.RequestOption{option.WithResponseInto(&attemptResp)}
+		if o.BaseURL != "" {
+			reqOpts = append(reqOpts, option.WithBaseURL(o.BaseURL))
+		}
+		// Disable SDK retries: we do our own (with Retry-After support).
+		reqOpts = append(reqOpts, option.WithMaxRetries(0))
+
+		cc, err := o.Client.Chat.Completions.New(ctx, params, reqOpts...)
+		if err != nil {
+			lastErr = err
+			if attemptResp == nil {
+				return nil, err
+			}
+			return attemptResp, nil
+		}
+
+		chatCompletion = cc
+		rawResp = attemptResp
+		return attemptResp, nil
+	}
+
+	_, err := retry.WithExponentialBackoffOpts(ctx, httpFn, retryOpts)
 	if err != nil {
 		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, err)
 		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	if lastErr != nil {
+		logging.LogAPIError(ctx, "provider.OpenAI", o.Model, lastErr)
+		return nil, fmt.Errorf("request failed: %w", lastErr)
+	}
+	if chatCompletion == nil {
+		return nil, fmt.Errorf("request failed: empty response")
 	}
 
 	result, err := o.parseResponse(chatCompletion)
@@ -241,11 +281,17 @@ func (o *openAI) buildParams(messages []core.Message, options *core.GenerateOpti
 		params.Tools = tools
 
 		if options.ToolChoice != "" && options.ToolChoice != "auto" {
-			if options.ToolChoice == "none" {
+			switch options.ToolChoice {
+			case "none":
 				params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
 					OfAuto: openai.String("none"),
 				}
-			} else {
+			case "required":
+				// Require the model to call a tool.
+				params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+					OfAuto: openai.String("required"),
+				}
+			default:
 				params.ToolChoice = openai.ToolChoiceOptionFunctionToolChoice(
 					openai.ChatCompletionNamedToolChoiceFunctionParam{
 						Name: options.ToolChoice,
@@ -376,9 +422,10 @@ func (o *openAI) convertTool(tool *core.Tool) openai.ChatCompletionToolUnionPara
 		Name:        tool.Name,
 		Description: openai.String(tool.Description),
 		Parameters: shared.FunctionParameters{
-			"type":       "object",
-			"properties": properties,
-			"required":   required,
+			"type":                 "object",
+			"properties":           properties,
+			"required":             required,
+			"additionalProperties": false,
 		},
 	})
 }

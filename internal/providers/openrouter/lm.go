@@ -273,13 +273,18 @@ func (o *openRouter) buildParams(messages []core.Message, options *core.Generate
 		params.Tools = tools
 
 		if options.ToolChoice != "" && options.ToolChoice != "auto" {
-			if options.ToolChoice == "none" {
+			switch options.ToolChoice {
+			case "none":
 				if !isZAIModel {
 					params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
 						OfAuto: openai.String("none"),
 					}
 				}
-			} else {
+			case "required":
+				params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+					OfAuto: openai.String("required"),
+				}
+			default:
 				params.ToolChoice = openai.ToolChoiceOptionFunctionToolChoice(
 					openai.ChatCompletionNamedToolChoiceFunctionParam{
 						Name: options.ToolChoice,
@@ -301,8 +306,12 @@ func (o *openRouter) buildParams(messages []core.Message, options *core.Generate
 	}
 
 	if isZAIModel && (len(options.Tools) > 0 || hasToolContent) {
-		params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
-			OfAuto: openai.String("auto"),
+		// Z.AI models have strict tool_choice handling and may reject "none".
+		// We only override when the caller didn't explicitly ask for a non-auto policy.
+		if options.ToolChoice == "" || options.ToolChoice == "auto" || options.ToolChoice == "none" {
+			params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+				OfAuto: openai.String("auto"),
+			}
 		}
 	}
 
@@ -448,9 +457,10 @@ func (o *openRouter) convertTool(tool *core.Tool) openai.ChatCompletionToolUnion
 		Name:        tool.Name,
 		Description: openai.String(tool.Description),
 		Parameters: shared.FunctionParameters{
-			"type":       "object",
-			"properties": properties,
-			"required":   required,
+			"type":                 "object",
+			"properties":           properties,
+			"required":             required,
+			"additionalProperties": false,
 		},
 	})
 }

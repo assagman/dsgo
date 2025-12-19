@@ -124,3 +124,31 @@ func TestMockHTTP_Stream(t *testing.T) {
 		t.Fatalf("usage.total=%d, want 3", last.Usage.TotalTokens)
 	}
 }
+
+func TestMockHTTP_buildRequest_ToolChoiceRequired(t *testing.T) {
+	m := &mockHTTP{model: "gpt-4o"}
+
+	tool := core.NewTool("test_tool", "A test tool", nil)
+	tool.AddParameter("q", "string", "Query", true)
+
+	req := m.buildRequest([]core.Message{{Role: "user", Content: "hi"}}, &core.GenerateOptions{
+		Tools:      []core.Tool{*tool},
+		ToolChoice: "required",
+	})
+
+	if req["tool_choice"] != "required" {
+		t.Fatalf("tool_choice=%v, want required", req["tool_choice"])
+	}
+}
+
+func TestMockHTTP_convertTool_AdditionalPropertiesFalse(t *testing.T) {
+	tool := core.NewTool("test_tool", "A test tool", nil)
+	tool.AddParameter("q", "string", "Query", true)
+
+	converted := convertTool(tool)
+	fn, _ := converted["function"].(map[string]any)
+	params, _ := fn["parameters"].(map[string]any)
+	if params["additionalProperties"] != false {
+		t.Fatalf("additionalProperties=%v, want false", params["additionalProperties"])
+	}
+}

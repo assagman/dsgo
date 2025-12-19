@@ -162,6 +162,21 @@ func TestOpenAI_BuildParams_ToolChoice(t *testing.T) {
 		}
 	})
 
+	t.Run("required", func(t *testing.T) {
+		lm := &openAI{Model: "gpt-4o"}
+		tool := core.NewTool("test_tool", "A test tool", nil)
+
+		opts := &core.GenerateOptions{Tools: []core.Tool{*tool}, ToolChoice: "required"}
+		params := lm.buildParams([]core.Message{{Role: "user", Content: "hi"}}, opts)
+
+		if !params.ToolChoice.OfAuto.Valid() {
+			t.Fatal("expected ToolChoice.OfAuto to be set")
+		}
+		if params.ToolChoice.OfAuto.Value != "required" {
+			t.Errorf("expected tool choice required, got %q", params.ToolChoice.OfAuto.Value)
+		}
+	})
+
 	t.Run("with provider params", func(t *testing.T) {
 		lm := &openAI{Model: "gpt-4o"}
 		messages := []core.Message{{Role: "user", Content: "test"}}
@@ -316,6 +331,10 @@ func TestOpenAI_ConvertTool(t *testing.T) {
 	}
 	if len(required) != 1 || required[0] != "param1" {
 		t.Errorf("expected required to be [param1], got %v", required)
+	}
+
+	if fn.Parameters["additionalProperties"] != false {
+		t.Errorf("expected additionalProperties=false, got %v", fn.Parameters["additionalProperties"])
 	}
 }
 

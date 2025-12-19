@@ -339,9 +339,10 @@ func (m *mockHTTP) buildRequest(messages []core.Message, options *core.GenerateO
 		req["tools"] = tools
 
 		if options.ToolChoice != "" && options.ToolChoice != "auto" {
-			if options.ToolChoice == "none" {
-				req["tool_choice"] = "none"
-			} else {
+			switch options.ToolChoice {
+			case "none", "required":
+				req["tool_choice"] = options.ToolChoice
+			default:
 				req["tool_choice"] = map[string]any{
 					"type": "function",
 					"function": map[string]string{
@@ -459,9 +460,10 @@ func convertTool(tool *core.Tool) map[string]any {
 			"name":        tool.Name,
 			"description": tool.Description,
 			"parameters": map[string]any{
-				"type":       "object",
-				"properties": properties,
-				"required":   required,
+				"type":                 "object",
+				"properties":           properties,
+				"required":             required,
+				"additionalProperties": false,
 			},
 		},
 	}

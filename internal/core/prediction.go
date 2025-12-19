@@ -23,6 +23,11 @@ type Prediction struct {
 
 	// Parse diagnostics (for partial outputs and validation tracking)
 	ParseDiagnostics *ValidationDiagnostics // Validation diagnostics for partial outputs
+
+	// Metadata is arbitrary module/provider diagnostics.
+	// This is intentionally flexible to allow modules to attach iteration counts,
+	// termination reasons, tool traces, etc.
+	Metadata map[string]any
 }
 
 // NewPrediction creates a new prediction from outputs
@@ -30,6 +35,7 @@ func NewPrediction(outputs map[string]any) *Prediction {
 	return &Prediction{
 		Outputs:     outputs,
 		Completions: []map[string]any{},
+		Metadata:    map[string]any{},
 	}
 }
 
@@ -72,6 +78,26 @@ func (p *Prediction) WithInputs(inputs map[string]any) *Prediction {
 // WithParseDiagnostics adds validation diagnostics for partial outputs
 func (p *Prediction) WithParseDiagnostics(diag *ValidationDiagnostics) *Prediction {
 	p.ParseDiagnostics = diag
+	return p
+}
+
+// WithMetadata replaces the prediction metadata map.
+// Callers should prefer AddMetadata for incremental updates.
+func (p *Prediction) WithMetadata(metadata map[string]any) *Prediction {
+	if metadata == nil {
+		p.Metadata = map[string]any{}
+		return p
+	}
+	p.Metadata = metadata
+	return p
+}
+
+// AddMetadata adds a single metadata key/value.
+func (p *Prediction) AddMetadata(key string, value any) *Prediction {
+	if p.Metadata == nil {
+		p.Metadata = map[string]any{}
+	}
+	p.Metadata[key] = value
 	return p
 }
 

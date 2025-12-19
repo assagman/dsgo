@@ -57,7 +57,7 @@ DSGo modules are higher-level behaviors built on top of the core `Signature` + `
 
 - **Predict**: Basic structured input → output prediction.
 - **ChainOfThought**: Adds a reasoning step and stores it in `Prediction.Rationale` (plus any explicit `reasoning` output fields).
-- **ReAct**: A tool-calling loop agent (think → act → observe), suitable for external integrations.
+- **ReAct**: A native tool-calling loop agent with an auto-injected `finish` tool and a post-loop extractor fallback to produce signature-valid outputs.
 - **Refine**: Iteratively improves a prediction when `inputs["feedback"]` (or a custom refinement field) is provided.
 - **BestOfN**: Runs a wrapped module `N` times and selects the best result using a scorer; can parallelize and optionally return all completions.
 - **Program**: Sequential pipeline; merges previous outputs into the next step's inputs.
@@ -93,12 +93,17 @@ graph TD
 
 ```mermaid
 flowchart TD
-  Q[User query] --> T[Thought]
-  T --> A[Act: tool call]
-  A --> O[Observation]
-  O --> T
-  T --> F[Final answer]
+  Q[Inputs] --> M[LM step]
+  M -->|tool call(s)| A[Act: tool execution]
+  A --> O[Observation(s)]
+  O --> M
+  M -->|finish(args) or direct answer| F[Final outputs (validated)]
+  F -->|if invalid or limits hit| X[Extractor (schema enforced)]
 ```
+
+Notes:
+- DSGo auto-injects a synthetic `finish` tool that mirrors the output `Signature`.
+- If the loop can’t produce a valid final output (or exceeds limits), DSGo runs an extraction step over the full trajectory to salvage a schema-valid answer.
 
 ## Streaming pipeline
 

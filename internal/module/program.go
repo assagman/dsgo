@@ -733,6 +733,11 @@ func copyPrediction(p *core.Prediction) *core.Prediction {
 	}
 
 	// Create new prediction
+	var diagCopy *core.ValidationDiagnostics
+	if p.ParseDiagnostics != nil {
+		diagCopy = p.ParseDiagnostics.Clone()
+	}
+
 	resultCopy := &core.Prediction{
 		Outputs:          core.DeepCopyMap(p.Outputs),
 		Usage:            p.Usage, // Usage is a struct, copies by value
@@ -745,7 +750,8 @@ func copyPrediction(p *core.Prediction) *core.Prediction {
 		ParseSuccess:     p.ParseSuccess,
 		ParseAttempts:    p.ParseAttempts,
 		FallbackUsed:     p.FallbackUsed,
-		ParseDiagnostics: p.ParseDiagnostics.Clone(),
+		ParseDiagnostics: diagCopy,
+		Metadata:         core.DeepCopyMap(p.Metadata),
 	}
 
 	return resultCopy

@@ -224,32 +224,77 @@ fmt.Println("Answer:", result.GetString("answer"))
 
 ### ReAct - Tool-Using Agents
 
-For tasks requiring external tools:
+ReAct is DSGo’s native tool-calling agent loop. It’s designed to keep tool trajectories bounded and to reliably produce outputs that match your `Signature`.
 
 ```go
-// Define a tool
-func searchWeb(ctx context.Context, args map[string]interface{}) (string, error) {
+// Tool: keep result sizes bounded (cost + context control).
+func searchWeb(ctx context.Context, args map[string]any) (any, error) {
     query := args["query"].(string)
-    return fmt.Sprintf("Search results for '%s': Wikipedia, Google, etc.", query), nil
+
+    // Size control: default to a small summary.
+    maxChars := 800
+    if v, ok := args["max_chars"].(float64); ok { // JSON numbers decode as float64
+        maxChars = int(v)
+    }
+
+    result := fmt.Sprintf("Search results for %q: Wikipedia, news, etc...", query)
+    if len(result) > maxChars {
+        result = result[:maxChars] + "...(truncated)"
+    }
+    return result, nil
 }
 
 searchTool := dsgo.NewTool(
     "search",
-    "Search the web for information",
+    "Search the web (return a short summary)",
     searchWeb,
-).AddParameter("query", dsgo.FieldTypeString, "Search query", true)
+).
+    AddParameter("query", "string", "Search query", true).
+    AddParameter("max_chars", "integer", "Max chars to return (size control)", false)
 
 sig := dsgo.NewSignature("Answer questions using tools").
     AddInput("question", dsgo.FieldTypeString, "Question to answer").
     AddOutput("answer", dsgo.FieldTypeString, "Final answer based on tool results")
 
-agent := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool})
+history := dsgo.NewHistoryWithLimit(20) // trajectory limit for multi-turn chats
 
-result, _ := agent.Forward(ctx, map[string]any{
+agent := dsgo.NewReAct(sig, lm, []dsgo.Tool{*searchTool}).
+    WithHistory(history).
+    WithMaxIterations(8) // trajectory limit for a single run
+
+pred, err := agent.Forward(ctx, map[string]any{
     "question": "Who is the current president of France?",
 })
-fmt.Println(result.GetString("answer"))
+if err != nil {
+    fmt.Println("error:", err)
+    return
+}
+fmt.Println(pred.GetString("answer"))
 ```
+
+#### ReAct output guarantees
+
+- **Native tool calling first**: Tools execute only when the selected model/provider supports native tool calls. For non-tool models, use `Predict`/`ChainOfThought` or switch models.
+- **Structured finish (recommended)**: DSGo auto-injects a synthetic `finish` tool (unless you provide one) whose arguments mirror your output fields. The model can end the loop by calling `finish(answer=...)`.
+- **Forced final mode**: On the last iteration DSGo requests a final JSON object matching your output signature and disallows further tool calls.
+- **Extractor fallback**: If parsing/validation fails or the loop hits limits, DSGo runs a post-loop extraction step that synthesizes a valid final JSON answer from the full tool trajectory.
+
+Structured output enforcement is enabled by default and controls the extractor’s retry behavior:
+
+```go
+dsgo.Configure(
+    dsgo.WithStructuredOutputEnabled(true),
+    dsgo.WithStructuredOutputMaxAttempts(3),
+    dsgo.WithStructuredOutputTemperature(0.0),
+)
+```
+
+#### ReAct behavioral details
+
+- **Bounded trajectories**: Tool results are truncated to `MaxToolResultBytes` (default 16KB) and encoded as JSON envelopes. The trajectory is rendered within a soft prompt budget (`MaxPromptBytes`, default 256KB), keeping only the newest steps that fit.
+- **Context overflow recovery**: If a provider returns a context-length error, ReAct drops the oldest trajectory steps and retries (up to 3 times).
+- **Strict tool schemas**: Tool parameter schemas include `additionalProperties: false`, so providers will reject tool calls with extra keys not in your schema.
+- **Termination policies**: The loop terminates early on repeated identical tool calls (3 in a row), repeated identical observations (stagnation), or consecutive tool errors (2 in a row). Termination reason is available in `Prediction.Metadata["termination_reason"]`.
 
 ### Refine - Iterative Improvement
 
@@ -326,31 +371,31 @@ fmt.Println("Answer:", result.GetString("answer"))
 
 ### ReAct - Tool-Using Agents
 
-For tasks requiring external tools:
+Same API, but constructed from the `module` package:
 
 ```go
-// Define a tool
-func searchWeb(ctx context.Context, args map[string]interface{}) (string, error) {
-    query := args["query"].(string)
-    return fmt.Sprintf("Search results for '%s': Wikipedia, Google, etc.", query), nil
-}
-
 searchTool := dsgo.NewTool(
     "search",
-    "Search the web for information",
+    "Search the web (return a short summary)",
     searchWeb,
-).AddParameter("query", dsgo.FieldTypeString, "Search query", true)
+).
+    AddParameter("query", "string", "Search query", true).
+    AddParameter("max_chars", "integer", "Max chars to return (size control)", false)
 
 sig := dsgo.NewSignature("Answer questions using tools").
     AddInput("question", dsgo.FieldTypeString, "Question to answer").
     AddOutput("answer", dsgo.FieldTypeString, "Final answer based on tool results")
 
-agent := module.NewReAct(sig, lm, []dsgo.Tool{*searchTool})
+agent := module.NewReAct(sig, lm, []dsgo.Tool{*searchTool}).WithMaxIterations(8)
 
-result, _ := agent.Forward(ctx, map[string]any{
+pred, err := agent.Forward(ctx, map[string]any{
     "question": "Who is the current president of France?",
 })
-fmt.Println(result.GetString("answer"))
+if err != nil {
+    fmt.Println("error:", err)
+    return
+}
+fmt.Println(pred.GetString("answer"))
 ```
 
 ### Refine - Iterative Improvement
@@ -439,17 +484,33 @@ func calculate(ctx context.Context, args map[string]interface{}) (string, error)
 }
 
 calcTool := dsgo.NewTool("calculate", "Perform mathematical operations", calculate).
-    AddParameter("operation", dsgo.FieldTypeString, "Operation (add/multiply/divide)", true).
-    AddParameter("a", dsgo.FieldTypeFloat, "First number", true).
-    AddParameter("b", dsgo.FieldTypeFloat, "Second number", true).
-    AddParameter("precision", dsgo.FieldTypeInt, "Decimal places", false) // Optional
+    AddParameter("operation", "string", "Operation (add/multiply/divide)", true).
+    AddParameter("a", "number", "First number", true).
+    AddParameter("b", "number", "Second number", true).
+    AddParameter("precision", "integer", "Decimal places", false) // Optional
 ```
+
+#### Tool schema best practices
+
+- Keep parameter schemas **small and explicit**: prefer a few required fields over a single “blob” argument.
+- Use constrained types:
+  - `AddEnumParameter(...)` for flags/modes
+  - `AddArrayParameter(...)` for lists
+- Put operational constraints in the schema (so the model can self-regulate): `max_results`, `max_chars`, `page`, `timeout_ms`.
+
+#### Tool result size controls
+
+Tool outputs become part of the ReAct trajectory. Treat them like *prompt tokens*:
+
+- Default to **summaries**, not raw payloads.
+- Add and enforce a `max_chars`/`max_bytes` argument and truncate server-side.
+- Prefer “preview” tools (e.g. `read_file(path, max_bytes)`) over returning full files.
 
 ### Multi-Tool Agents
 
 ```go
 weatherTool := dsgo.NewTool("get_weather", "Get current weather", getWeatherFunc).
-    AddParameter("location", dsgo.FieldTypeString, "City name", true)
+    AddParameter("location", "string", "City name", true)
 
 tools := []dsgo.Tool{*calcTool, *weatherTool}
 
