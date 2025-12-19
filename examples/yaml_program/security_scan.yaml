@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/assagman/dsgo/main/internal/yamlprogram/dsgo-program.schema.json
 name: "security-scan"
 description: "Security scanning workflow: scan multiple files in parallel, synthesize findings, produce remediation report."
 
@@ -12,14 +13,11 @@ runtime:
     pipeline: 25m
 
 tool_sources:
-  fs:
-    kind: mcp
-    type: filesystem
-    allowed_dirs: [".."]
-  shell:
-    kind: mcp
-    type: shell
-    allowed_dirs: [".."]
+  mcp:
+    filesystem:
+      allowed_dirs: [".."]
+    shell:
+      allowed_dirs: [".."]
 
 signatures:
   scan_file:
@@ -51,7 +49,7 @@ modules:
     react:
       max_iterations: 10
       tools:
-        - source: fs
+        - source: filesystem
           include: ["*"]
         - source: shell
           include: ["*"]

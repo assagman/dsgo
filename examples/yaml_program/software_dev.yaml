@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/assagman/dsgo/main/internal/yamlprogram/dsgo-program.schema.json
 name: "software-development-assistant"
 description: "End-to-end software development workflow: classify, draft, synthesize, implement with tools, review, refine."
 
@@ -20,17 +21,12 @@ runtime:
 
 # Tool sources are reusable; ReAct modules select tools from these.
 tool_sources:
-  fs:
-    kind: mcp
-    type: filesystem
-    allowed_dirs: [".."]
-  shell:
-    kind: mcp
-    type: shell
-    allowed_dirs: [".."]
-  builtin:
-    kind: builtin
-    tools: [current_datetime, calculate]
+  mcp:
+    filesystem:
+      allowed_dirs: [".."]
+    shell:
+      allowed_dirs: [".."]
+  builtin: [current_datetime, calculate]
 
 histories:
   dev: {limit: 50}
@@ -152,7 +148,7 @@ modules:
     react:
       max_iterations: 12
       tools:
-        - source: fs
+        - source: filesystem
           include: ["*"]
         - source: shell
           include: ["*"]

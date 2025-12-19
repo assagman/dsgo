@@ -195,6 +195,7 @@ func TestFieldType_Constants(t *testing.T) {
 		FieldTypeFloat,
 		FieldTypeBool,
 		FieldTypeJSON,
+		FieldTypeArray,
 		FieldTypeClass,
 		FieldTypeImage,
 		FieldTypeDatetime,
@@ -205,6 +206,90 @@ func TestFieldType_Constants(t *testing.T) {
 			t.Errorf("FieldType should not be empty: %v", ft)
 		}
 	}
+}
+
+func TestSignature_ArrayType(t *testing.T) {
+	t.Run("AddArrayInput", func(t *testing.T) {
+		sig := NewSignature("Test").
+			AddArrayInput("tags", FieldTypeString, "List of tags")
+
+		if len(sig.InputFields) != 1 {
+			t.Fatalf("Expected 1 input field, got %d", len(sig.InputFields))
+		}
+		field := sig.InputFields[0]
+		if field.Type != FieldTypeArray {
+			t.Errorf("Expected FieldTypeArray, got %v", field.Type)
+		}
+		if field.ElementType != FieldTypeString {
+			t.Errorf("Expected ElementType FieldTypeString, got %v", field.ElementType)
+		}
+		if field.Optional {
+			t.Error("Field should not be optional")
+		}
+	})
+
+	t.Run("AddOptionalArrayInput", func(t *testing.T) {
+		sig := NewSignature("Test").
+			AddOptionalArrayInput("tags", FieldTypeString, "Optional tags")
+
+		field := sig.InputFields[0]
+		if !field.Optional {
+			t.Error("Field should be optional")
+		}
+	})
+
+	t.Run("AddArrayOutput", func(t *testing.T) {
+		sig := NewSignature("Test").
+			AddArrayOutput("results", FieldTypeInt, "List of results")
+
+		if len(sig.OutputFields) != 1 {
+			t.Fatalf("Expected 1 output field, got %d", len(sig.OutputFields))
+		}
+		field := sig.OutputFields[0]
+		if field.Type != FieldTypeArray {
+			t.Errorf("Expected FieldTypeArray, got %v", field.Type)
+		}
+		if field.ElementType != FieldTypeInt {
+			t.Errorf("Expected ElementType FieldTypeInt, got %v", field.ElementType)
+		}
+	})
+
+	t.Run("AddOptionalArrayOutput", func(t *testing.T) {
+		sig := NewSignature("Test").
+			AddOptionalArrayOutput("items", FieldTypeFloat, "Optional items")
+
+		field := sig.OutputFields[0]
+		if !field.Optional {
+			t.Error("Field should be optional")
+		}
+	})
+
+	t.Run("ValidateArrayOutput", func(t *testing.T) {
+		sig := NewSignature("Test").
+			AddArrayOutput("items", FieldTypeString, "List of items")
+
+		tests := []struct {
+			name    string
+			value   any
+			wantErr bool
+		}{
+			{"valid slice", []any{"a", "b", "c"}, false},
+			{"empty slice", []any{}, false},
+			{"string slice", []string{"x", "y"}, false},
+			{"invalid non-slice", "not a slice", true},
+			{"invalid int", 123, true},
+			{"invalid map", map[string]any{"a": 1}, true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := sig.ValidateOutputs(map[string]any{"items": tt.value})
+				if (err != nil) != tt.wantErr {
+					t.Errorf("ValidateOutputs() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			})
+		}
+	})
 }
 
 func TestSignature_ValidateFieldType_NumericTypes(t *testing.T) {
@@ -1084,6 +1169,33 @@ func TestSignatureToJSONSchema(t *testing.T) {
 				_, hasRequired := schema["required"]
 				if hasRequired {
 					t.Error("expected no required field in schema when all fields are optional")
+				}
+			},
+		},
+		{
+			name: "array field with element type",
+			sig: NewSignature("Array test").
+				AddArrayOutput("tags", FieldTypeString, "List of tags").
+				AddArrayOutput("scores", FieldTypeInt, "List of scores"),
+			validate: func(t *testing.T, schema map[string]any) {
+				props := schema["properties"].(map[string]any)
+
+				tagsProp := props["tags"].(map[string]any)
+				if tagsProp["type"] != "array" {
+					t.Errorf("expected tags type array, got %v", tagsProp["type"])
+				}
+				tagsItems := tagsProp["items"].(map[string]any)
+				if tagsItems["type"] != "string" {
+					t.Errorf("expected tags items type string, got %v", tagsItems["type"])
+				}
+
+				scoresProp := props["scores"].(map[string]any)
+				if scoresProp["type"] != "array" {
+					t.Errorf("expected scores type array, got %v", scoresProp["type"])
+				}
+				scoresItems := scoresProp["items"].(map[string]any)
+				if scoresItems["type"] != "integer" {
+					t.Errorf("expected scores items type integer, got %v", scoresItems["type"])
 				}
 			},
 		},

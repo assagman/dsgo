@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../internal/yamlprogram/dsgo-program.schema.json
 name: "deep-researcher"
 description: "Deep web research: multiple agents in parallel + synthesis + structured report."
 
@@ -9,17 +10,14 @@ defaults:
 
 runtime:
   timeouts:
-    pipeline: 30m
+    pipeline: 1800
 
 tool_sources:
-  tavily:
-    kind: mcp
-    type: tavily
-    api_key_env: TAVILY_API_KEY
-  exa:
-    kind: mcp
-    type: exa
-    api_key_env: EXA_API_KEY
+  mcp:
+    tavily:
+      api_key_env: TAVILY_API_KEY
+    exa:
+      api_key_env: EXA_API_KEY
 
 signatures:
   scope_query:
@@ -40,18 +38,27 @@ signatures:
     out:
       rationale: string
       answer: string
-      sources: json
+      sources:
+        type: array
+        items: string
+        desc: "List of source URLs"
 
   research_report:
     desc: "Write a final report from the synthesized research."
     in:
       topic: string
       answer: string
-      sources: json
+      sources:
+        type: array
+        items: string
+        desc: "Source URLs from research"
     out:
       rationale: string
       report: string
-      sources: json
+      sources:
+        type: array
+        items: string
+        desc: "Final list of source URLs"
 
 modules:
   scope:

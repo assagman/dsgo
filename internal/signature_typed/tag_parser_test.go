@@ -384,8 +384,32 @@ func TestInferFieldType_AllFloatTypes(t *testing.T) {
 func TestInferFieldType_SliceType(t *testing.T) {
 	sliceType := reflect.TypeOf([]string{})
 	got := inferFieldType(sliceType, nil)
-	if got != core.FieldTypeJSON {
-		t.Errorf("inferFieldType(slice) = %v, want JSON", got)
+	if got != core.FieldTypeArray {
+		t.Errorf("inferFieldType(slice) = %v, want array", got)
+	}
+}
+
+func TestInferElementType(t *testing.T) {
+	tests := []struct {
+		name     string
+		goType   reflect.Type
+		wantType core.FieldType
+	}{
+		{"string slice", reflect.TypeOf([]string{}), core.FieldTypeString},
+		{"int slice", reflect.TypeOf([]int{}), core.FieldTypeInt},
+		{"float64 slice", reflect.TypeOf([]float64{}), core.FieldTypeFloat},
+		{"bool slice", reflect.TypeOf([]bool{}), core.FieldTypeBool},
+		{"any slice", reflect.TypeOf([]any{}), core.FieldTypeString},
+		{"non-slice", reflect.TypeOf(""), core.FieldTypeString},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := inferElementType(tt.goType)
+			if got != tt.wantType {
+				t.Errorf("inferElementType(%v) = %v, want %v", tt.goType, got, tt.wantType)
+			}
+		})
 	}
 }
 

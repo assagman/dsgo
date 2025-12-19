@@ -46,7 +46,7 @@ type Spec struct {
 	Runtime  Runtime  `yaml:"runtime,omitempty" json:"runtime,omitempty"`
 
 	// ToolSources define where tools come from (builtin registry or MCP clients).
-	ToolSources map[string]ToolSource `yaml:"tool_sources,omitempty" json:"tool_sources,omitempty"`
+	ToolSources ToolSources `yaml:"tool_sources,omitempty" json:"tool_sources,omitempty"`
 
 	// Histories defines reusable conversation histories.
 	Histories map[string]HistorySpec `yaml:"histories,omitempty" json:"histories,omitempty"`
@@ -153,25 +153,33 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// ToolSource describes a tool registry.
+// ToolSources groups tool providers by kind.
 //
-// kind:
-// - builtin: local Go tools shipped with the runner
-// - mcp: tools discovered from an MCP client
+// Example:
 //
-// For MCP, type is one of: exa, jina, tavily, filesystem, shell, custom.
-type ToolSource struct {
-	Kind string `yaml:"kind" json:"kind" jsonschema:"enum=builtin,enum=mcp"`
+//	tool_sources:
+//	  mcp:
+//	    tavily:
+//	      api_key_env: TAVILY_API_KEY
+//	    filesystem:
+//	      allowed_dirs: ["/tmp"]
+//	  builtin: [current_datetime, calculate]
+type ToolSources struct {
+	MCP     map[string]MCPToolSource `yaml:"mcp,omitempty" json:"mcp,omitempty"`
+	Builtin []string                 `yaml:"builtin,omitempty" json:"builtin,omitempty"`
+}
 
-	// MCP-only fields
-	Type        string   `yaml:"type,omitempty" json:"type,omitempty"`
-	URL         string   `yaml:"url,omitempty" json:"url,omitempty"`
-	APIKey      string   `yaml:"api_key,omitempty" json:"api_key,omitempty"`
-	APIKeyEnv   string   `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty"`
+// MCPToolSource configures an MCP tool provider.
+// The map key determines the provider type (exa, jina, tavily, filesystem, shell, custom).
+type MCPToolSource struct {
+	// APIKey is the API key for the MCP provider.
+	APIKey string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
+	// APIKeyEnv is the environment variable name containing the API key.
+	APIKeyEnv string `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty"`
+	// URL is required for custom MCP providers.
+	URL string `yaml:"url,omitempty" json:"url,omitempty"`
+	// AllowedDirs is required for filesystem and shell providers.
 	AllowedDirs []string `yaml:"allowed_dirs,omitempty" json:"allowed_dirs,omitempty"`
-
-	// Builtin-only fields
-	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty"`
 }
 
 // HistorySpec defines a reusable DSGo History instance.
@@ -201,14 +209,15 @@ type SignatureSpec struct {
 //	  desc: "Sentiment"
 //
 // Supported types:
-// - string, int, float, bool, json, image, datetime, enum
+// - string, int, float, bool, json, image, datetime, enum, array
 //
-// enum uses Values.
+// enum uses Values, array uses Items (element type).
 type FieldSpec struct {
 	Type     string   `yaml:"type" json:"type"`
 	Desc     string   `yaml:"desc,omitempty" json:"desc,omitempty"`
 	Optional bool     `yaml:"optional,omitempty" json:"optional,omitempty"`
-	Values   []string `yaml:"values,omitempty" json:"values,omitempty"`
+	Values   []string `yaml:"values,omitempty" json:"values,omitempty"` // For enum types: allowed values
+	Items    string   `yaml:"items,omitempty" json:"items,omitempty"`   // For array types: element type (string, int, float, bool, json)
 }
 
 func (f *FieldSpec) UnmarshalYAML(value *yaml.Node) error {

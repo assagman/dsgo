@@ -31,10 +31,8 @@ func Validate(s *Spec) error {
 		}
 	}
 
-	for srcName, ts := range s.ToolSources {
-		if err := validateToolSource(srcName, ts); err != nil {
-			return err
-		}
+	if err := validateToolSources(s.ToolSources); err != nil {
+		return err
 	}
 
 	for histName, hs := range s.Histories {
@@ -118,6 +116,7 @@ func validateFieldType(sigName, dir, fieldName string, f FieldSpec) error {
 		"image":    true,
 		"datetime": true,
 		"enum":     true,
+		"array":    true,
 	}
 	if !valid[f.Type] {
 		return fmt.Errorf("signature %q: %s.%s has invalid type %q", sigName, dir, fieldName, f.Type)
@@ -125,42 +124,57 @@ func validateFieldType(sigName, dir, fieldName string, f FieldSpec) error {
 	if f.Type == "enum" && len(f.Values) == 0 {
 		return fmt.Errorf("signature %q: %s.%s is enum but values is empty", sigName, dir, fieldName)
 	}
+	if f.Type == "array" && f.Items != "" {
+		validItems := map[string]bool{
+			"string": true,
+			"int":    true,
+			"float":  true,
+			"bool":   true,
+			"json":   true,
+		}
+		if !validItems[f.Items] {
+			return fmt.Errorf("signature %q: %s.%s has invalid array items type %q", sigName, dir, fieldName, f.Items)
+		}
+	}
 	return nil
 }
 
-func validateToolSource(name string, ts ToolSource) error {
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("tool_sources: key must not be empty")
-	}
-	if ts.Kind != "builtin" && ts.Kind != "mcp" {
-		return fmt.Errorf("tool_sources.%s: kind must be builtin or mcp", name)
-	}
-	if ts.Kind == "builtin" {
-		if len(ts.Tools) == 0 {
-			return fmt.Errorf("tool_sources.%s: builtin requires tools", name)
+var validMCPTypes = map[string]bool{
+	"exa":        true,
+	"jina":       true,
+	"tavily":     true,
+	"filesystem": true,
+	"shell":      true,
+	"custom":     true,
+}
+
+func validateToolSources(ts ToolSources) error {
+	for name, src := range ts.MCP {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("tool_sources.mcp: key must not be empty")
 		}
-		return nil
+		if !validMCPTypes[name] {
+			return fmt.Errorf("tool_sources.mcp.%s: invalid MCP type (valid: exa, jina, tavily, filesystem, shell, custom)", name)
+		}
+		if name == "custom" && strings.TrimSpace(src.URL) == "" {
+			return fmt.Errorf("tool_sources.mcp.custom: url is required")
+		}
+		if name == "filesystem" && len(src.AllowedDirs) == 0 {
+			return fmt.Errorf("tool_sources.mcp.filesystem: allowed_dirs is required")
+		}
 	}
 
-	// MCP
-	validTypes := map[string]bool{
-		"exa":        true,
-		"jina":       true,
-		"tavily":     true,
-		"filesystem": true,
-		"shell":      true,
-		"custom":     true,
-	}
-	if !validTypes[ts.Type] {
-		return fmt.Errorf("tool_sources.%s: invalid type %q", name, ts.Type)
-	}
-	if ts.Type == "custom" && strings.TrimSpace(ts.URL) == "" {
-		return fmt.Errorf("tool_sources.%s: custom requires url", name)
-	}
-	if ts.Type == "filesystem" && len(ts.AllowedDirs) == 0 {
-		return fmt.Errorf("tool_sources.%s: filesystem requires allowed_dirs", name)
-	}
 	return nil
+}
+
+// isValidToolSource checks if a source name is defined in ToolSources.
+// Valid sources are: "builtin" (if builtin tools are defined) or any MCP type key.
+func isValidToolSource(ts ToolSources, source string) bool {
+	if source == "builtin" {
+		return len(ts.Builtin) > 0
+	}
+	_, ok := ts.MCP[source]
+	return ok
 }
 
 func validateModule(s *Spec, name string, mod ModuleSpec) error {
@@ -215,7 +229,7 @@ func validateModule(s *Spec, name string, mod ModuleSpec) error {
 			if sel.Source == "" {
 				return fmt.Errorf("module %q (react): tool selection missing source", name)
 			}
-			if _, ok := s.ToolSources[sel.Source]; !ok {
+			if !isValidToolSource(s.ToolSources, sel.Source) {
 				return fmt.Errorf("module %q (react): unknown tool source %q", name, sel.Source)
 			}
 			if len(sel.Include) == 0 {

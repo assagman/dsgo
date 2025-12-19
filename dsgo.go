@@ -423,6 +423,7 @@ const (
 	FieldTypeBool     = core.FieldTypeBool
 	FieldTypeClass    = core.FieldTypeClass
 	FieldTypeJSON     = core.FieldTypeJSON
+	FieldTypeArray    = core.FieldTypeArray
 	FieldTypeImage    = core.FieldTypeImage
 	FieldTypeDatetime = core.FieldTypeDatetime
 

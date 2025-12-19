@@ -1,0 +1,621 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/assagman/dsgo/internal/yamlprogram/spec",
+  "$ref": "#/$defs/Spec",
+  "$defs": {
+    "AdapterSpec": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "fallback",
+            "chat",
+            "json",
+            "two_step"
+          ]
+        },
+        "reasoning": {
+          "type": "boolean"
+        },
+        "extraction_model": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "BestOfNSpec": {
+      "properties": {
+        "of": {
+          "type": "string"
+        },
+        "n": {
+          "type": "integer"
+        },
+        "parallel": {
+          "type": "boolean"
+        },
+        "return_all": {
+          "type": "boolean"
+        },
+        "max_failures": {
+          "type": "integer"
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "scorer": {
+          "$ref": "#/$defs/ScorerSpec"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "of",
+        "n",
+        "scorer"
+      ]
+    },
+    "CacheSpec": {
+      "properties": {
+        "capacity": {
+          "type": "integer"
+        },
+        "ttl": {
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "DSGoRuntime": {
+      "properties": {
+        "default_timeout_seconds": {
+          "type": "integer"
+        },
+        "max_retries": {
+          "type": "integer"
+        },
+        "tracing": {
+          "type": "boolean"
+        },
+        "skip_model_validation": {
+          "type": "boolean"
+        },
+        "structured_output": {
+          "$ref": "#/$defs/StructuredOutputSpec"
+        },
+        "cache": {
+          "$ref": "#/$defs/CacheSpec"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Defaults": {
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "gen": {
+          "$ref": "#/$defs/GenerateOptionsSpec"
+        },
+        "adapter": {
+          "$ref": "#/$defs/AdapterSpec"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Duration": {
+      "type": "integer",
+      "description": "Duration in seconds"
+    },
+    "ExampleSpec": {
+      "properties": {
+        "inputs": {
+          "type": "object"
+        },
+        "outputs": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "inputs",
+        "outputs"
+      ]
+    },
+    "FieldSpec": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Shorthand: field type (string, int, float, bool, json, image, datetime, enum)"
+        },
+        {
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "desc": {
+              "type": "string"
+            },
+            "optional": {
+              "type": "boolean"
+            },
+            "values": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "items": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "GenerateOptionsSpec": {
+      "properties": {
+        "temperature": {
+          "type": "number"
+        },
+        "max_tokens": {
+          "type": "integer"
+        },
+        "top_p": {
+          "type": "number"
+        },
+        "stop": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "response_format": {
+          "type": "string",
+          "enum": [
+            "text",
+            "json"
+          ]
+        },
+        "response_schema": {
+          "type": "object"
+        },
+        "tool_choice": {
+          "type": "string"
+        },
+        "frequency_penalty": {
+          "type": "number"
+        },
+        "presence_penalty": {
+          "type": "number"
+        },
+        "provider_params": {
+          "type": "object"
+        },
+        "retry": {
+          "$ref": "#/$defs/RetrySpec"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "HistorySpec": {
+      "properties": {
+        "limit": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "MCPToolSource": {
+      "properties": {
+        "api_key": {
+          "type": "string"
+        },
+        "api_key_env": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "allowed_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ModuleSpec": {
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "sig": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "gen": {
+          "$ref": "#/$defs/GenerateOptionsSpec"
+        },
+        "adapter": {
+          "$ref": "#/$defs/AdapterSpec"
+        },
+        "verbose": {
+          "type": "boolean"
+        },
+        "history": {
+          "type": "string"
+        },
+        "demos": {
+          "items": {
+            "$ref": "#/$defs/ExampleSpec"
+          },
+          "type": "array"
+        },
+        "react": {
+          "$ref": "#/$defs/ReactSpec"
+        },
+        "refine": {
+          "$ref": "#/$defs/RefineSpec"
+        },
+        "best_of_n": {
+          "$ref": "#/$defs/BestOfNSpec"
+        },
+        "program_of_thought": {
+          "$ref": "#/$defs/ProgramOfThoughtSpec"
+        },
+        "program": {
+          "$ref": "#/$defs/ProgramSpec"
+        },
+        "parallel": {
+          "$ref": "#/$defs/ParallelSpec"
+        },
+        "multi_chain_comparison": {
+          "$ref": "#/$defs/MultiChainComparisonSpec"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "kind"
+      ]
+    },
+    "MultiChainComparisonSpec": {
+      "properties": {
+        "attempts": {
+          "type": "integer"
+        },
+        "attempt_template": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "attempts"
+      ]
+    },
+    "ParallelSpec": {
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "clone",
+            "instances",
+            "factory"
+          ]
+        },
+        "module": {
+          "type": "string"
+        },
+        "instances": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "factory": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_workers": {
+          "type": "integer"
+        },
+        "max_failures": {
+          "type": "integer"
+        },
+        "fail_fast": {
+          "type": "boolean"
+        },
+        "return_all": {
+          "type": "boolean"
+        },
+        "only_successful": {
+          "type": "boolean"
+        },
+        "batch_key": {
+          "type": "string"
+        },
+        "repeat": {
+          "type": "integer"
+        },
+        "verbose": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ProgramOfThoughtSpec": {
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "allow_execution": {
+          "type": "boolean"
+        },
+        "execution_timeout_seconds": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "language"
+      ]
+    },
+    "ProgramSpec": {
+      "properties": {
+        "steps": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "steps"
+      ]
+    },
+    "ReactSpec": {
+      "properties": {
+        "max_iterations": {
+          "type": "integer"
+        },
+        "tools": {
+          "items": {
+            "$ref": "#/$defs/ToolSelection"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "RefineSpec": {
+      "properties": {
+        "max_iterations": {
+          "type": "integer"
+        },
+        "refinement_field": {
+          "type": "string"
+        },
+        "track_history": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "RetrySpec": {
+      "properties": {
+        "max_retries": {
+          "type": "integer"
+        },
+        "initial_backoff": {
+          "$ref": "#/$defs/Duration"
+        },
+        "max_backoff": {
+          "$ref": "#/$defs/Duration"
+        },
+        "jitter_factor": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Runtime": {
+      "properties": {
+        "dsgo": {
+          "$ref": "#/$defs/DSGoRuntime"
+        },
+        "timeouts": {
+          "$ref": "#/$defs/TimeoutSettings"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ScorerSpec": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "default",
+            "confidence"
+          ]
+        },
+        "field": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "kind"
+      ]
+    },
+    "SignatureSpec": {
+      "properties": {
+        "desc": {
+          "type": "string"
+        },
+        "in": {
+          "additionalProperties": {
+            "$ref": "#/$defs/FieldSpec"
+          },
+          "type": "object"
+        },
+        "out": {
+          "additionalProperties": {
+            "$ref": "#/$defs/FieldSpec"
+          },
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "desc",
+        "in",
+        "out"
+      ]
+    },
+    "Spec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "defaults": {
+          "$ref": "#/$defs/Defaults"
+        },
+        "runtime": {
+          "$ref": "#/$defs/Runtime"
+        },
+        "tool_sources": {
+          "$ref": "#/$defs/ToolSources"
+        },
+        "histories": {
+          "additionalProperties": {
+            "$ref": "#/$defs/HistorySpec"
+          },
+          "type": "object"
+        },
+        "signatures": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SignatureSpec"
+          },
+          "type": "object"
+        },
+        "modules": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ModuleSpec"
+          },
+          "type": "object"
+        },
+        "pipeline": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "inputs": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "signatures",
+        "modules",
+        "pipeline"
+      ]
+    },
+    "StructuredOutputSpec": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "max_attempts": {
+          "type": "integer"
+        },
+        "temperature": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "TimeoutSettings": {
+      "properties": {
+        "pipeline": {
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ToolSelection": {
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "include": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "source",
+        "include"
+      ]
+    },
+    "ToolSources": {
+      "properties": {
+        "mcp": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MCPToolSource"
+          },
+          "type": "object"
+        },
+        "builtin": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    }
+  },
+  "title": "DSGo YAML Program Spec"
+}

@@ -1,5 +1,7 @@
 package yamlprogram
 
+//go:generate go run gen_schema.go
+
 import (
 	"encoding/json"
 
@@ -20,6 +22,38 @@ func SchemaJSON() ([]byte, error) {
 	}
 	if s.Title == "" {
 		s.Title = "DSGo YAML Program Spec"
+	}
+
+	// Fix Duration: accepts string ("30m", "5s") or integer (seconds).
+	// The reflector doesn't understand custom UnmarshalYAML.
+	if defs := s.Definitions; defs != nil {
+		if dur, ok := defs["Duration"]; ok {
+			dur.Type = "integer"
+			dur.Description = "Duration in seconds"
+			dur.Properties = nil
+			dur.AdditionalProperties = nil
+			dur.Required = nil
+		}
+
+		// Fix FieldSpec: accepts string shorthand ("string") or object with type/desc/values.
+		if fs, ok := defs["FieldSpec"]; ok {
+			// Save the original object schema.
+			objSchema := &jsonschema.Schema{
+				Type:                 "object",
+				Properties:           fs.Properties,
+				AdditionalProperties: fs.AdditionalProperties,
+				Required:             fs.Required,
+			}
+			// Clear and set oneOf.
+			fs.Type = ""
+			fs.Properties = nil
+			fs.AdditionalProperties = nil
+			fs.Required = nil
+			fs.OneOf = []*jsonschema.Schema{
+				{Type: "string", Description: "Shorthand: field type (string, int, float, bool, json, image, datetime, enum)"},
+				objSchema,
+			}
+		}
 	}
 
 	return json.MarshalIndent(s, "", "  ")
