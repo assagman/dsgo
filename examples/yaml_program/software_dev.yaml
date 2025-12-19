@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/assagman/dsgo/main/internal/yamlprogram/dsgo-program.schema.json
 name: "software-development-assistant"
-description: "End-to-end software development workflow: classify, draft, synthesize, implement with tools, review, refine."
+description: "End-to-end software development workflow: design, implement, test, review a Go+HTMX hello world web app."
 
 defaults:
   model: openrouter/z-ai/glm-4.6
@@ -12,7 +12,7 @@ defaults:
 
 runtime:
   timeouts:
-    pipeline: 45m
+    pipeline: 30m
   dsgo:
     structured_output:
       enabled: true
@@ -20,174 +20,137 @@ runtime:
       temperature: 0
 
 # Tool sources are reusable; ReAct modules select tools from these.
+# Use current dir for tools; the implementer will create swe_dev_output/ as needed.
 tool_sources:
   mcp:
     filesystem:
-      allowed_dirs: [".."]
+      allowed_dirs: ["."]
     shell:
-      allowed_dirs: [".."]
-  builtin: [current_datetime, calculate]
+      allowed_dirs: ["."]
+  builtin: [current_datetime]
 
 histories:
   dev: {limit: 50}
 
 signatures:
-  classify_task:
-    desc: "Classify the user's request into a development task type."
+  design_app:
+    desc: "Design the Go+HTMX web app structure and components."
     in:
       request: string
+      output_dir: string
     out:
       rationale: string
-      task_type:
-        type: enum
-        values: [feature, refactor, bugfix, review]
+      architecture: string
+      files:
+        type: array
+        items: string
+        desc: "List of files to create"
 
-  draft_solution:
-    desc: "Propose a solution and a patch outline."
+  implement_app:
+    desc: "Create the output directory if needed, then create the Go+HTMX web app files."
     in:
       request: string
-      context: string
-    out:
-      rationale: string
-      answer: string
-      patch:
-        type: json
-        desc: "High-level patch plan (files, changes, tests)"
-
-  pot_patch:
-    desc: "Generate a code-oriented patch plan (no tools)."
-    in:
-      request: string
-      answer: string
-    out:
-      code: string
-      explanation: string
-
-  apply_changes:
-    desc: "Implement the change using tools (edit files, run tests)."
-    in:
-      request: string
-      answer: string
-      patch: json
+      output_dir: string
+      architecture: string
+      files:
+        type: array
+        items: string
+        desc: "Files to create"
     out:
       rationale: string
       result: string
+      created_files:
+        type: array
+        items: string
+        desc: "Files that were created"
 
-  review_change:
-    desc: "Review the change and provide a confidence score."
+  test_app:
+    desc: "Verify the app compiles and structure is correct."
+    in:
+      output_dir: string
+      created_files:
+        type: array
+        items: string
+        desc: "Files to verify"
+    out:
+      rationale: string
+      test_result: string
+      issues:
+        type: array
+        items: string
+        desc: "Any issues found"
+
+  review_app:
+    desc: "Review the implementation and provide quality assessment."
     in:
       request: string
-      result: string
+      output_dir: string
+      test_result: string
     out:
       rationale: string
       summary: string
       confidence: float
 
   final_report:
-    desc: "Produce a final report; optionally refine using feedback."
+    desc: "Produce a final report with usage instructions."
     in:
       request: string
+      output_dir: string
       summary: string
-      feedback:
-        type: string
-        optional: true
     out:
       rationale: string
       report: string
+      run_command: string
 
 modules:
-  classifier:
-    kind: predict
-    sig: classify_task
-    adapter: {kind: json}
-
-  # Three drafts with different temperatures.
-  draft_cold:
+  designer:
     kind: chain_of_thought
-    sig: draft_solution
-    gen: {temperature: 0}
+    sig: design_app
+    gen: {temperature: 0.3}
 
-  draft_default:
-    kind: chain_of_thought
-    sig: draft_solution
-    gen: {temperature: 0.6}
-
-  draft_hot:
-    kind: chain_of_thought
-    sig: draft_solution
-    gen: {temperature: 1.0}
-
-  drafts:
-    kind: parallel
-    parallel:
-      mode: instances
-      instances: [draft_cold, draft_default, draft_hot]
-      max_workers: 3
-      return_all: true
-      only_successful: true
-      verbose: false
-
-  synth:
-    kind: multi_chain_comparison
-    sig: draft_solution
-    multi_chain_comparison:
-      attempts: 3
-      attempt_template: "Rationale: {rationale}\nProposal: {answer}"
-
-  pot:
-    kind: program_of_thought
-    sig: pot_patch
-    program_of_thought:
-      language: python
-      allow_execution: false
-
-  implement:
+  implementer:
     kind: react
-    sig: apply_changes
+    sig: implement_app
     verbose: true
     react:
-      max_iterations: 12
+      max_iterations: 15
       tools:
         - source: filesystem
           include: ["*"]
         - source: shell
           include: ["*"]
         - source: builtin
-          include: [calculate, current_datetime]
+          include: [current_datetime]
 
-  reviewer_base:
-    kind: chain_of_thought
-    sig: review_change
-    gen: {temperature: 0.4}
+  tester:
+    kind: react
+    sig: test_app
+    verbose: true
+    react:
+      max_iterations: 8
+      tools:
+        - source: filesystem
+          include: ["*"]
+        - source: shell
+          include: ["*"]
 
   reviewer:
-    kind: best_of_n
-    best_of_n:
-      of: reviewer_base
-      n: 3
-      parallel: true
-      return_all: true
-      scorer:
-        kind: confidence
-        field: confidence
+    kind: chain_of_thought
+    sig: review_app
+    gen: {temperature: 0.4}
 
   finalize:
-    kind: refine
+    kind: chain_of_thought
     sig: final_report
     history: dev
-    refine:
-      max_iterations: 2
-      refinement_field: feedback
-      track_history: true
 
   dev_flow:
     kind: program
     program:
-      steps: [classifier, drafts, synth, pot, implement, reviewer, finalize]
+      steps: [designer, implementer, tester, reviewer, finalize]
 
 pipeline: [dev_flow]
 
 inputs:
-  request: "Refactor examples/yaml_program to use the new internal YAML program loader."
-  context: "Repository: github.com/assagman/dsgo. Goal: internal-only YAML program support + schema reference."
-  feedback: "Keep the schema minimal, but cover all advanced options."
+  request: "Create a simple Go+HTMX hello world web application. The app should serve an HTML page that displays 'Hello, World!' with HTMX-powered interactivity - a button that when clicked fetches a greeting from the server without page reload."
+  output_dir: "./swe_dev_output"

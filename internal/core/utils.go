@@ -21,7 +21,7 @@ package core
 // of each string in the input, preserving the original order.
 func DedupeStringsPreserveOrder(in []string) []string {
 	if len(in) == 0 {
-		return nil
+		return []string{} // Return empty slice instead of nil for safe JSON serialization
 	}
 
 	seen := make(map[string]struct{}, len(in))

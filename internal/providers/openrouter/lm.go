@@ -427,7 +427,7 @@ func sanitizeToolsForOpenRouter(tools []core.Tool) []core.Tool {
 
 func (o *openRouter) convertTool(tool *core.Tool) openai.ChatCompletionToolUnionParam {
 	properties := make(map[string]any)
-	required := []string{}
+	required := make([]string, 0) // Ensure non-nil slice
 
 	for _, param := range tool.Parameters {
 		jsonType := mapParamTypeToJSONType(param.Type)

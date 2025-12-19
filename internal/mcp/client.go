@@ -168,6 +168,18 @@ func (c *Client) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to unmarshal tools list: %w", err)
 	}
 
+	// Normalize schemas: ensure Required is never nil (some MCP servers return null).
+	// When unspecified, assume all parameters are required.
+	for i := range result.Tools {
+		if result.Tools[i].InputSchema.Required == nil {
+			var allParams []string
+			for paramName := range result.Tools[i].InputSchema.Properties {
+				allParams = append(allParams, paramName)
+			}
+			result.Tools[i].InputSchema.Required = allParams
+		}
+	}
+
 	c.schemas = result.Tools
 	c.tools = ConvertMCPToolsToDSGo(result.Tools, c)
 
