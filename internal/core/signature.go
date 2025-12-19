@@ -15,6 +15,7 @@ const (
 	FieldTypeFloat    FieldType = "float"
 	FieldTypeBool     FieldType = "bool"
 	FieldTypeJSON     FieldType = "json"
+	FieldTypeArray    FieldType = "array"
 	FieldTypeClass    FieldType = "class"
 	FieldTypeImage    FieldType = "image"
 	FieldTypeDatetime FieldType = "datetime"
@@ -28,6 +29,7 @@ type Field struct {
 	Optional     bool
 	Classes      []string          // For class/enum types
 	ClassAliases map[string]string // Synonym mapping for class values (e.g., "pos" -> "positive")
+	ElementType  FieldType         // For array types: the type of array elements
 }
 
 // Signature defines the structure of inputs and outputs for an LM call
@@ -98,6 +100,54 @@ func (s *Signature) AddClassOutput(name string, classes []string, description st
 		Description: description,
 		Optional:    false,
 		Classes:     classes,
+	})
+	return s
+}
+
+// AddArrayInput adds an array input field with element type
+func (s *Signature) AddArrayInput(name string, elementType FieldType, description string) *Signature {
+	s.InputFields = append(s.InputFields, Field{
+		Name:        name,
+		Type:        FieldTypeArray,
+		Description: description,
+		Optional:    false,
+		ElementType: elementType,
+	})
+	return s
+}
+
+// AddOptionalArrayInput adds an optional array input field with element type
+func (s *Signature) AddOptionalArrayInput(name string, elementType FieldType, description string) *Signature {
+	s.InputFields = append(s.InputFields, Field{
+		Name:        name,
+		Type:        FieldTypeArray,
+		Description: description,
+		Optional:    true,
+		ElementType: elementType,
+	})
+	return s
+}
+
+// AddArrayOutput adds an array output field with element type
+func (s *Signature) AddArrayOutput(name string, elementType FieldType, description string) *Signature {
+	s.OutputFields = append(s.OutputFields, Field{
+		Name:        name,
+		Type:        FieldTypeArray,
+		Description: description,
+		Optional:    false,
+		ElementType: elementType,
+	})
+	return s
+}
+
+// AddOptionalArrayOutput adds an optional array output field with element type
+func (s *Signature) AddOptionalArrayOutput(name string, elementType FieldType, description string) *Signature {
+	s.OutputFields = append(s.OutputFields, Field{
+		Name:        name,
+		Type:        FieldTypeArray,
+		Description: description,
+		Optional:    true,
+		ElementType: elementType,
 	})
 	return s
 }
@@ -304,6 +354,12 @@ func (s *Signature) validateFieldType(field Field, value any) error {
 		default:
 			return fmt.Errorf("field %s expected JSON (map/slice/string), got %T", field.Name, value)
 		}
+
+	case FieldTypeArray:
+		// Accept slice types
+		if kind != reflect.Slice {
+			return fmt.Errorf("field %s expected array/slice, got %T", field.Name, value)
+		}
 	}
 	return nil
 }
@@ -402,6 +458,9 @@ func (s *Signature) SignatureToJSONSchema() map[string]any {
 			prop["type"] = "boolean"
 		case FieldTypeJSON:
 			prop["type"] = "object"
+		case FieldTypeArray:
+			prop["type"] = "array"
+			prop["items"] = fieldTypeToJSONSchemaType(field.ElementType)
 		case FieldTypeClass:
 			prop["type"] = "string"
 			if len(field.Classes) > 0 {
@@ -424,6 +483,8 @@ func (s *Signature) SignatureToJSONSchema() map[string]any {
 		}
 	}
 
+	required = DedupeStringsPreserveOrder(required)
+
 	schema := map[string]any{
 		"type":                 "object",
 		"properties":           properties,
@@ -440,6 +501,24 @@ func (s *Signature) SignatureToJSONSchema() map[string]any {
 	}
 
 	return schema
+}
+
+// fieldTypeToJSONSchemaType converts a FieldType to its JSON schema type representation
+func fieldTypeToJSONSchemaType(ft FieldType) map[string]any {
+	switch ft {
+	case FieldTypeString, FieldTypeImage, FieldTypeDatetime, FieldTypeClass:
+		return map[string]any{"type": "string"}
+	case FieldTypeInt:
+		return map[string]any{"type": "integer"}
+	case FieldTypeFloat:
+		return map[string]any{"type": "number"}
+	case FieldTypeBool:
+		return map[string]any{"type": "boolean"}
+	case FieldTypeJSON:
+		return map[string]any{"type": "object"}
+	default:
+		return map[string]any{"type": "string"}
+	}
 }
 
 // SignatureToOpenAIJSONSchema generates an OpenAI-compliant JSON schema
@@ -478,6 +557,9 @@ func (s *Signature) SignatureToOpenAIJSONSchema() map[string]any {
 				},
 			}
 			prop["required"] = []string{"value"}
+		case FieldTypeArray:
+			prop["type"] = "array"
+			prop["items"] = fieldTypeToJSONSchemaType(field.ElementType)
 		case FieldTypeClass:
 			prop["type"] = "string"
 			if len(field.Classes) > 0 {
@@ -498,6 +580,8 @@ func (s *Signature) SignatureToOpenAIJSONSchema() map[string]any {
 		// even if they're logically optional in DSGo
 		required = append(required, field.Name)
 	}
+
+	required = DedupeStringsPreserveOrder(required)
 
 	schema := map[string]any{
 		"type":                 "object",

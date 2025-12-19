@@ -83,8 +83,8 @@ func TestNewMultiChainComparison(t *testing.T) {
 	mcc := NewMultiChainComparison(sig, lm, 3)
 
 	// Test configuration
-	if mcc.M != 3 {
-		t.Errorf("Expected M=3, got %d", mcc.M)
+	if mcc.Attempts != 3 {
+		t.Errorf("Expected Attempts=3, got %d", mcc.Attempts)
 	}
 
 	if mcc.BaseSignature != sig {
@@ -200,6 +200,51 @@ func TestMultiChainComparison_WithAttemptTemplate(t *testing.T) {
 
 	if mcc.AttemptTemplate != template {
 		t.Error("AttemptTemplate not set correctly")
+	}
+}
+
+func TestMultiChainComparison_FormatAttempt_AdditionalFields(t *testing.T) {
+	sig := core.NewSignature("Test").
+		AddInput("input", core.FieldTypeString, "Input").
+		AddOutput("answer", core.FieldTypeString, "Answer").
+		AddOutput("sources", core.FieldTypeJSON, "Sources")
+
+	lm := &mockLM{responses: []string{`{"answer": "test", "sources": []}`}}
+	mcc := NewMultiChainComparison(sig, lm, 1).
+		WithAttemptTemplate("Answer={answer}\nSources={sources}")
+
+	attempt := mcc.formatAttempt(map[string]any{
+		"rationale": "r1",
+		"answer":    "a1",
+		"sources": []any{
+			map[string]any{"url": "https://example.com", "title": "Example"},
+		},
+	})
+
+	if !strings.Contains(attempt, "Sources=") {
+		t.Fatalf("expected sources placeholder replaced, got: %q", attempt)
+	}
+	if !strings.Contains(attempt, "https://example.com") {
+		t.Fatalf("expected sources JSON in attempt, got: %q", attempt)
+	}
+}
+
+func TestBuildMCCSignature_DoesNotDuplicateRationale(t *testing.T) {
+	base := core.NewSignature("Test").
+		AddInput("q", core.FieldTypeString, "Q").
+		AddOutput("rationale", core.FieldTypeString, "why").
+		AddOutput("answer", core.FieldTypeString, "ans")
+
+	sig, _ := buildMCCSignature(base, 2)
+
+	rationaleCount := 0
+	for _, f := range sig.OutputFields {
+		if f.Name == "rationale" {
+			rationaleCount++
+		}
+	}
+	if rationaleCount != 1 {
+		t.Fatalf("expected 1 rationale field, got %d", rationaleCount)
 	}
 }
 
@@ -451,8 +496,8 @@ func TestMultiChainComparison_Clone(t *testing.T) {
 	cloned := mcc.Clone().(*MultiChainComparison)
 
 	// Test that cloned module has same configuration
-	if cloned.M != mcc.M {
-		t.Error("Cloned module has different M value")
+	if cloned.Attempts != mcc.Attempts {
+		t.Error("Cloned module has different Attempts value")
 	}
 
 	if cloned.Options.Temperature != mcc.Options.Temperature {

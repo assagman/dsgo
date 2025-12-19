@@ -2,6 +2,7 @@ package module
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"github.com/assagman/dsgo/internal/logging"
 )
 
-// MultiChainComparison synthesizes the best answer from M reasoning attempts.
+// MultiChainComparison synthesizes the best answer from multiple reasoning attempts.
 // It follows DSPy's design: accepts pre-generated completions and performs synthesis.
 // The signature is transformed to include reasoning attempts as INPUT fields.
 type MultiChainComparison struct {
@@ -18,7 +19,7 @@ type MultiChainComparison struct {
 	internalSignature *core.Signature // Internal signature with reasoning_attempt INPUT fields
 	predict           *Predict        // Underlying Predict module for synthesis
 	LM                core.LM         // Language model for synthesis
-	M                 int             // Number of reasoning attempts
+	Attempts          int             // Number of reasoning attempts
 	lastKey           string          // Name of the last output field
 	AttemptTemplate   string          // Template for formatting attempts
 	Options           *core.GenerateOptions
@@ -28,21 +29,21 @@ type MultiChainComparison struct {
 }
 
 // NewMultiChainComparison creates a new MultiChainComparison module.
-// It accepts a base signature, language model, and number of reasoning attempts M.
-func NewMultiChainComparison(baseSignature *core.Signature, lm core.LM, m int) *MultiChainComparison {
+// It accepts a base signature, language model, and number of reasoning attempts.
+func NewMultiChainComparison(baseSignature *core.Signature, lm core.LM, attempts int) *MultiChainComparison {
 	// Constructor validation
 	if baseSignature == nil {
 		panic("baseSignature cannot be nil")
 	}
-	if m <= 0 {
-		panic("m must be positive")
+	if attempts <= 0 {
+		panic("attempts must be positive")
 	}
 	if len(baseSignature.OutputFields) == 0 {
 		panic("signature must have at least one output field")
 	}
 
-	// Build internal signature with M INPUT fields for reasoning attempts
-	internalSig, lastKey := buildMCCSignature(baseSignature, m)
+	// Build internal signature with Attempts INPUT fields for reasoning attempts
+	internalSig, lastKey := buildMCCSignature(baseSignature, attempts)
 
 	// Create underlying Predict module
 	predict := NewPredict(internalSig, lm)
@@ -52,7 +53,7 @@ func NewMultiChainComparison(baseSignature *core.Signature, lm core.LM, m int) *
 		internalSignature: internalSig,
 		predict:           predict,
 		LM:                lm,
-		M:                 m,
+		Attempts:          attempts,
 		lastKey:           lastKey,
 		AttemptTemplate:   "I'm trying to {rationale} I'm not sure but my prediction is {answer}",
 		Options:           core.DefaultGenerateOptions(),
@@ -125,8 +126,8 @@ func (mcc *MultiChainComparison) Forward(ctx context.Context, inputs map[string]
 		predErr = fmt.Errorf("failed to extract completions: %w", err)
 		return nil, predErr
 	}
-	if len(completions) != mcc.M {
-		predErr = fmt.Errorf("expected %d completions, got %d", mcc.M, len(completions))
+	if len(completions) != mcc.Attempts {
+		predErr = fmt.Errorf("expected %d completions, got %d", mcc.Attempts, len(completions))
 		return nil, predErr
 	}
 
@@ -218,7 +219,9 @@ func (mcc *MultiChainComparison) extractCompletions(inputs map[string]any) ([]ma
 }
 
 // formatAttempt formats a completion using the attempt template.
-// It extracts rationale and answer from the completion using DSPy-style aliases.
+//
+// By default it extracts rationale/answer (DSPy-style aliases) and supports
+// placeholders like {rationale}, {answer}, and any completion key (e.g. {sources}).
 func (mcc *MultiChainComparison) formatAttempt(completion map[string]any) string {
 	// Extract rationale using DSPy aliases
 	var rationale string
@@ -231,7 +234,7 @@ func (mcc *MultiChainComparison) formatAttempt(completion map[string]any) string
 		}
 	}
 
-	// Extract answer (use first non-rationale field)
+	// Extract answer (use first non-rationale string field)
 	var answer string
 	for key, value := range completion {
 		if key == "rationale" || key == "reasoning" || key == "thought" || key == "explanation" {
@@ -248,6 +251,19 @@ func (mcc *MultiChainComparison) formatAttempt(completion map[string]any) string
 	template = strings.ReplaceAll(template, "{rationale}", rationale)
 	template = strings.ReplaceAll(template, "{answer}", answer)
 
+	// Support referencing additional completion fields in the template.
+	// For non-strings we JSON-encode the value (e.g. sources).
+	for key, value := range completion {
+		if key == "rationale" || key == "answer" {
+			continue
+		}
+		ph := "{" + key + "}"
+		if !strings.Contains(template, ph) {
+			continue
+		}
+		template = strings.ReplaceAll(template, ph, formatTemplateValue(value))
+	}
+
 	return template
 }
 
@@ -258,6 +274,20 @@ func firstLine(s string) string {
 		return strings.TrimSpace(lines[0])
 	}
 	return ""
+}
+
+func formatTemplateValue(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	b, err := json.Marshal(v)
+	if err == nil {
+		return string(b)
+	}
+	return fmt.Sprintf("%v", v)
 }
 
 // buildMCCSignature builds the internal signature for MultiChainComparison.
@@ -278,8 +308,18 @@ func buildMCCSignature(baseSig *core.Signature, m int) (*core.Signature, string)
 		sig.AddInput(fieldName, core.FieldTypeString, description)
 	}
 
-	// PREPEND rationale as first output field (DSPy design)
-	sig.AddOutput("rationale", core.FieldTypeString, "Rationale for the synthesized answer")
+	// PREPEND rationale as first output field (DSPy design), unless the base signature
+	// already defines it.
+	hasRationale := false
+	for _, f := range baseSig.OutputFields {
+		if f.Name == "rationale" {
+			hasRationale = true
+			break
+		}
+	}
+	if !hasRationale {
+		sig.AddOutput("rationale", core.FieldTypeString, "Rationale for the synthesized answer")
+	}
 
 	// Copy original output fields
 	var lastKey string
@@ -303,7 +343,7 @@ func (mcc *MultiChainComparison) Clone() core.Module {
 		internalSignature: mcc.internalSignature,
 		predict:           mcc.predict.Clone().(*Predict),
 		LM:                mcc.LM,
-		M:                 mcc.M,
+		Attempts:          mcc.Attempts,
 		lastKey:           mcc.lastKey,
 		AttemptTemplate:   mcc.AttemptTemplate,
 		Options:           mcc.Options.Copy(),

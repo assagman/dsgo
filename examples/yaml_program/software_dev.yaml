@@ -1,0 +1,156 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/assagman/dsgo/main/internal/yamlprogram/dsgo-program.schema.json
+name: "software-development-assistant"
+description: "End-to-end software development workflow: design, implement, test, review a Go+HTMX hello world web app."
+
+defaults:
+  model: openrouter/z-ai/glm-4.6
+  gen:
+    temperature: 0.6
+    max_tokens: 4096
+  adapter:
+    kind: fallback
+
+runtime:
+  timeouts:
+    pipeline: 30m
+  dsgo:
+    structured_output:
+      enabled: true
+      max_attempts: 3
+      temperature: 0
+
+# Tool sources are reusable; ReAct modules select tools from these.
+# Use current dir for tools; the implementer will create swe_dev_output/ as needed.
+tool_sources:
+  mcp:
+    filesystem:
+      allowed_dirs: ["."]
+    shell:
+      allowed_dirs: ["."]
+  builtin: [current_datetime]
+
+histories:
+  dev: {limit: 50}
+
+signatures:
+  design_app:
+    desc: "Design the Go+HTMX web app structure and components."
+    in:
+      request: string
+      output_dir: string
+    out:
+      rationale: string
+      architecture: string
+      files:
+        type: array
+        items: string
+        desc: "List of files to create"
+
+  implement_app:
+    desc: "Create the output directory if needed, then create the Go+HTMX web app files."
+    in:
+      request: string
+      output_dir: string
+      architecture: string
+      files:
+        type: array
+        items: string
+        desc: "Files to create"
+    out:
+      rationale: string
+      result: string
+      created_files:
+        type: array
+        items: string
+        desc: "Files that were created"
+
+  test_app:
+    desc: "Verify the app compiles and structure is correct."
+    in:
+      output_dir: string
+      created_files:
+        type: array
+        items: string
+        desc: "Files to verify"
+    out:
+      rationale: string
+      test_result: string
+      issues:
+        type: array
+        items: string
+        desc: "Any issues found"
+
+  review_app:
+    desc: "Review the implementation and provide quality assessment."
+    in:
+      request: string
+      output_dir: string
+      test_result: string
+    out:
+      rationale: string
+      summary: string
+      confidence: float
+
+  final_report:
+    desc: "Produce a final report with usage instructions."
+    in:
+      request: string
+      output_dir: string
+      summary: string
+    out:
+      rationale: string
+      report: string
+      run_command: string
+
+modules:
+  designer:
+    kind: chain_of_thought
+    sig: design_app
+    gen: {temperature: 0.3}
+
+  implementer:
+    kind: react
+    sig: implement_app
+    verbose: true
+    react:
+      max_iterations: 15
+      tools:
+        - source: filesystem
+          include: ["*"]
+        - source: shell
+          include: ["*"]
+        - source: builtin
+          include: [current_datetime]
+
+  tester:
+    kind: react
+    sig: test_app
+    verbose: true
+    react:
+      max_iterations: 8
+      tools:
+        - source: filesystem
+          include: ["*"]
+        - source: shell
+          include: ["*"]
+
+  reviewer:
+    kind: chain_of_thought
+    sig: review_app
+    gen: {temperature: 0.4}
+
+  finalize:
+    kind: chain_of_thought
+    sig: final_report
+    history: dev
+
+  dev_flow:
+    kind: program
+    program:
+      steps: [designer, implementer, tester, reviewer, finalize]
+
+pipeline: [dev_flow]
+
+inputs:
+  request: "Create a simple Go+HTMX hello world web application. The app should serve an HTML page that displays 'Hello, World!' with HTMX-powered interactivity - a button that when clicked fetches a greeting from the server without page reload."
+  output_dir: "./swe_dev_output"

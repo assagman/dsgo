@@ -5,6 +5,8 @@
 package dsgo
 
 import (
+	"context"
+
 	"github.com/assagman/dsgo/internal/core"
 	"github.com/assagman/dsgo/internal/cost"
 	"github.com/assagman/dsgo/internal/env"
@@ -13,6 +15,7 @@ import (
 	"github.com/assagman/dsgo/internal/modelcatalog"
 	"github.com/assagman/dsgo/internal/module"
 	signature_typed "github.com/assagman/dsgo/internal/signature_typed"
+	"github.com/assagman/dsgo/internal/yamlprogram"
 
 	// Import all standard providers to trigger their init() registration
 	_ "github.com/assagman/dsgo/internal/providers/openai"
@@ -225,6 +228,29 @@ var (
 	StripMarkers                    = core.StripMarkers
 )
 
+// YAML program execution.
+//
+// Implemented in internal/yamlprogram and re-exported from dsgo.
+// This keeps YAML compilation/execution out of the core/module layers.
+//
+// Usage:
+//
+//	pred, err := dsgo.ExecYaml(ctx, "program.yaml")
+//	pred, err := dsgo.ExecYaml(ctx, "program.yaml", dsgo.WithExecYamlLMFactory(myFactory))
+type (
+	ExecYamlOption    = yamlprogram.ExecOption
+	ExecYamlLMFactory = yamlprogram.LMFactory
+)
+
+var (
+	WithExecYamlLMFactory = yamlprogram.WithLMFactory
+	YamlProgramSchemaJSON = yamlprogram.SchemaJSON
+)
+
+func ExecYaml(ctx context.Context, path string, opts ...ExecYamlOption) (*Prediction, error) {
+	return yamlprogram.Exec(ctx, path, opts...)
+}
+
 // Re-export model catalog and cost functions
 var (
 	RegisterModel         = modelcatalog.RegisterModel
@@ -397,6 +423,7 @@ const (
 	FieldTypeBool     = core.FieldTypeBool
 	FieldTypeClass    = core.FieldTypeClass
 	FieldTypeJSON     = core.FieldTypeJSON
+	FieldTypeArray    = core.FieldTypeArray
 	FieldTypeImage    = core.FieldTypeImage
 	FieldTypeDatetime = core.FieldTypeDatetime
 

@@ -16,6 +16,7 @@ type FieldInfo struct {
 	Optional     bool
 	Classes      []string
 	ClassAliases map[string]string
+	ElementType  core.FieldType // For array types: the type of array elements
 	IsInput      bool
 	IsOutput     bool
 }
@@ -108,6 +109,11 @@ func parseFieldTag(fieldName string, fieldType reflect.Type, tag string) (FieldI
 	// Infer DSGo field type from Go type
 	info.Type = inferFieldType(fieldType, info.Classes)
 
+	// For array types, also infer the element type
+	if info.Type == core.FieldTypeArray {
+		info.ElementType = inferElementType(fieldType)
+	}
+
 	return info, nil
 }
 
@@ -133,11 +139,23 @@ func inferFieldType(goType reflect.Type, classes []string) core.FieldType {
 		return core.FieldTypeFloat
 	case reflect.Bool:
 		return core.FieldTypeBool
-	case reflect.Map, reflect.Slice, reflect.Struct:
+	case reflect.Slice:
+		return core.FieldTypeArray
+	case reflect.Map, reflect.Struct:
 		return core.FieldTypeJSON
 	default:
 		return core.FieldTypeString // Default fallback
 	}
+}
+
+// inferElementType infers the element type for array/slice types
+func inferElementType(goType reflect.Type) core.FieldType {
+	if goType.Kind() != reflect.Slice {
+		return core.FieldTypeString
+	}
+	elemType := goType.Elem()
+	// For element type inference, we don't support enum classes
+	return inferFieldType(elemType, nil)
 }
 
 // splitTag splits a tag string by commas, respecting quoted values
