@@ -1,0 +1,532 @@
+package module
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"strings"
+
+	"github.com/assagman/dsgo/core"
+)
+
+func TestProgramOfThought_Forward_Success(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Solve math").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
+				Content: `{"code": "print(2+2)", "explanation": "Add 2+2", "answer": "4"}`,
+			}, nil
+		},
+	}
+
+	pot := NewProgramOfThought(sig, lm, "python")
+	outputs, err := pot.Forward(context.Background(), map[string]interface{}{
+		"problem": "What is 2+2?",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if outputs.Outputs["answer"] != "4" {
+		t.Errorf("Expected answer='4', got %v", outputs.Outputs["answer"])
+	}
+
+	if _, exists := outputs.Outputs["code"]; !exists {
+		t.Error("Should include code field")
+	}
+}
+
+func TestProgramOfThought_Forward_InvalidInput(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddInput("required", core.FieldTypeString, "Required")
+
+	lm := &MockLM{}
+	pot := NewProgramOfThought(sig, lm, "python")
+
+	_, err := pot.Forward(context.Background(), map[string]interface{}{})
+	if err == nil {
+		t.Error("Forward() should error on invalid input")
+	}
+}
+
+func TestProgramOfThought_Forward_LMError(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddInput("problem", core.FieldTypeString, "Problem")
+
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return nil, errors.New("LM error")
+		},
+	}
+
+	pot := NewProgramOfThought(sig, lm, "python")
+	_, err := pot.Forward(context.Background(), map[string]interface{}{
+		"problem": "test",
+	})
+
+	if err == nil {
+		t.Error("Forward() should propagate LM error")
+	}
+}
+
+func TestProgramOfThought_WithOptions(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test")
+	lm := &MockLM{}
+	pot := NewProgramOfThought(sig, lm, "python")
+
+	customOpts := &core.GenerateOptions{Temperature: 0.5}
+	pot.WithOptions(customOpts)
+
+	if pot.Options.Temperature != 0.5 {
+		t.Error("WithOptions should set custom options")
+	}
+}
+
+func TestProgramOfThought_WithAllowExecution(t *testing.T) {
+	t.Parallel()
+	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "python")
+
+	if pot.AllowExecution {
+		t.Error("Execution should be disabled by default")
+	}
+
+	pot.WithAllowExecution(true)
+
+	if !pot.AllowExecution {
+		t.Error("WithAllowExecution should enable execution")
+	}
+}
+
+func TestProgramOfThought_WithExecutionTimeout(t *testing.T) {
+	t.Parallel()
+	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "python")
+	pot.WithExecutionTimeout(60)
+
+	if pot.ExecutionTimeout != 60 {
+		t.Error("WithExecutionTimeout should set timeout")
+	}
+}
+
+func TestProgramOfThought_GetSignature(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test")
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	if pot.GetSignature() != sig {
+		t.Error("GetSignature should return the signature")
+	}
+}
+
+func TestProgramOfThought_Language(t *testing.T) {
+	t.Parallel()
+	tests := []string{"python", "javascript", "go"}
+
+	for _, lang := range tests {
+		tt := lang // Capture range variable
+		t.Run(tt, func(t *testing.T) {
+			t.Parallel()
+			pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, tt)
+			if pot.Language != tt {
+				t.Errorf("Expected language '%s', got '%s'", tt, pot.Language)
+			}
+		})
+	}
+}
+
+func TestProgramOfThought_ExecuteCode_UnsupportedLanguage(t *testing.T) {
+	t.Parallel()
+	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "unsupported")
+
+	_, err := pot.executeCode(context.Background(), "some code")
+	if err == nil {
+		t.Error("executeCode should error on unsupported language")
+	}
+}
+
+func TestProgramOfThought_ExecuteCode_GoNotSupported(t *testing.T) {
+	t.Parallel()
+	pot := NewProgramOfThought(core.NewSignature("Test"), &MockLM{}, "go")
+
+	_, err := pot.executeCode(context.Background(), "package main")
+	if err == nil {
+		t.Error("executeCode should error on Go (not yet supported)")
+	}
+}
+
+func TestProgramOfThought_BuildPrompt_NoDescription(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("").
+		AddInput("problem", core.FieldTypeString, "Problem")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	prompt, err := pot.buildPrompt(map[string]interface{}{
+		"problem": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("buildPrompt() error = %v", err)
+	}
+
+	if !contains(prompt, "python") {
+		t.Error("Prompt should mention language")
+	}
+}
+
+func TestProgramOfThought_Forward_WithCodeExecution(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Calculate").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
+				Content: `{"code": "print('2+2=4')", "answer": "4", "explanation": "Simple addition"}`,
+			}, nil
+		},
+	}
+
+	pot := NewProgramOfThought(sig, lm, "python").WithAllowExecution(true)
+	outputs, err := pot.Forward(context.Background(), map[string]interface{}{
+		"problem": "2+2",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if _, exists := outputs.Outputs["execution_result"]; !exists {
+		t.Log("execution_result field expected when execution enabled")
+	}
+}
+
+func TestProgramOfThought_BuildPrompt_NoOutputFields(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddInput("problem", core.FieldTypeString, "Problem")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	prompt, err := pot.buildPrompt(map[string]interface{}{
+		"problem": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("buildPrompt() error = %v", err)
+	}
+
+	if !contains(prompt, "code") {
+		t.Error("Prompt should request code even without explicit output fields")
+	}
+}
+
+func TestProgramOfThought_Forward_WithCodeExecutionError(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	lm := &MockLM{
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			return &core.GenerateResult{
+				Content: `{"code": "syntax error!", "answer": "42", "explanation": "Test explanation"}`,
+			}, nil
+		},
+	}
+
+	pot := NewProgramOfThought(sig, lm, "python").WithAllowExecution(true)
+	outputs, err := pot.Forward(context.Background(), map[string]interface{}{
+		"problem": "test",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() should not fail on execution error: %v", err)
+	}
+
+	if _, exists := outputs.Outputs["execution_error"]; !exists {
+		t.Error("Should include execution_error when code execution fails")
+	}
+}
+
+func TestProgramOfThought_Forward_ForcesJSONMode(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Solve math").
+		AddInput("problem", core.FieldTypeString, "Problem").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	var capturedOptions *core.GenerateOptions
+	lm := &MockLM{
+		SupportsJSONVal: true,
+		GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+			capturedOptions = options
+			return &core.GenerateResult{
+				Content: `{"code": "print(2+2)", "explanation": "Add 2+2", "answer": "4"}`,
+			}, nil
+		},
+	}
+
+	pot := NewProgramOfThought(sig, lm, "python")
+	_, err := pot.Forward(context.Background(), map[string]interface{}{
+		"problem": "What is 2+2?",
+	})
+
+	if err != nil {
+		t.Fatalf("Forward() error = %v", err)
+	}
+
+	if capturedOptions == nil {
+		t.Fatal("GenerateOptions not captured")
+	}
+
+	if capturedOptions.ResponseFormat != "json" {
+		t.Errorf("Expected ResponseFormat='json', got '%s'", capturedOptions.ResponseFormat)
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_ShortContent(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("code", core.FieldTypeString, "Code")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	// Test with very short content
+	outputs := pot.extractTextOutputs("short")
+	if outputs != nil {
+		t.Error("extractTextOutputs should return nil for content < 10 chars")
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_NoStringFields(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("count", core.FieldTypeInt, "Count")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := pot.extractTextOutputs("some long content that is more than 10 characters")
+	if outputs != nil {
+		t.Error("extractTextOutputs should return nil when no string output fields")
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_WithLanguageCodeBlock(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("code", core.FieldTypeString, "Code").
+		AddOutput("explanation", core.FieldTypeString, "Explanation")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	content := "Here's the solution:\n```python\nprint('hello')\n```\nThis prints hello"
+	outputs := pot.extractTextOutputs(content)
+
+	if outputs == nil {
+		t.Fatal("extractTextOutputs should extract from language-tagged code block")
+	}
+
+	if code, ok := outputs["code"].(string); !ok || code != "print('hello')" {
+		t.Errorf("Expected code='print('hello')', got %v", outputs["code"])
+	}
+
+	if expl, ok := outputs["explanation"].(string); !ok || expl != "Here's the solution:" {
+		t.Errorf("Expected explanation before code block, got %v", outputs["explanation"])
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_GenericCodeBlock(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("code", core.FieldTypeString, "Code").
+		AddOutput("explanation", core.FieldTypeString, "Explanation")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	content := "```\nx = 42\n```"
+	outputs := pot.extractTextOutputs(content)
+
+	if outputs == nil {
+		t.Fatal("extractTextOutputs should extract from generic code block")
+	}
+
+	if code, ok := outputs["code"].(string); !ok || code != "x = 42" {
+		t.Errorf("Expected code='x = 42', got %v", outputs["code"])
+	}
+}
+
+func TestProgramOfThought_ExtractTextOutputs_PlainCode(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("code", core.FieldTypeString, "Code").
+		AddOutput("explanation", core.FieldTypeString, "Explanation")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	content := "result = 2 + 2\nprint(result)"
+	outputs := pot.extractTextOutputs(content)
+
+	if outputs == nil {
+		t.Fatal("extractTextOutputs should use entire content as code when no blocks found")
+	}
+
+	if code, ok := outputs["code"].(string); !ok || code != content {
+		t.Errorf("Expected code='%s', got %v", content, outputs["code"])
+	}
+
+	// Should fill required explanation field with placeholder
+	if expl, ok := outputs["explanation"].(string); !ok || expl == "" {
+		t.Errorf("Expected explanation placeholder, got %v", outputs["explanation"])
+	}
+}
+
+func TestProgramOfThought_FillRequiredStringFields_StandardFields(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("explanation", core.FieldTypeString, "Explanation").
+		AddOutput("result", core.FieldTypeString, "Result").
+		AddOutput("answer", core.FieldTypeString, "Answer").
+		AddOutput("steps", core.FieldTypeString, "Steps").
+		AddOutput("insights", core.FieldTypeString, "Insights")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := make(map[string]any)
+	pot.fillRequiredStringFields(outputs, sig.OutputFields)
+
+	// Check all standard field placeholders are set
+	expectedFields := []string{"explanation", "result", "answer", "steps", "insights"}
+	for _, field := range expectedFields {
+		if _, exists := outputs[field]; !exists {
+			t.Errorf("Expected field '%s' to be filled", field)
+		}
+	}
+}
+
+func TestProgramOfThought_FillRequiredStringFields_CustomField(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("custom_field", core.FieldTypeString, "Custom")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := make(map[string]any)
+	pot.fillRequiredStringFields(outputs, sig.OutputFields)
+
+	if val, ok := outputs["custom_field"].(string); !ok || val != "Output for custom_field" {
+		t.Errorf("Expected custom field placeholder, got %v", outputs["custom_field"])
+	}
+}
+
+func TestProgramOfThought_FillRequiredStringFields_SkipsOptional(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOptionalOutput("optional_field", core.FieldTypeString, "Optional")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := make(map[string]any)
+	pot.fillRequiredStringFields(outputs, sig.OutputFields)
+
+	// Should not fill optional fields
+	if _, exists := outputs["optional_field"]; exists {
+		t.Error("fillRequiredStringFields should not fill optional fields")
+	}
+}
+
+func TestProgramOfThought_FillRequiredStringFields_SkipsExisting(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test").
+		AddOutput("answer", core.FieldTypeString, "Answer")
+
+	pot := NewProgramOfThought(sig, &MockLM{}, "python")
+
+	outputs := map[string]any{
+		"answer": "existing value",
+	}
+	pot.fillRequiredStringFields(outputs, sig.OutputFields)
+
+	// Should not overwrite existing values
+	if outputs["answer"] != "existing value" {
+		t.Error("fillRequiredStringFields should not overwrite existing values")
+	}
+}
+
+// TestProgramOfThought_FinishReasonHandling tests finish_reason scenarios
+func TestProgramOfThought_FinishReasonHandling(t *testing.T) {
+	t.Parallel()
+	sig := core.NewSignature("Test signature").
+		AddOutput("code", core.FieldTypeString, "Code").
+		AddOutput("explanation", core.FieldTypeString, "Explanation")
+
+	tests := []struct {
+		name          string
+		finishReason  string
+		content       string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "finish_reason=stop with valid content",
+			finishReason: "stop",
+			content:      "[[ ## code ## ]]\nprint('hello')\n[[ ## explanation ## ]]\nPrints hello",
+			expectError:  false,
+		},
+		{
+			name:          "finish_reason=length (error)",
+			finishReason:  "length",
+			content:       "[[ ## code ## ]]\nprint('hello')\n[[ ## explanation ## ]]\nThis code",
+			expectError:   true,
+			errorContains: "model hit max_tokens limit (finish_reason=length)",
+		},
+		{
+			name:          "finish_reason=tool_calls (error)",
+			finishReason:  "tool_calls",
+			content:       "",
+			expectError:   true,
+			errorContains: "finish_reason=tool_calls) but ProgramOfThought module doesn't support tool loops",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt // Capture range variable
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			mockLM := &MockLM{
+				GenerateFunc: func(ctx context.Context, messages []core.Message, options *core.GenerateOptions) (*core.GenerateResult, error) {
+					return &core.GenerateResult{
+						Content:      tt.content,
+						FinishReason: tt.finishReason,
+						Usage:        core.Usage{TotalTokens: 10},
+					}, nil
+				},
+			}
+
+			pot := NewProgramOfThought(sig, mockLM, "python").WithAllowExecution(false)
+			_, err := pot.Forward(context.Background(), map[string]any{"problem": "test"})
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.errorContains)
+				}
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error containing %q, got: %v", tt.errorContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+			}
+		})
+	}
+}

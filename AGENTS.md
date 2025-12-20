@@ -9,7 +9,7 @@
 ```bash
 # Essential workflow
 make all                    # Full validation: clean + check + lint + test-race
-make test                   # Fast: unit + integration (no race)
+make test                   # Fast: unit (no race)
 make check                  # Format + vet + build
 
 # Development
@@ -18,8 +18,7 @@ make lint                  # Run golangci-lint (requires v2.6.0)
 go test -v -run TestName   # Run specific test
 
 # Examples
-cd examples/codebase_analysis && go run main.go
-DSGO_LOG=pretty go run main.go  # With verbose logging
+# (Examples directory removed in this layout.)
 ```
 
 ---
@@ -37,50 +36,44 @@ DSGO_LOG=pretty go run main.go  # With verbose logging
 
 ```
 dsgo/
-├── dsgo.go                    # Main package - public API re-exports
-├── internal/
-│   ├── core/                  # Layer 2: Primitives
-│   │   ├── signature.go       # I/O field definitions
-│   │   ├── lm.go              # LM interface
-│   │   ├── adapter.go         # Output parsing (Chat, JSON, TwoStep, Fallback)
-│   │   ├── module.go          # Module interface
-│   │   ├── prediction.go      # Result wrapper with metadata
-│   │   ├── history.go         # Conversation tracking
-│   │   ├── tool.go            # Function calling
-│   │   ├── cache.go           # LRU caching
-│   │   ├── settings.go        # Global configuration
-│   │   └── collector.go       # Observability collectors
-│   │
-│   ├── module/                # Layer 3: High-level behaviors
-│   │   ├── predict.go         # Basic prediction
-│   │   ├── chain_of_thought.go
-│   │   ├── react.go           # Tool-using agent
-│   │   ├── refine.go
-│   │   ├── best_of_n.go
-│   │   ├── program.go         # Pipeline composition
-│   │   ├── parallel.go        # Concurrent execution
-│   │   └── multi_chain_comparison.go
-│   │
-│   ├── providers/             # Layer 1: LLM implementations
-│   │   ├── openai/            # OpenAI API
-│   │   └── openrouter/        # OpenRouter (100+ models)
-│   │
-│   ├── logging/               # Structured logging
-│   ├── mcp/                   # Model Context Protocol
-│   ├── signature_typed/       # Typed signatures & Func[I,O] implementation
-│   ├── jsonutil/              # JSON extraction & repair
-│   ├── cost/                  # Pricing tables
-│   ├── retry/                 # Retry logic
-│   └── env/                   # Environment loading
+├── core/                      # Layer 2: Primitives
+│   ├── signature.go           # I/O field definitions
+│   ├── lm.go                  # LM interface
+│   ├── adapter.go             # Output parsing (Chat, JSON, TwoStep, Fallback)
+│   ├── module.go              # Module interface
+│   ├── prediction.go          # Result wrapper with metadata
+│   ├── history.go             # Conversation tracking
+│   ├── tool.go                # Function calling
+│   ├── cache.go               # LRU caching
+│   ├── settings.go            # Global configuration
+│   └── collector.go           # Observability collectors
 │
-├── examples/                  # Working examples
-├── integration/               # Integration tests
+├── module/                    # Layer 3: High-level behaviors
+│   ├── predict.go             # Basic prediction
+│   ├── chain_of_thought.go
+│   ├── react.go               # Tool-using agent
+│   ├── refine.go
+│   ├── best_of_n.go
+│   ├── program.go             # Pipeline composition
+│   ├── parallel.go            # Concurrent execution
+│   └── multi_chain_comparison.go
+│
+├── provider/                  # Layer 1: LLM implementations
+│   ├── openai/                # OpenAI API
+│   └── openrouter/            # OpenRouter (100+ models)
+│
+├── logging/                   # Structured logging
+├── mcp/                       # Model Context Protocol
+├── signature_typed/           # Typed signatures & Func[I,O] implementation
+├── cost/                      # Pricing tables
+├── modelcatalog/              # Model registry
+├── internal/                  # Internal helpers (jsonutil, retry, env, ids)
 └── scripts/                   # Build scripts
 ```
 
-**Key principle**: Implementation in `internal/*`, public API via re-exports in `dsgo.go`.
+**Key principle**: Public API is package-per-concern (`core`, `module`, `provider/*`, etc.), with internal-only helpers under `internal/*`.
 
-Typed functionality (Func[I,O], typed Predict, struct helpers) lives in `internal/signature_typed` but must always be used via the `dsgo` package (e.g., `dsgo.Func`, `dsgo.NewTypedPredict`, `dsgo.StructToMap`).
+Typed functionality (Func[I,O], typed Predict, struct helpers) lives in `signature_typed` and should be used via that package (e.g., `signature_typed.Func`, `signature_typed.NewPredict`, `signature_typed.StructToMap`).
 
 ---
 
@@ -90,8 +83,8 @@ Typed functionality (Func[I,O], typed Predict, struct helpers) lives in `interna
 
 ```go
 // Signature definition - fluent builder pattern
-sig := dsgo.NewSignature("Classify sentiment").
-    AddInput("text", dsgo.FieldTypeString, "Text to classify").
+sig := core.NewSignature("Classify sentiment").
+    AddInput("text", core.FieldTypeString, "Text to classify").
     AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "Sentiment")
 
 // Module creation with options
@@ -183,7 +176,7 @@ func TestSomething(t *testing.T) {
 ### Ask First
 
 - Adding new dependencies (currently zero external deps)
-- Changing public API signatures in `dsgo.go`
+- Changing public API signatures in `core`, `module`, `provider/*`, `logging`, `mcp`, `cost`, `modelcatalog`, or `signature_typed`
 - Modifying adapter parsing logic
 - Adding new field types
 - Changing thread-safety guarantees
@@ -206,23 +199,23 @@ func TestSomething(t *testing.T) {
 
 ```bash
 # Fast development cycle
-make test                      # Unit + integration, no race
+make test                      # Unit, no race
 
 # Full validation (CI/final)
 make test-race                 # With race detector
 
 # Specific tests
-go test -v -run TestPredictForward ./internal/module/
-go test -v -run TestAdapter ./internal/core/
+go test -v -run TestPredictForward ./module/
+go test -v -run TestAdapter ./core/
 ```
 
 ### Coverage Targets
 
 | Package | Target | Current |
 |---------|--------|---------|
-| internal/core | >90% | 94.0% |
-| internal/module | >85% | 89.0% |
-| internal/providers | >85% | 90%+ |
+| core | >90% | 94.0% |
+| module | >85% | 89.0% |
+| provider | >85% | 90%+ |
 | Total | >90% | 91.8% |
 
 ### What to Test
@@ -285,16 +278,15 @@ type Module interface {
 
 ### Adding a New Module
 
-1. Create `internal/module/mymodule.go`
+1. Create `module/mymodule.go`
 2. Implement `Module` interface with `Clone()` method
 3. Add builder pattern with `With*()` methods
-4. Write tests in `internal/module/mymodule_test.go`
-5. Re-export in `dsgo.go` if public
-6. Add example in `examples/` if appropriate
+4. Write tests in `module/mymodule_test.go`
+5. Add docs if appropriate
 
 ### Adding a New Provider
 
-1. Create `internal/providers/myprovider/lm.go`
+1. Create `provider/myprovider/lm.go`
 2. Implement `LM` interface
 3. Register via `init()`:
    ```go
@@ -302,7 +294,7 @@ type Module interface {
        core.RegisterLM("myprovider", Factory)
    }
    ```
-4. Add pricing to `internal/cost/cost.go`
+4. Add pricing to `cost/cost.go`
 5. Write tests with mock responses
 
 ### Debugging Parsing Issues
@@ -376,7 +368,7 @@ DSGO_DEBUG_PARSE=1           # Show parse attempts
 | [REFERENCE.md](REFERENCE.md) | Tables + links (quick reference) |
 | [ROADMAP.md](ROADMAP.md) | Implementation status |
 | [llms.txt](llms.txt) | LLM-friendly documentation |
-| [examples/README.md](examples/README.md) | Runnable examples index |
+| (examples removed) | None |
 
 ---
 
@@ -389,17 +381,16 @@ DSGO_DEBUG_PARSE=1           # Show parse attempts
 3. **Test immediately**: Write tests alongside implementation
 4. **Validate always**: Run `make all` before marking work complete
 5. **Follow patterns**: Look at similar code for consistency
-6. **Use dsgo for typed APIs**: prefer `dsgo.Func`, `dsgo.NewTypedPredict`, etc.; never introduce public imports for `internal/signature_typed`.
+6. **Use signature_typed for typed APIs**: prefer `signature_typed.Func`, `signature_typed.NewPredict`, etc.
 
 ### File Navigation Tips
 
 | Want to... | Look at |
 |------------|---------|
-| Understand signatures | `internal/core/signature.go` |
-| See module patterns | `internal/module/predict.go` |
-| Add LLM provider | `internal/providers/openai/lm.go` |
-| Debug parsing | `internal/core/adapter.go` |
-| Add observability | `internal/core/collector.go` |
-| See usage patterns | `examples/codebase_analysis/main.go` |
-| Understand tests | `internal/module/*_test.go` |
-| Work on typed Func[I,O] / typed modules | `internal/signature_typed/*.go` (implementation), `dsgo.go` (typed re-exports) |
+| Understand signatures | `core/signature.go` |
+| See module patterns | `module/predict.go` |
+| Add LLM provider | `provider/openai/lm.go` |
+| Debug parsing | `core/adapter.go` |
+| Add observability | `core/collector.go` |
+| Understand tests | `module/*_test.go` |
+| Work on typed Func[I,O] / typed modules | `signature_typed/*.go` |

@@ -1,43 +1,28 @@
-.PHONY: all test test-race test-unit test-unit-with-race test-integration test-integration-with-race build fmt vet lint check check-lint check-eof verify clean install-hooks fmt-fix help
+.PHONY: all test test-race test-unit test-unit-with-race build fmt vet lint check check-lint check-eof verify clean install-hooks fmt-fix help
 
-PACKAGES := $$(go list ./... | grep -v /examples | grep -v /scripts | grep -v /integration)
-INTEGRATION_PACKAGES := $$(go list ./integration)
+PACKAGES := $$(go list ./... | grep -v /examples | grep -v /scripts)
 
 all: clean check check-lint test-race
 
 # Fast unit testing (without race detector) - for development iterations
 test-unit:
-	@echo "Running unit tests (parallel, no race detector, coverage, excluding integration tests)..."
+	@echo "Running unit tests (parallel, no race detector, coverage)..."
 	@go test -parallel $$(nproc) -covermode=atomic -coverpkg=./... -coverprofile=coverage.out $(PACKAGES) || exit 1
 	@printf "\nUnit Coverage: "
 	@go tool cover -func=coverage.out | grep total | awk '{print $$3}'
 
 # Unit testing with race detector - for CI and final testing
 test-unit-with-race:
-	@echo "Running unit tests (parallel, race detector + coverage, excluding integration tests)..."
+	@echo "Running unit tests (parallel, race detector + coverage)..."
 	@go test -race -parallel $$(nproc) -covermode=atomic -coverpkg=./... -coverprofile=coverage.out $(PACKAGES) || exit 1
 	@printf "\nUnit Coverage: "
 	@go tool cover -func=coverage.out | grep total | awk '{print $$3}'
 
-# Fast integration testing (without race detector) - for development iterations
-test-integration:
-	@echo "Running integration tests (parallel, no race detector, coverage)..."
-	@go test -parallel $$(nproc) -covermode=atomic -coverpkg=./internal/... -coverprofile=integration_coverage.out ./integration/... || exit 1
-	@printf "\nIntegration Coverage (of main codebase): "
-	@go tool cover -func=integration_coverage.out | grep total | awk '{print $$3}'
+# Fast testing (unit only, no race) - for development iterations
+test: test-unit
 
-# Integration testing with race detector - for CI and final testing
-test-integration-with-race:
-	@echo "Running integration tests (parallel, race detector + coverage)..."
-	@go test -race -parallel $$(nproc) -covermode=atomic -coverpkg=./internal/... -coverprofile=integration_coverage.out ./integration/... || exit 1
-	@printf "\nIntegration Coverage (of main codebase): "
-	@go tool cover -func=integration_coverage.out | grep total | awk '{print $$3}'
-
-# Fast testing (unit + integration, no race) - for development iterations
-test: test-unit test-integration
-
-# Full testing (unit + integration, with race) - for CI and final validation
-test-race: test-unit-with-race test-integration-with-race
+# Full testing (unit only, with race) - for CI and final validation
+test-race: test-unit-with-race
 
 build:
 	go build $(PACKAGES)
@@ -71,7 +56,7 @@ check-eof:
 	./scripts/check-eof.sh
 
 clean:
-	rm -f coverage.out integration_coverage.out
+	rm -f coverage.out
 	go clean -cache -testcache
 
 install-hooks:
@@ -82,12 +67,10 @@ help:
 	@printf "Core workflows:\n"
 	@printf "  make all                 - Clean, check, lint, test-race (full validation)\n"
 	@printf "Testing:\n"
-	@printf "  make test                - Fast testing: test-unit + test-integration (no race)\n"
-	@printf "  make test-race           - Full testing: test-unit-with-race + test-integration-with-race\n"
+	@printf "  make test                - Fast testing: test-unit (no race)\n"
+	@printf "  make test-race           - Full testing: test-unit-with-race\n"
 	@printf "  make test-unit           - Fast unit tests (no race detector)\n"
 	@printf "  make test-unit-with-race - Unit tests with race detector (CI/final)\n"
-	@printf "  make test-integration    - Fast integration tests (no race detector)\n"
-	@printf "  make test-integration-with-race - Integration tests with race detector (CI/final)\n"
 	@printf "Code Quality:\n"
 	@printf "  make fmt                 - Check code formatting\n"
 	@printf "  make fmt-fix             - Auto-fix code formatting\n"

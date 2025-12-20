@@ -17,7 +17,7 @@ DSGo provides a batteries-included approach to LLM orchestration in Go. Build ev
 - [ARCHITECTURE.md](ARCHITECTURE.md): Diagram-first deep dive
 - [DEVELOPMENT.md](DEVELOPMENT.md): Contributor workflow
 - [REFERENCE.md](REFERENCE.md): Tables + links (quick reference)
-- [examples/README.md](examples/README.md): Runnable examples index
+- (examples removed): runnable examples not included in this layout
 - [AGENTS.md](AGENTS.md): Development guide for contributors and AI agents
 - [ROADMAP.md](ROADMAP.md): Implementation status and future plans
 
@@ -28,8 +28,8 @@ DSGo provides a batteries-included approach to LLM orchestration in Go. Build ev
 Define input/output contracts for modules with type validation:
 
 ```go
-sig := dsgo.NewSignature("Classify sentiment").
-    AddInput("text", dsgo.FieldTypeString, "Text to classify").
+sig := core.NewSignature("Classify sentiment").
+    AddInput("text", core.FieldTypeString, "Text to classify").
     AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "Sentiment")
 ```
 
@@ -64,82 +64,77 @@ Handle LLM output parsing with automatic fallback:
 
 ### Providers
 
-LLM API implementations (auto-registered via init()):
+LLM API implementations (register via init(); import the provider packages you use):
 
 - **OpenAI**: GPT-3.5, GPT-4, GPT-4 Turbo, GPT-4o
 - **OpenRouter**: 100+ models (Claude, Llama, Gemini, etc.)
 
 ## Source Code
 
-- [dsgo.go](dsgo.go): Main package with public API re-exports (300+ types)
+### Core Layer (core/)
 
-### Core Layer (internal/core/)
+- [signature.go](core/signature.go): Field and Signature definitions with validation
+- [lm.go](core/lm.go): LM interface, Message, GenerateOptions, GenerateResult
+- [module.go](core/module.go): Module interface (Forward, GetSignature, Clone)
+- [adapter.go](core/adapter.go): Adapter implementations (Chat, JSON, TwoStep, Fallback)
+- [prediction.go](core/prediction.go): Prediction wrapper with metadata and diagnostics
+- [history.go](core/history.go): Thread-safe conversation history management
+- [tool.go](core/tool.go): Tool and ToolCall definitions for function calling
+- [cache.go](core/cache.go): LRU cache with TTL and deterministic keys
+- [collector.go](core/collector.go): History collectors (Memory, JSONL, Composite)
+- [settings.go](core/settings.go): Global configuration singleton
+- [configure.go](core/configure.go): Functional options for configuration
 
-- [signature.go](internal/core/signature.go): Field and Signature definitions with validation
-- [lm.go](internal/core/lm.go): LM interface, Message, GenerateOptions, GenerateResult
-- [module.go](internal/core/module.go): Module interface (Forward, GetSignature, Clone)
-- [adapter.go](internal/core/adapter.go): Adapter implementations (Chat, JSON, TwoStep, Fallback)
-- [prediction.go](internal/core/prediction.go): Prediction wrapper with metadata and diagnostics
-- [history.go](internal/core/history.go): Thread-safe conversation history management
-- [tool.go](internal/core/tool.go): Tool and ToolCall definitions for function calling
-- [cache.go](internal/core/cache.go): LRU cache with TTL and deterministic keys
-- [collector.go](internal/core/collector.go): History collectors (Memory, JSONL, Composite)
-- [settings.go](internal/core/settings.go): Global configuration singleton
-- [configure.go](internal/core/configure.go): Functional options for configuration
+### Module Layer (module/)
 
-### Module Layer (internal/module/)
+- [predict.go](module/predict.go): Basic prediction module
+- [chain_of_thought.go](module/chain_of_thought.go): Reasoning with rationale extraction
+- [react.go](module/react.go): ReAct agent with tool calling loop
+- [refine.go](module/refine.go): Iterative refinement module
+- [best_of_n.go](module/best_of_n.go): Multi-candidate selection with scoring
+- [program.go](module/program.go): Module pipeline composition
+- [parallel.go](module/parallel.go): Concurrent execution with auto-cloning
+- [program_of_thought.go](module/program_of_thought.go): Code-first reasoning module
+- [multi_chain_comparison.go](module/multi_chain_comparison.go): DSPy-style synthesis
 
-- [predict.go](internal/module/predict.go): Basic prediction module
-- [chain_of_thought.go](internal/module/chain_of_thought.go): Reasoning with rationale extraction
-- [react.go](internal/module/react.go): ReAct agent with tool calling loop
-- [refine.go](internal/module/refine.go): Iterative refinement module
-- [best_of_n.go](internal/module/best_of_n.go): Multi-candidate selection with scoring
-- [program.go](internal/module/program.go): Module pipeline composition
-- [parallel.go](internal/module/parallel.go): Concurrent execution with auto-cloning
-- [program_of_thought.go](internal/module/program_of_thought.go): Code-first reasoning module
-- [multi_chain_comparison.go](internal/module/multi_chain_comparison.go): DSPy-style synthesis
+### Provider Layer (provider/)
 
-### Provider Layer (internal/providers/)
-
-- [openai/lm.go](internal/providers/openai/lm.go): OpenAI API implementation
-- [openrouter/lm.go](internal/providers/openrouter/lm.go): OpenRouter API implementation
+- [openai/lm.go](provider/openai/lm.go): OpenAI API implementation
+- [openrouter/lm.go](provider/openrouter/lm.go): OpenRouter API implementation
 
 ### Infrastructure
 
-- [internal/logging/logger.go](internal/logging/logger.go): Structured logging with request IDs
-- [internal/mcp/client.go](internal/mcp/client.go): Model Context Protocol integration
-- [internal/signature_typed/func.go](internal/signature_typed/func.go): Generic Func[I,O] type-safe wrappers (implementation; use via dsgo.Func, dsgo.NewTypedPredict, etc.)
+- [logging/logger.go](logging/logger.go): Structured logging with request IDs
+- [mcp/client.go](mcp/client.go): Model Context Protocol integration
+- [signature_typed/func.go](signature_typed/func.go): Generic Func[I,O] type-safe wrappers (implementation; use via signature_typed.Func, signature_typed.NewPredict, etc.)
 - [internal/jsonutil/extract.go](internal/jsonutil/extract.go): JSON extraction and repair
-- [internal/cost/cost.go](internal/cost/cost.go): Model pricing tables
+- [cost/cost.go](cost/cost.go): Model pricing tables
 - [internal/retry/retry.go](internal/retry/retry.go): Exponential backoff retry logic
 
 ## Examples
 
-- [examples/codebase_analysis/main.go](examples/codebase_analysis/main.go): Comprehensive code analysis with ChainOfThought
-- [examples/react_experiment/main.go](examples/react_experiment/main.go): ReAct agent with tool calling
-- [examples/modules/parallel/main.go](examples/modules/parallel/main.go): Concurrent execution patterns
-- [examples/project_review/main.go](examples/project_review/main.go): Multi-stage pipeline composition
-- [examples/multi_chain_comparison/main.go](examples/multi_chain_comparison/main.go): Answer synthesis from multiple chains
-- [examples/filesystem_mcp/main.go](examples/filesystem_mcp/main.go): ReAct agent with filesystem MCP tools
+Examples are not included in this layout.
 
 ## API Quick Reference
 
 ### Creating LM Instance
 
 ```go
-lm, err := dsgo.NewLM(ctx, "openai/gpt-4o-mini")
+import _ "github.com/assagman/dsgo/provider/openai"
+
+lm, err := core.NewLM(ctx, "openai/gpt-4o-mini")
 // or
-lm, err := dsgo.NewLM(ctx, "openrouter/anthropic/claude-3-opus")
+lm, err := core.NewLM(ctx, "openrouter/anthropic/claude-3-opus")
 ```
 
 ### Basic Prediction
 
 ```go
-sig := dsgo.NewSignature("Task description").
-    AddInput("input", dsgo.FieldTypeString, "Input description").
-    AddOutput("output", dsgo.FieldTypeString, "Output description")
+sig := core.NewSignature("Task description").
+    AddInput("input", core.FieldTypeString, "Input description").
+    AddOutput("output", core.FieldTypeString, "Output description")
 
-predictor := dsgo.NewPredict(sig, lm)
+predictor := module.NewPredict(sig, lm)
 result, err := predictor.Forward(ctx, map[string]any{"input": "value"})
 output := result.GetString("output")
 ```
@@ -147,10 +142,10 @@ output := result.GetString("output")
 ### Tool-Using Agent
 
 ```go
-tool := dsgo.NewTool("search", "Search the web", searchFunc).
+tool := core.NewTool("search", "Search the web", searchFunc).
     AddParameter("query", "string", "Search query", true)
 
-agent := dsgo.NewReAct(sig, lm, []dsgo.Tool{*tool}).
+agent := module.NewReAct(sig, lm, []core.Tool{*tool}).
     WithMaxIterations(10).
     WithVerbose(true)
 ```
@@ -158,8 +153,8 @@ agent := dsgo.NewReAct(sig, lm, []dsgo.Tool{*tool}).
 ### Typed API (Func[I,O])
 
 ```go
-// Import only github.com/assagman/dsgo
-import "github.com/assagman/dsgo"
+// Import signature_typed for typed helpers
+import "github.com/assagman/dsgo/signature_typed"
 
 // Define input/output structs with dsgo tags
 type Input struct {
@@ -171,7 +166,7 @@ type Output struct {
 }
 
 // Create typed function
-predictor, err := dsgo.NewTypedPredict[Input, Output](lm)
+predictor, err := signature_typed.NewPredict[Input, Output](lm)
 if err != nil {
     log.Fatal(err)
 }
@@ -185,12 +180,12 @@ if err != nil {
 fmt.Printf("Result: %s\n", output.Result)
 ```
 
-**Note**: Do not import `internal/signature_typed` from applications; treat it as internal.
+**Note**: `signature_typed` is the public home for typed helpers.
 
 ### Module Composition
 
 ```go
-program := dsgo.NewProgram("Pipeline").
+program := module.NewProgram("Pipeline").
     Add(classifier).
     Add(generator).
     Add(refiner)
@@ -237,13 +232,13 @@ DSGO_CACHE_SIZE=1000               # LRU cache size
 - **Builder pattern**: Fluent API for configuration
 - **Adapter fallback chain**: >95% parsing success rate
 - **Internal packages**: Clean public API via re-exports
-- **Typed generics via dsgo only**: Typed helpers (Func[I,O], typed Predict, struct mappers) are implemented in `internal/signature_typed` and re-exported from `dsgo`; do not introduce public `typed` or `signature_typed` packages.
+- **Typed generics live in signature_typed**: Typed helpers (Func[I,O], typed Predict, struct mappers) are provided by `signature_typed`.
 - **Context propagation**: Request IDs and cancellation throughout
 
 ## Optional
 
-- [internal/mcp/transport.go](internal/mcp/transport.go): MCP HTTP/SSE/Stdio transports
-- [internal/signature_typed/schema.go](internal/signature_typed/schema.go): Struct-to-signature conversion (implementation; use via dsgo.Func, dsgo.NewTypedPredict, etc.)
-- [internal/core/streaming_buffer.go](internal/core/streaming_buffer.go): Thread-safe streaming buffer
-- [internal/core/streaming_marker_filter.go](internal/core/streaming_marker_filter.go): Field marker filtering
+- [mcp/transport.go](mcp/transport.go): MCP HTTP/SSE/Stdio transports
+- [signature_typed/schema.go](signature_typed/schema.go): Struct-to-signature conversion (implementation; use via signature_typed.Func, signature_typed.NewPredict, etc.)
+- [core/streaming_buffer.go](core/streaming_buffer.go): Thread-safe streaming buffer
+- [core/streaming_marker_filter.go](core/streaming_marker_filter.go): Field marker filtering
 - [integration/](integration/): Integration test suite with fixtures

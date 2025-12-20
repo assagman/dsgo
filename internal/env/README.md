@@ -13,6 +13,8 @@ This package provides functionality for loading environment variables from `.env
 
 ## Usage
 
+This package is internal. External callers should rely on `core.Configure()` to trigger `.env` auto-loading (and note it returns an error if API key env vars are missing).
+
 ```go
 import "github.com/assagman/dsgo/internal/env"
 

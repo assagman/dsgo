@@ -45,7 +45,7 @@ Tables and quick lookups for DSGo.
 | `DSGO_ARTIFACT_DIR` | Where to write debug artifacts (e.g. raw exchanges) |
 | `DSGO_EXAMPLE` | Optional label included in saved artifacts |
 
-> Source-of-truth: see package docs and `internal/*`.
+> Source-of-truth: see package docs; internal helpers live under `internal/*`.
 
 ## Modules (high level)
 
@@ -53,7 +53,7 @@ Tables and quick lookups for DSGo.
 
 Enable:
 
-- Code: `dsgo.NewParallel(...).WithVerbose(true)`
+- Code: `module.NewParallel(...).WithVerbose(true)`
 - Logging output: set up the DSGo logger (e.g., via `logging.ConfigureLoggerFromEnv()` or `DSGO_LOG=pretty`).
 
 Parallel logs are emitted with `module=module.Parallel`. When verbose is enabled, per-task logs are emitted at INFO (otherwise DEBUG).
@@ -113,29 +113,31 @@ This allows filtering either:
 
 | Module | Constructor | Notes |
 |---|---|---|
-| Predict | `dsgo.NewPredict(sig, lm)` | Structured prediction |
-| ChainOfThought | `dsgo.NewChainOfThought(sig, lm)` | Stores reasoning in `Prediction.Rationale` (and/or explicit reasoning fields) |
-| ReAct | `dsgo.NewReAct(sig, lm, tools)` | Tool-using agent loop (native tool calls + auto `finish` tool + extractor fallback) |
-| Refine | `dsgo.NewRefine(sig, lm)` | Refines only when `inputs["feedback"]` (or custom refinement field) is provided |
-| BestOfN | `dsgo.NewBestOfN(module, n)` | Requires `WithScorer(...)`; can parallelize and optionally return all completions |
-| Program | `dsgo.NewProgram(name)` | Sequential composition |
-| Parallel | `dsgo.NewParallel(module)` | Concurrent execution; per-item outputs are in `Prediction.Completions` |
-| ProgramOfThought | `dsgo.NewProgramOfThought(sig, lm, language)` | Generates code-first solutions; execution is disabled by default |
-| MultiChainComparison | `dsgo.NewMultiChainComparison(sig, lm, m)` | Synthesizes from `inputs["completions"]` and prepends `rationale` output |
+| Predict | `module.NewPredict(sig, lm)` | Structured prediction |
+| ChainOfThought | `module.NewChainOfThought(sig, lm)` | Stores reasoning in `Prediction.Rationale` (and/or explicit reasoning fields) |
+| ReAct | `module.NewReAct(sig, lm, tools)` | Tool-using agent loop (native tool calls + auto `finish` tool + extractor fallback) |
+| Refine | `module.NewRefine(sig, lm)` | Refines only when `inputs["feedback"]` (or custom refinement field) is provided |
+| BestOfN | `module.NewBestOfN(module, n)` | Requires `WithScorer(...)`; can parallelize and optionally return all completions |
+| Program | `module.NewProgram(name)` | Sequential composition |
+| Parallel | `module.NewParallel(module)` | Concurrent execution; per-item outputs are in `Prediction.Completions` |
+| ProgramOfThought | `module.NewProgramOfThought(sig, lm, language)` | Generates code-first solutions; execution is disabled by default |
+| MultiChainComparison | `module.NewMultiChainComparison(sig, lm, m)` | Synthesizes from `inputs["completions"]` and prepends `rationale` output |
 
 ### ReAct: key knobs
 
 - **Trajectory limit (per run)**: `WithMaxIterations(n)` (default: 10)
-- **Trajectory limit (multi-turn)**: `WithHistory(dsgo.NewHistoryWithLimit(n))` to bound remembered messages
+- **Trajectory limit (multi-turn)**: `WithHistory(core.NewHistoryWithLimit(n))` to bound remembered messages
 - **Prompted finishing**: ReAct guides the model to terminate by calling a synthetic `finish` tool whose arguments match your output `Signature`.
 - **Extractor / schema enforcement**: configure globally via:
 
 ```go
-dsgo.Configure(
-  dsgo.WithStructuredOutputEnabled(true),
-  dsgo.WithStructuredOutputMaxAttempts(3),
-  dsgo.WithStructuredOutputTemperature(0.0),
-)
+if err := core.Configure(
+  core.WithStructuredOutputEnabled(true),
+  core.WithStructuredOutputMaxAttempts(3),
+  core.WithStructuredOutputTemperature(0.0),
+); err != nil {
+  log.Fatal(err)
+}
 ```
 
 - **Tool result size control**: design tool schemas with explicit bounds like `max_chars`, `max_results`, and enforce them in the tool implementation.
@@ -191,17 +193,17 @@ Uses the official `@modelcontextprotocol/server-filesystem` via npx/bunx:
 
 ```go
 // Create filesystem client with specific directory
-fsClient, err := dsgo.NewMCPFilesystemClient("/path/to/directory")
+fsClient, err := mcp.NewFilesystemClient("/path/to/directory")
 
 // Or use current directory (default)
-fsClient, err := dsgo.NewMCPFilesystemClient()
+fsClient, err := mcp.NewFilesystemClient()
 
 // Initialize and get tools
 err = fsClient.Initialize(ctx)
 tools := fsClient.GetTools()
 
 // Use with ReAct agent
-agent := dsgo.NewReAct(sig, lm, tools)
+agent := module.NewReAct(sig, lm, tools)
 ```
 
 **Available Tools**: `read_file`, `write_file`, `edit_file`, `create_directory`, `list_directory`, `directory_tree`, `move_file`, `search_files`, `get_file_info`, `list_allowed_directories`
@@ -213,6 +215,6 @@ agent := dsgo.NewReAct(sig, lm, tools)
 - Getting started: [`QUICKSTART.md`](QUICKSTART.md)
 - Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - Development: [`DEVELOPMENT.md`](DEVELOPMENT.md)
-- Examples index: [`examples/README.md`](examples/README.md)
-- Core internals: [`internal/core/README.md`](internal/core/README.md)
-- Module internals: [`internal/module/README.md`](internal/module/README.md)
+- Examples: not included in this layout
+- Core internals: [`core/README.md`](core/README.md)
+- Module internals: [`module/README.md`](module/README.md)

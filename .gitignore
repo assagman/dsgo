@@ -50,3 +50,5 @@ examples/snowflake_trainer/output/
 
 **/.agents
 examples/yaml_program/yaml_program
+
+.gocache

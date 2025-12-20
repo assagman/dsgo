@@ -65,7 +65,7 @@ flowchart LR
 | Deep dive | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Tables / quick reference | [`REFERENCE.md`](REFERENCE.md) |
 | Contributor workflow | [`DEVELOPMENT.md`](DEVELOPMENT.md) |
-| Runnable examples | [`examples/README.md`](examples/README.md) |
+| Runnable examples | Not included in this layout |
 
 ## 3-minute example
 
@@ -77,20 +77,25 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/assagman/dsgo"
+	"github.com/assagman/dsgo/core"
 	"github.com/assagman/dsgo/module"
+	_ "github.com/assagman/dsgo/provider/openai"
 )
 
 func main() {
 	ctx := context.Background()
 
-	lm, err := dsgo.NewLM(ctx, "openai/gpt-4o-mini")
+	if err := core.Configure(); err != nil {
+		log.Fatal(err)
+	}
+
+	lm, err := core.NewLM(ctx, "openai/gpt-4o-mini")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	sig := dsgo.NewSignature("Classify sentiment").
-		AddInput("text", dsgo.FieldTypeString, "Text to classify").
+	sig := core.NewSignature("Classify sentiment").
+		AddInput("text", core.FieldTypeString, "Text to classify").
 		AddClassOutput("sentiment", []string{"positive", "negative", "neutral"}, "Sentiment")
 
 	predict := module.NewPredict(sig, lm)
@@ -106,7 +111,7 @@ func main() {
 
 ## Environment Variables
 
-DSGo supports several environment variables for configuration:
+DSGo supports several environment variables for configuration. At least one API key env var is required; `core.Configure()` returns an error if none are set.
 
 ```bash
 # API Keys

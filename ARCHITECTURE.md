@@ -43,13 +43,13 @@ graph TB
   C2 --> C3
 ```
 
-- Public API lives in `dsgo` (see `dsgo.go`).
-- Implementations live under `internal/*`.
+- Public API is package-per-concern (e.g., `core`, `module`, `provider/*`).
+- Internal helpers live under `internal/*` (jsonutil, retry, ids, env).
 
 Links:
-- Core: [`internal/core/README.md`](internal/core/README.md)
-- Modules: [`internal/module/README.md`](internal/module/README.md)
-- MCP: [`internal/mcp/README.md`](internal/mcp/README.md)
+- Core: [`core/README.md`](core/README.md)
+- Modules: [`module/README.md`](module/README.md)
+- MCP: [`mcp/README.md`](mcp/README.md)
 
 ## Modules
 
