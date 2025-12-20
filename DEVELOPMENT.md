@@ -5,14 +5,15 @@ Contributor workflow for DSGo.
 ## Commands
 
 ```bash
-make check      # verify + fmt + vet + build
-make test       # unit (no race)
+make check      # verify + fmt + vet + build + check-eof
+make test       # unit (no race, coverage)
+make test-race  # unit + race detector
 make all        # clean + check + lint + test-race
 ```
 
 ## Lint
 
-- `make lint` requires `golangci-lint`.
+- `make lint` requires `golangci-lint` (install via `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`).
 
 ## Repo layout (high level)
 

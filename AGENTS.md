@@ -10,12 +10,13 @@
 # Essential workflow
 make all                    # Full validation: clean + check + lint + test-race
 make test                   # Fast: unit (no race)
-make check                  # Format + vet + build
+make check                  # verify + fmt + vet + build + check-eof
 
 # Development
-make fmt-fix               # Auto-fix formatting
-make lint                  # Run golangci-lint (requires v2.6.0)
-go test -v -run TestName   # Run specific test
+make fmt-fix                  # Auto-fix formatting
+make lint                     # Run golangci-lint (install via go install ...@latest)
+./scripts/check-eof.sh --fix  # Auto-fix missing EOF newlines
+go test -v -run TestName      # Run specific test
 
 # Examples
 # (Examples directory removed in this layout.)
@@ -26,8 +27,8 @@ go test -v -run TestName   # Run specific test
 ## Tech Stack
 
 - **Language**: Go 1.25+
-- **Dependencies**: Standard library only (zero external deps)
-- **Lint**: golangci-lint v2.6.0 (binary install required)
+- **Dependencies**: Direct: `github.com/openai/openai-go/v3` (providers); indirect: `github.com/tidwall/gjson`, `github.com/tidwall/sjson`
+- **Lint**: golangci-lint (install via `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`)
 - **Test**: `go test -race` with >90% coverage target
 
 ---
@@ -56,11 +57,13 @@ dsgo/
 │   ├── best_of_n.go
 │   ├── program.go             # Pipeline composition
 │   ├── parallel.go            # Concurrent execution
+│   ├── program_of_thought.go   # Code-first reasoning
 │   └── multi_chain_comparison.go
 │
 ├── provider/                  # Layer 1: LLM implementations
 │   ├── openai/                # OpenAI API
 │   └── openrouter/            # OpenRouter (100+ models)
+│   └── mock/                  # Test/mock provider
 │
 ├── logging/                   # Structured logging
 ├── mcp/                       # Model Context Protocol
@@ -175,7 +178,7 @@ func TestSomething(t *testing.T) {
 
 ### Ask First
 
-- Adding new dependencies (currently zero external deps)
+- Adding new dependencies (current direct dep: `github.com/openai/openai-go/v3`; indirect: `github.com/tidwall/gjson`, `github.com/tidwall/sjson`)
 - Changing public API signatures in `core`, `module`, `provider/*`, `logging`, `mcp`, `cost`, `modelcatalog`, or `signature_typed`
 - Modifying adapter parsing logic
 - Adding new field types
@@ -211,12 +214,12 @@ go test -v -run TestAdapter ./core/
 
 ### Coverage Targets
 
-| Package | Target | Current |
-|---------|--------|---------|
-| core | >90% | 94.0% |
-| module | >85% | 89.0% |
-| provider | >85% | 90%+ |
-| Total | >90% | 91.8% |
+| Package | Target |
+|---------|--------|
+| core | >90% |
+| module | >85% |
+| provider | >85% |
+| Total | >90% |
 
 ### What to Test
 
@@ -236,10 +239,10 @@ Adapters handle LLM output parsing with automatic fallback:
 1. **ChatAdapter**: Field markers `[[ ## field ## ]]` - general purpose
 2. **JSONAdapter**: Structured JSON with schema - for APIs
 3. **TwoStepAdapter**: Reason then extract - for complex tasks
-4. **FallbackAdapter**: Chains adapters for >95% success rate
+4. **FallbackAdapter**: Chains adapters for robust parsing
 
 ```go
-// Default: FallbackAdapter (Chat → JSON)
+// Default: FallbackAdapter (JSON → Chat)
 adapter := core.NewFallbackAdapter()
 
 // Specific adapter
@@ -342,19 +345,67 @@ make all  # Must pass
 ## Environment Variables
 
 ```bash
-# API Keys
+# API keys (DSGO_* preferred; OPENAI/OPENROUTER supported)
+DSGO_OPENAI_API_KEY=sk-...
 OPENAI_API_KEY=sk-...
+DSGO_OPENROUTER_API_KEY=sk-or-...
 OPENROUTER_API_KEY=sk-or-...
 
-# Runtime
-DSGO_TIMEOUT=30s
+# Runtime defaults
+DSGO_TIMEOUT=30              # seconds
 DSGO_MAX_RETRIES=3
-DSGO_CACHE_SIZE=1000
+DSGO_TRACING=true
+DSGO_MAX_TOKENS=10000
+DSGO_TEMPERATURE=0.7
+DSGO_HTTP_TIMEOUT_MS=300000  # provider HTTP timeout (ms)
+
+# Caching
+DSGO_CACHE=true
+DSGO_CACHE_TTL=5m
+DSGO_CACHE_MEMORY=1000
+DSGO_CACHE_DISK=true
+DSGO_CACHEDIR=~/.dsgo_cache
+DSGO_CACHE_LIMIT=32212254720 # bytes (30GB default)
+
+# Structured outputs
+DSGO_STRUCTURED_OUTPUTS=true
+DSGO_STRUCTURED_MAX_ATTEMPTS=3
+DSGO_STRUCTURED_TEMPERATURE=0.0
+
+# ReAct tuning
+DSGO_REACT_MAX_PROMPT_BYTES=262144
+
+# Logging
+DSGO_LOG_LEVEL=info
+DSGO_LOG_FORMAT=text
+DSGO_LOG_COLOR=auto           # auto, always, never
+DSGO_LOG_MODULE_LEVELS=module.Predict=debug
+DSGO_LOG_BUFFER_SIZE=1000
+DSGO_LOG_FLUSH_INTERVAL=200ms
+DSGO_LOG_FLUSH_TIMEOUT=1s
+DSGO_LOG_BATCH_SIZE=50
+DSGO_LOG_DROP_WHEN_FULL=1
+DSGO_LOG_MAX_MEMORY=10485760
+DSGO_LOG_CACHE_SLOW_THRESHOLD=200ms
+DSGO_LOG_TOOL_SLOW_THRESHOLD=200ms
+DSGO_LOG_BLOCK_TIMEOUT=250ms
 
 # Debugging
-DSGO_LOG=pretty              # none, pretty, events
-DSGO_LOG_COLOR=auto          # Color: auto, always, never
-DSGO_DEBUG_PARSE=1           # Show parse attempts
+DSGO_DEBUG_PARSE=1
+DSGO_DEBUG_MARKERS=1
+
+# .env loading
+DSGO_ENV_FILE_PATH=/path/to/.env
+
+# Provider extras
+OPENROUTER_SITE_NAME=your-app
+OPENROUTER_SITE_URL=https://example.com
+DSGO_MOCK_BASE_URL=http://localhost:8080
+DSGO_MOCK_API_KEY=test
+
+# Example overrides (legacy)
+EXAMPLES_MAX_TOKENS=10000
+EXAMPLES_TEMPERATURE=0.7
 ```
 
 ---

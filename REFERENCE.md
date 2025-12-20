@@ -8,21 +8,36 @@ Tables and quick lookups for DSGo.
 
 | Variable | Purpose |
 |---|---|
-| `OPENAI_API_KEY` | OpenAI API key |
-| `OPENROUTER_API_KEY` | OpenRouter API key |
+| `DSGO_OPENAI_API_KEY` | OpenAI API key (preferred) |
+| `OPENAI_API_KEY` | OpenAI API key (fallback) |
+| `DSGO_OPENROUTER_API_KEY` | OpenRouter API key (preferred) |
+| `OPENROUTER_API_KEY` | OpenRouter API key (fallback) |
+| `OPENROUTER_SITE_NAME` | Optional OpenRouter app name header |
+| `OPENROUTER_SITE_URL` | Optional OpenRouter app URL header |
+| `DSGO_MOCK_BASE_URL` | Mock provider base URL (tests/dev) |
+| `DSGO_MOCK_API_KEY` | Mock provider API key (optional; default "test") |
 
-### Runtime
+### Runtime (core defaults)
 
 | Variable | Purpose |
 |---|---|
-| `DSGO_TIMEOUT` | Request timeout (e.g. `30s`) |
+| `DSGO_TIMEOUT` | Request timeout in seconds (e.g. `30`) |
 | `DSGO_MAX_RETRIES` | Max retry attempts |
+| `DSGO_TRACING` | Enable tracing (`true`/`false`) |
+| `DSGO_MAX_TOKENS` | Default max tokens (GenerateOptions) |
+| `DSGO_TEMPERATURE` | Default temperature (GenerateOptions) |
+| `DSGO_HTTP_TIMEOUT_MS` | Provider HTTP timeout in ms |
+
+### Cache
+
+| Variable | Purpose |
+|---|---|
 | `DSGO_CACHE` | Enable/disable caching (`true`/`false`) |
+| `DSGO_CACHE_TTL` | Cache TTL (e.g. `5m`, `1h`) |
 | `DSGO_CACHE_MEMORY` | Memory cache capacity |
 | `DSGO_CACHE_DISK` | Enable/disable disk cache |
 | `DSGO_CACHEDIR` | Disk cache directory |
-| `DSGO_CACHE_LIMIT` | Disk cache size limit |
-| `DSGO_CACHE_TTL` | Cache TTL |
+| `DSGO_CACHE_LIMIT` | Disk cache size limit (bytes) |
 
 ### Structured Outputs
 
@@ -32,18 +47,44 @@ Tables and quick lookups for DSGo.
 | `DSGO_STRUCTURED_MAX_ATTEMPTS` | Max validation retry attempts | `3` |
 | `DSGO_STRUCTURED_TEMPERATURE` | Temperature override for structured mode | `0.0` |
 
-### Observability / debugging
+### Logging
 
 | Variable | Purpose |
 |---|---|
-| `DSGO_LOG` | Logging output mode (see logging docs) |
+| `DSGO_LOG_LEVEL` | Logging level (`debug|info|warn|error|fatal`) |
+| `DSGO_LOG_FORMAT` | `text` or `json` |
+| `DSGO_LOG_COLOR` | `auto|always|never` (text format) |
+| `DSGO_LOG_MODULE_LEVELS` | Per-module overrides (`module.Predict=debug,...`) |
+| `DSGO_LOG_BUFFER_SIZE` | Async buffer size |
+| `DSGO_LOG_FLUSH_INTERVAL` | Flush interval (e.g. `200ms`) |
+| `DSGO_LOG_FLUSH_TIMEOUT` | Flush timeout (e.g. `1s`) |
+| `DSGO_LOG_BATCH_SIZE` | Max batch size per flush |
+| `DSGO_LOG_DROP_WHEN_FULL` | Drop logs when buffer full (`1`/`true`) |
+| `DSGO_LOG_MAX_MEMORY` | Max async buffer memory (bytes) |
+| `DSGO_LOG_CACHE_SLOW_THRESHOLD` | Cache slow-log threshold |
+| `DSGO_LOG_TOOL_SLOW_THRESHOLD` | Tool slow-log threshold |
+| `DSGO_LOG_BLOCK_TIMEOUT` | Max block time when buffer full |
+
+### Debugging
+
+| Variable | Purpose |
+|---|---|
 | `DSGO_DEBUG_PARSE` | Show parse attempts (`1`/`true`) |
-| `DSGO_SAVE_RAW_RESPONSES` | Save raw LM outputs (if supported by provider) |
 | `DSGO_DEBUG_MARKERS` | Show field markers during streaming |
-| `DSGO_COLLECTOR` | Collector type (`memory`, etc.) |
-| `DSGO_REQUEST_ID_HEADER` | Incoming request id header name |
-| `DSGO_ARTIFACT_DIR` | Where to write debug artifacts (e.g. raw exchanges) |
-| `DSGO_EXAMPLE` | Optional label included in saved artifacts |
+| `DSGO_REACT_MAX_PROMPT_BYTES` | Override ReAct prompt budget (bytes) |
+
+### .env loading
+
+| Variable | Purpose |
+|---|---|
+| `DSGO_ENV_FILE_PATH` | Explicit path to .env file (skips auto search) |
+
+### Legacy example overrides
+
+| Variable | Purpose |
+|---|---|
+| `EXAMPLES_MAX_TOKENS` | Default max tokens for examples |
+| `EXAMPLES_TEMPERATURE` | Default temperature for examples |
 
 > Source-of-truth: see package docs; internal helpers live under `internal/*`.
 
@@ -54,7 +95,7 @@ Tables and quick lookups for DSGo.
 Enable:
 
 - Code: `module.NewParallel(...).WithVerbose(true)`
-- Logging output: set up the DSGo logger (e.g., via `logging.ConfigureLoggerFromEnv()` or `DSGO_LOG=pretty`).
+- Logging output: set up the DSGo logger (e.g., via `logging.ConfigureLoggerFromEnv()` or `DSGO_LOG_LEVEL=info`).
 
 Parallel logs are emitted with `module=module.Parallel`. When verbose is enabled, per-task logs are emitted at INFO (otherwise DEBUG).
 
@@ -182,10 +223,10 @@ DSGo supports MCP clients for accessing external tools and services:
 
 | Client | Factory Function | Transport | Description |
 |--------|------------------|-----------|-------------|
-| Exa | `NewMCPExaClient(apiKey)` | HTTP | Web search and content extraction |
-| Jina | `NewMCPJinaClient(apiKey)` | SSE | URL reading and content extraction |
-| Tavily | `NewMCPTavilyClient(apiKey)` | HTTP | Web search and content extraction |
-| Filesystem | `NewMCPFilesystemClient(dir)` | Stdio | Local filesystem operations via official MCP server |
+| Exa | `mcp.NewExaClient(apiKey)` | HTTP | Web search and content extraction |
+| Jina | `mcp.NewJinaClient(apiKey)` | SSE | URL reading and content extraction |
+| Tavily | `mcp.NewTavilyClient(apiKey)` | HTTP | Web search and content extraction |
+| Filesystem | `mcp.NewFilesystemClient(dir)` | Stdio | Local filesystem operations via official MCP server |
 
 ### Filesystem MCP Client
 

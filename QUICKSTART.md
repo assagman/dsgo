@@ -28,10 +28,12 @@ go get github.com/assagman/dsgo
 Set up your API keys:
 
 ```bash
-# OpenAI (for GPT models)
+# OpenAI (for GPT models) - DSGO_* preferred, OPENAI_* supported
+export DSGO_OPENAI_API_KEY=sk-...
 export OPENAI_API_KEY=sk-...
 
-# OpenRouter (access to 100+ models)
+# OpenRouter (access to 100+ models) - DSGO_* preferred, OPENROUTER_* supported
+export DSGO_OPENROUTER_API_KEY=sk-or-v1-...
 export OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
@@ -159,7 +161,7 @@ sig := core.NewSignature("Summarize text").
 
 // Optional fields can be missing
 result, _ := module.NewPredict(sig, lm).Forward(ctx, inputs)
-summary := result.GetString("answer")           // Always present
+summary := result.GetString("summary")          // Always present
 keywords, hasKeywords := result.GetJSON("keywords") // May be nil
 ```
 
@@ -735,7 +737,7 @@ Provide examples to guide the model:
 
 ```go
 predictor := module.NewPredict(sig, lm).
-    WithExamples([]core.Example{
+    WithDemos([]core.Example{
         {
             Inputs: map[string]interface{}{"text": "How much does the premium plan cost?"},
             Outputs: map[string]interface{}{"category": "billing"},
@@ -764,12 +766,12 @@ Control how prompts are formatted and responses are parsed:
 // Use JSON adapter for structured data
 jsonPredictor := module.NewPredict(sig, lm).WithAdapter(core.NewJSONAdapter())
 
-// Use fallback adapter for robustness (default behavior)
+// Use fallback adapter for robustness (default behavior: JSON → Chat)
 fallbackPredictor := module.NewPredict(sig, lm).WithAdapter(
-    core.NewFallbackAdapterWithChain([]core.Adapter{
-        core.NewChatAdapter(),    // Try first
-        core.NewJSONAdapter(),    // Fallback
-    })
+    core.NewFallbackAdapterWithChain(
+        core.NewJSONAdapter(),   // Try first
+        core.NewChatAdapter(),   // Fallback
+    ),
 )
 ```
 

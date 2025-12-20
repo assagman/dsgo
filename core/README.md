@@ -29,20 +29,27 @@ flowchart TD
 
 | Variable | Purpose |
 |---|---|
-| `DSGO_TIMEOUT` | Request timeout |
-| `DSGO_MAX_RETRIES` | Retry attempts |
+| `DSGO_TIMEOUT` | Default timeout in seconds |
+| `DSGO_MAX_RETRIES` | Default retry attempts |
+| `DSGO_TRACING` | Enable tracing (`true`/`false`) |
+| `DSGO_MAX_TOKENS` | Default max tokens (GenerateOptions) |
+| `DSGO_TEMPERATURE` | Default temperature (GenerateOptions) |
 | `DSGO_CACHE` | Enable/disable caching |
 | `DSGO_CACHE_MEMORY` | Memory cache capacity |
 | `DSGO_CACHE_DISK` | Enable/disable disk cache |
 | `DSGO_CACHEDIR` | Disk cache directory |
-| `DSGO_CACHE_LIMIT` | Disk cache size limit |
+| `DSGO_CACHE_LIMIT` | Disk cache size limit (bytes) |
 | `DSGO_CACHE_TTL` | Cache TTL |
-| `DSGO_COLLECTOR` | Collector selection |
-| `DSGO_REQUEST_ID_HEADER` | Request id header name |
+| `DSGO_OPENAI_API_KEY` | OpenAI API key (preferred) |
+| `DSGO_OPENROUTER_API_KEY` | OpenRouter API key (preferred) |
+| `OPENAI_API_KEY` | OpenAI API key (fallback) |
+| `OPENROUTER_API_KEY` | OpenRouter API key (fallback) |
+| `DSGO_STRUCTURED_OUTPUTS` | Enable structured output enforcement |
+| `DSGO_STRUCTURED_MAX_ATTEMPTS` | Max structured validation attempts |
+| `DSGO_STRUCTURED_TEMPERATURE` | Temperature override for structured mode |
 | `DSGO_DEBUG_PARSE` | Parse debug |
 | `DSGO_DEBUG_MARKERS` | Streaming marker debug |
-| `DSGO_SAVE_RAW_RESPONSES` | Save raw provider responses (where supported) |
-| `DSGO_ARTIFACT_DIR` | Debug artifact directory |
+| `DSGO_ENV_FILE_PATH` | Explicit .env path for Configure auto-load |
 
 ## Key files
 

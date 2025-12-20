@@ -62,7 +62,7 @@ DSGo modules are higher-level behaviors built on top of the core `Signature` + `
 - **BestOfN**: Runs a wrapped module `N` times and selects the best result using a scorer; can parallelize and optionally return all completions.
 - **Program**: Sequential pipeline; merges previous outputs into the next step's inputs.
 - **Parallel**: Runs the wrapped module concurrently across expanded inputs; stores per-item outputs in `Prediction.Completions`.
-- **ProgramOfThought**: Generates code-first solutions; execution is disabled by default and, when enabled, runs local `python3`/`node` under a timeout (no tool loop).
+- **ProgramOfThought**: Generates code-first solutions; execution is disabled by default and, when enabled, runs local `python3`/`node` under a timeout (Go execution is not supported yet; no tool loop).
 - **MultiChainComparison**: Synthesizes a final answer from `inputs["completions"]` (multiple attempts) and prepends a `rationale` output.
 
 ## Request lifecycle
@@ -80,14 +80,16 @@ flowchart LR
 
 ```mermaid
 graph TD
-  A[Raw response] --> B{ChatAdapter}
+  A[Raw response] --> B{JSONAdapter}
   B -->|ok| R[Result]
-  B -->|fail| C{JSONAdapter}
+  B -->|fail| C{ChatAdapter}
   C -->|ok| R
-  C -->|fail| D{TwoStepAdapter}
-  D -->|ok| R
-  D -->|fail| X[Error]
+  C -->|fail| X[Error]
 ```
+
+Notes:
+- The default `FallbackAdapter` chain is JSON → Chat.
+- `TwoStepAdapter` is opt-in for specialized workflows.
 
 ## Tool calling (ReAct loop)
 

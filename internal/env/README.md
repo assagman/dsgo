@@ -10,6 +10,7 @@ This package provides functionality for loading environment variables from `.env
 - Comments with `#` are ignored
 - Environment variables are only set if not already set
 - File search functionality that walks up the directory tree
+- Optional override via `DSGO_ENV_FILE_PATH` to load a specific file
 
 ## Usage
 

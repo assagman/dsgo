@@ -70,8 +70,8 @@
 - [ ] **9.2: Cerebras** - High-speed inference (MEDIUM priority)
 
 ### Phase 10: Advanced Infrastructure
-- ⏳ **10.1: Enhanced Caching** - TTL expiry, disk cache, auto-wiring (HIGH)
-- ⏳ **10.2: Enhanced Retry** - Retry-After header, configurable params (MEDIUM)
+- ✅ **10.1: Enhanced Caching** - TTL expiry, disk cache, auto-wiring (HIGH)
+- ✅ **10.2: Enhanced Retry** - Retry-After header, configurable params (MEDIUM)
 - ⏳ **10.3: Streaming Enhancements** - CoT, ReAct, PoT, Refine streaming (MEDIUM)
 - ⏳ **10.4: Async Support** - aforward() equivalents with goroutines (LOW)
 - ⏳ **10.5: Callback System** - BaseCallback interface, hooks (LOW)
@@ -82,5 +82,5 @@
 
 ## 🎯 NEXT PRIORITIES
 
-1. Phase 10
-2. Phase 6
+1. Phase 10.3 (Streaming Enhancements)
+2. Phase 6.3 (KNN) / 6.4 (CodeAct)

@@ -6,6 +6,7 @@ This package provides an implementation of the Model Context Protocol (MCP) for 
 
 - **HTTP and SSE Transport**: Support for both HTTP request/response and Server-Sent Events (SSE) transports
 - **Stdio Transport**: Support for communication with MCP servers via standard input/output
+- **Local Transport**: In-process MCP servers via `LocalTransport`
 - **Tool Conversion**: Automatic conversion of MCP tool schemas to DSGo tools
 - **Complex Schema Handling**: Advanced type inference for complex JSON Schema definitions including union types (anyOf, oneOf, allOf)
 
@@ -23,6 +24,7 @@ DSGo collapses complex MCP JSON Schema types into compatible parameter types for
 - **Exa**: Search and web content extraction
 - **Jina**: URL reading and content extraction
 - **Tavily**: Web search (`tavily-search`) and content extraction (`tavily-extract`)
+- **Filesystem**: Local filesystem operations via the official MCP server (stdio)
 
 ## Usage
 
@@ -89,6 +91,25 @@ Used for Server-Sent Events based MCP servers. The transport:
 ### StdioTransport
 
 Used for local MCP servers that communicate via stdin/stdout. Useful for running MCP servers as subprocesses.
+
+### LocalTransport
+
+Used for in-process MCP servers that implement `LocalHandler`. Useful for built-in tools like the DSGo shell server.
+
+## Built-in Local Server (Shell)
+
+DSGo includes a local MCP shell server that exposes two tools:
+- `shell_run`: whitelisted command runner (make/go test/git read-only)
+- `apply_patch`: apply unified diffs via git
+
+```go
+server, err := mcp.NewShellServer(mcp.ShellServerConfig{RootDir: "/path/to/repo"})
+if err != nil {
+    log.Fatal(err)
+}
+transport, _ := mcp.NewLocalTransport(server)
+client, _ := mcp.NewClient(mcp.ClientConfig{Transport: transport})
+```
 
 ## Architecture
 

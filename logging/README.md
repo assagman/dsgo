@@ -57,6 +57,26 @@ Auto behavior: Colors are enabled when all conditions are met:
 3. stdout is a terminal (TTY)
 4. TERM environment variable is not "dumb"
 
+### Environment Configuration
+
+`logging.ConfigureLoggerFromEnv()` reads the following variables:
+
+| Variable | Purpose |
+|---|---|
+| `DSGO_LOG_LEVEL` | Logging level (`debug|info|warn|error|fatal`) |
+| `DSGO_LOG_FORMAT` | `text` or `json` |
+| `DSGO_LOG_COLOR` | `auto|always|never` (text format) |
+| `DSGO_LOG_MODULE_LEVELS` | Per-module overrides (`module.Predict=debug,...`) |
+| `DSGO_LOG_BUFFER_SIZE` | Async buffer size |
+| `DSGO_LOG_FLUSH_INTERVAL` | Flush interval (e.g. `200ms`) |
+| `DSGO_LOG_FLUSH_TIMEOUT` | Flush timeout (e.g. `1s`) |
+| `DSGO_LOG_BATCH_SIZE` | Max batch size per flush |
+| `DSGO_LOG_DROP_WHEN_FULL` | Drop logs when buffer full (`1`/`true`) |
+| `DSGO_LOG_MAX_MEMORY` | Max async buffer memory (bytes) |
+| `DSGO_LOG_CACHE_SLOW_THRESHOLD` | Cache slow-log threshold |
+| `DSGO_LOG_TOOL_SLOW_THRESHOLD` | Tool slow-log threshold |
+| `DSGO_LOG_BLOCK_TIMEOUT` | Max block time when buffer full |
+
 ### Use Auto-Generated Request IDs
 
 ```go
@@ -150,13 +170,13 @@ func EnsureRequestID(ctx context.Context) context.Context
 
 ```go
 // LogAPIRequest logs the start of an API request
-func LogAPIRequest(ctx context.Context, model string, promptLength int)
+func LogAPIRequest(ctx context.Context, provider string, model string, promptLength int)
 
 // LogAPIResponse logs the completion of an API request
-func LogAPIResponse(ctx context.Context, model string, statusCode int, duration time.Duration, usage core.Usage)
+func LogAPIResponse(ctx context.Context, provider string, model string, statusCode int, duration time.Duration, usage core.Usage)
 
 // LogAPIError logs an API error
-func LogAPIError(ctx context.Context, model string, err error)
+func LogAPIError(ctx context.Context, provider string, model string, err error)
 
 // LogPredictionStart logs the start of a prediction
 func LogPredictionStart(ctx context.Context, moduleName string, signature string)
@@ -266,8 +286,6 @@ Example:
 ```
 [DSGo] 2025-10-31 00:24:07.625 [INFO] [016e63bd1d0aefd2] API request started | model=gpt-4 prompt_length=367
 ```
-
-See [LOGGING_IMPLEMENTATION.md](../LOGGING_IMPLEMENTATION.md) for implementation details.
 
 ## Performance
 

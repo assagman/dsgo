@@ -2,13 +2,13 @@
 
 > Go framework for building structured LLM applications with DSPy-style composable modules, type-safe signatures, and production-grade robustness.
 
-DSGo provides a batteries-included approach to LLM orchestration in Go. Build everything from simple classifiers to complex multi-step agents with tool calling, all with zero external dependencies.
+DSGo provides a batteries-included approach to LLM orchestration in Go. Build everything from simple classifiers to complex multi-step agents with tool calling, with minimal external dependencies (OpenAI Go SDK for provider integrations).
 
 - **Repository**: https://github.com/assagman/dsgo
 - **Language**: Go 1.25+
 - **License**: MIT
 - **Architecture**: 3-layer (Providers → Core → Modules)
-- **Test Coverage**: 91.8%
+- **Coverage Target**: >90%
 
 ## Documentation
 
@@ -60,7 +60,7 @@ Handle LLM output parsing with automatic fallback:
 | ChatAdapter | Field markers `[[ ## field ## ]]` | General purpose |
 | JSONAdapter | Structured JSON with schema | APIs, structured data |
 | TwoStepAdapter | Reason then extract | Complex reasoning |
-| FallbackAdapter | Chains adapters | >95% success rate |
+| FallbackAdapter | Chains adapters (default JSON → Chat) | Robust parsing |
 
 ### Providers
 
@@ -207,7 +207,7 @@ result := <-finalPred
 
 ```bash
 make all        # Full validation (clean + check + lint + test-race)
-make test       # Fast testing (unit + integration, no race)
+make test       # Fast testing (unit, no race)
 make check      # Format + vet + build
 make lint       # Run golangci-lint
 make fmt-fix    # Auto-fix formatting
@@ -216,18 +216,36 @@ make fmt-fix    # Auto-fix formatting
 ## Environment Variables
 
 ```bash
-OPENAI_API_KEY=sk-...              # OpenAI API key
-OPENROUTER_API_KEY=sk-or-...       # OpenRouter API key
-DSGO_LOG=pretty                    # Logging: none, pretty, events
-DSGO_LOG_COLOR=auto                  # Color: auto, always, never
-DSGO_DEBUG_PARSE=1                 # Show parse attempts
-DSGO_TIMEOUT=30s                   # Request timeout
-DSGO_CACHE_SIZE=1000               # LRU cache size
+# Common env vars
+DSGO_OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=sk-...
+DSGO_OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_API_KEY=sk-or-...
+DSGO_TIMEOUT=30                    # seconds
+DSGO_MAX_RETRIES=3
+DSGO_MAX_TOKENS=10000
+DSGO_TEMPERATURE=0.7
+DSGO_CACHE=true
+DSGO_CACHE_TTL=5m
+DSGO_CACHE_MEMORY=1000
+DSGO_CACHE_DISK=true
+DSGO_CACHEDIR=~/.dsgo_cache
+DSGO_CACHE_LIMIT=32212254720       # bytes
+DSGO_STRUCTURED_OUTPUTS=true
+DSGO_STRUCTURED_MAX_ATTEMPTS=3
+DSGO_STRUCTURED_TEMPERATURE=0.0
+DSGO_LOG_LEVEL=info
+DSGO_LOG_FORMAT=text
+DSGO_LOG_COLOR=auto
+DSGO_DEBUG_PARSE=1
+DSGO_DEBUG_MARKERS=1
+DSGO_ENV_FILE_PATH=/path/to/.env
+DSGO_HTTP_TIMEOUT_MS=300000
 ```
 
 ## Key Design Decisions
 
-- **Zero external dependencies**: Standard library only for core
+- **Minimal external dependencies**: Providers use the official OpenAI Go SDK; core stays stdlib-only
 - **Thread-safe by default**: All components safe for concurrent use
 - **Builder pattern**: Fluent API for configuration
 - **Adapter fallback chain**: >95% parsing success rate
@@ -241,4 +259,3 @@ DSGO_CACHE_SIZE=1000               # LRU cache size
 - [signature_typed/schema.go](signature_typed/schema.go): Struct-to-signature conversion (implementation; use via signature_typed.Func, signature_typed.NewPredict, etc.)
 - [core/streaming_buffer.go](core/streaming_buffer.go): Thread-safe streaming buffer
 - [core/streaming_marker_filter.go](core/streaming_marker_filter.go): Field marker filtering
-- [integration/](integration/): Integration test suite with fixtures

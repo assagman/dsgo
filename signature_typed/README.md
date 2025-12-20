@@ -7,7 +7,7 @@ The `signature_typed` package provides generic, type-safe wrappers for DSGo modu
 - ✅ Generic `Func[I, O]` module with compile-time type safety
 - ✅ Automatic signature generation from struct tags
 - ✅ Field type inference from Go types
-- ✅ Support for all DSGo field types (string, int, float, bool, class/enum, JSON)
+- ✅ Field type inference for string, int, float, bool, class/enum, JSON (image/datetime not yet in typed inference)
 - ✅ Type-safe few-shot examples with `WithDemosTyped()`
 - ✅ Full integration with existing DSGo features (options, adapters, history)
 
@@ -182,7 +182,7 @@ predictor.WithHistory(history)
 
 ## Testing
 
-The package has 81.6% test coverage with comprehensive tests for:
+The package has comprehensive tests for:
 - Tag parsing (basic, enum, optional, aliases)
 - Type inference (all Go types)
 - Struct/map conversion (including type coercion)
